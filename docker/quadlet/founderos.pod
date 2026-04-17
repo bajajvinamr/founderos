@@ -1,0 +1,3 @@
+[Pod]
+PodName=founderos
+PublishPort=3100:3100

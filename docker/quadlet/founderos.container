@@ -1,0 +1,23 @@
+[Unit]
+Description=FounderOS Agent Orchestrator
+Requires=founderos-db.service
+After=founderos-db.service
+
+[Container]
+Image=founderos-local
+ContainerName=founderos
+Pod=founderos.pod
+Volume=%h/.local/share/founderos:/founderos:Z
+Environment=HOST=0.0.0.0
+Environment=FOUNDEROS_HOME=/founderos
+Environment=FOUNDEROS_DEPLOYMENT_MODE=authenticated
+Environment=FOUNDEROS_DEPLOYMENT_EXPOSURE=private
+Environment=FOUNDEROS_PUBLIC_URL=http://localhost:3100
+EnvironmentFile=%h/.config/containers/systemd/founderos.env
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

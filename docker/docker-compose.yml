@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: founderos
+      POSTGRES_PASSWORD: founderos
+      POSTGRES_DB: founderos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U founderos -d founderos"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  server:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      DATABASE_URL: postgres://founderos:founderos@db:5432/founderos
+      PORT: "3100"
+      SERVE_UI: "true"
+      FOUNDEROS_DEPLOYMENT_MODE: "authenticated"
+      FOUNDEROS_DEPLOYMENT_EXPOSURE: "private"
+      FOUNDEROS_PUBLIC_URL: "${FOUNDEROS_PUBLIC_URL:-http://localhost:3100}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+    volumes:
+      - founderos-data:/founderos
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  founderos-data:
