@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router";
-import type { TemplateSummary } from "@founderos/shared";
+import type { TemplateSummary, CompanyTemplate } from "@founderos/shared";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,6 +13,7 @@ import {
   Target,
   Flag,
   Key,
+  Upload,
 } from "lucide-react";
 import {
   templatesApi,
@@ -44,6 +45,7 @@ export function OnboardingWizardNew() {
   const { setSelectedCompanyId } = useCompany();
   const [step, setStep] = useState<Step>("welcome");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [importedTemplate, setImportedTemplate] = useState<CompanyTemplate | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [strategy, setStrategy] = useState<ProviderStrategy>("mixed");
 
@@ -59,11 +61,19 @@ export function OnboardingWizardNew() {
 
   const spawnMutation = useMutation({
     mutationFn: () =>
-      templatesApi.spawn({
-        templateId: selectedId!,
-        companyName: companyName.trim() || undefined,
-        providerStrategy: strategy,
-      }),
+      templatesApi.spawn(
+        importedTemplate
+          ? {
+              inlineTemplate: importedTemplate,
+              companyName: companyName.trim() || undefined,
+              providerStrategy: strategy,
+            }
+          : {
+              templateId: selectedId!,
+              companyName: companyName.trim() || undefined,
+              providerStrategy: strategy,
+            },
+      ),
     onSuccess: async (data) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
       setSelectedCompanyId(data.companyId);
@@ -71,9 +81,22 @@ export function OnboardingWizardNew() {
     },
   });
 
-  const selectedTemplate = selectedId
-    ? templatesQuery.data?.find((t) => t.id === selectedId) ?? null
-    : null;
+  // For the review step, build a summary from whichever source is active.
+  const selectedTemplate: TemplateSummary | null = importedTemplate
+    ? {
+        id: importedTemplate.id,
+        name: importedTemplate.name,
+        tagline: importedTemplate.tagline ?? "Imported template",
+        summary: importedTemplate.summary ?? "",
+        icon: importedTemplate.icon ?? "📂",
+        category: importedTemplate.category ?? "custom",
+        agentCount: importedTemplate.agents.length,
+        goalCount: importedTemplate.goals.length,
+        projectCount: importedTemplate.projects.length,
+      }
+    : selectedId
+      ? templatesQuery.data?.find((t) => t.id === selectedId) ?? null
+      : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10 md:py-14">
@@ -87,7 +110,14 @@ export function OnboardingWizardNew() {
           loading={templatesQuery.isLoading}
           selectedId={selectedId}
           onSelect={(id, t) => {
+            setImportedTemplate(null);
             setSelectedId(id);
+            setCompanyName(t.name);
+            setStep("providers");
+          }}
+          onImportedTemplate={(t) => {
+            setImportedTemplate(t);
+            setSelectedId(null);
             setCompanyName(t.name);
             setStep("providers");
           }}
@@ -199,12 +229,15 @@ function TemplateStep({
   loading,
   selectedId,
   onSelect,
+  onImportedTemplate,
   onBack,
 }: {
   templates: TemplateSummary[];
   loading: boolean;
   selectedId: string | null;
   onSelect: (id: string, t: TemplateSummary) => void;
+  /** Fired when a user uploads a .template.json file. */
+  onImportedTemplate: (template: CompanyTemplate) => void;
   onBack: () => void;
 }) {
   if (loading) {
@@ -255,10 +288,11 @@ function TemplateStep({
           </button>
         ))}
       </div>
-      <div className="mt-8">
+      <div className="mt-8 flex items-center justify-between gap-3 flex-wrap">
         <Button type="button" variant="ghost" onClick={onBack} className="gap-1.5">
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
+        <TemplateImportButton onImported={onImportedTemplate} />
       </div>
     </div>
   );
@@ -511,3 +545,58 @@ const FAMILY_INFO: Record<"anthropic" | "openai" | "google", { label: string; ic
   openai: { label: "OpenAI Codex / GPT-5", icon: "🔵", bg: "color-mix(in oklch, #10a37f 18%, transparent)" },
   google: { label: "Google Gemini", icon: "🟢", bg: "color-mix(in oklch, #4285f4 18%, transparent)" },
 };
+
+/**
+ * Upload a `.template.json` exported from another FounderOS instance.
+ * Parses locally, validates the shape is at least plausible, and hands
+ * off to the parent wizard which then goes to the providers + review
+ * steps just like a built-in template.
+ */
+function TemplateImportButton({
+  onImported,
+}: {
+  onImported: (template: CompanyTemplate) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <label className="cursor-pointer">
+        <input
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={async (e) => {
+            setError(null);
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              const text = await file.text();
+              const parsed = JSON.parse(text) as CompanyTemplate;
+              if (
+                !parsed ||
+                typeof parsed !== "object" ||
+                typeof parsed.id !== "string" ||
+                !Array.isArray(parsed.agents) ||
+                parsed.agents.length === 0
+              ) {
+                throw new Error("Not a valid FounderOS template JSON");
+              }
+              onImported(parsed);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to parse file");
+            } finally {
+              // Allow re-upload of the same filename
+              e.target.value = "";
+            }
+          }}
+        />
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-[color:color-mix(in_oklch,var(--brand)_45%,var(--border))] transition-colors">
+          <Upload className="h-3.5 w-3.5" />
+          Import template JSON…
+        </span>
+      </label>
+      {error && <span className="text-[11px] text-destructive">{error}</span>}
+    </div>
+  );
+}

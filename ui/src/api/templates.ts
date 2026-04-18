@@ -14,7 +14,9 @@ export type ProviderStrategy =
   | { kind: "override"; adapterType: FounderOSAdapterType; model: string };
 
 export type SpawnFromTemplateRequest = {
-  templateId: string;
+  /** Use templateId for built-ins, inlineTemplate for custom / forked JSON. */
+  templateId?: string;
+  inlineTemplate?: CompanyTemplate;
   companyName?: string;
   providerStrategy?: ProviderStrategy;
   agentOverrides?: Record<string, { budgetUsd?: number }>;

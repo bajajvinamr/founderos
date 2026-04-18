@@ -10,8 +10,9 @@ import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check, Download, Upload, FileJson, Loader2 } from "lucide-react";
+import { Settings, Check, Download, Upload, FileJson, Loader2, Copy } from "lucide-react";
 import { templatesApi } from "../api/templates";
+import { useNavigate } from "@/lib/router";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
 import {
   Field,
@@ -562,6 +563,10 @@ export function CompanySettings() {
               </Link>
             </Button>
             <TemplateExportButton companyId={selectedCompanyId ?? ""} />
+            <CloneCompanyButton
+              companyId={selectedCompanyId ?? ""}
+              companyName={selectedCompany?.name ?? ""}
+            />
           </div>
         </div>
       </div>
@@ -775,6 +780,70 @@ function TemplateExportButton({ companyId }: { companyId: string }) {
         <FileJson className="mr-1.5 h-3.5 w-3.5" />
       )}
       Export as template
+    </Button>
+  );
+}
+
+/**
+ * One-click fork — exports current company as template, then spawns
+ * a new company from that template inline. Used for "make me a copy
+ * to experiment with" or "clone this successful setup to a sister org".
+ *
+ * Stitches together GET /companies/:id/template-export + POST
+ * /templates/spawn with inlineTemplate so there's no manual file step.
+ */
+function CloneCompanyButton({
+  companyId,
+  companyName,
+}: {
+  companyId: string;
+  companyName: string;
+}) {
+  const navigate = useNavigate();
+  const { pushToast } = useToast();
+  const queryClient = useQueryClient();
+  const { setSelectedCompanyId } = useCompany();
+  const [stage, setStage] = useState<"idle" | "exporting" | "spawning">("idle");
+  const busy = stage !== "idle";
+
+  const run = async () => {
+    if (!companyId) return;
+    try {
+      setStage("exporting");
+      const template = await templatesApi.exportCompanyAsTemplate(companyId);
+      setStage("spawning");
+      const result = await templatesApi.spawn({
+        inlineTemplate: template,
+        companyName: `${companyName} (Copy)`,
+        providerStrategy: "mixed",
+      });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      setSelectedCompanyId(result.companyId);
+      pushToast({
+        title: "Company cloned",
+        body: `${result.company.name} created with ${result.agentsCreated} agents`,
+        tone: "success",
+      });
+      navigate("/dashboard");
+    } catch (err) {
+      pushToast({
+        title: "Clone failed",
+        body: err instanceof Error ? err.message : "Unknown error",
+        tone: "error",
+      });
+    } finally {
+      setStage("idle");
+    }
+  };
+
+  return (
+    <Button size="sm" variant="outline" onClick={run} disabled={!companyId || busy}>
+      {busy ? (
+        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Copy className="mr-1.5 h-3.5 w-3.5" />
+      )}
+      {stage === "exporting" ? "Exporting…" : stage === "spawning" ? "Spawning…" : "Clone this company"}
     </Button>
   );
 }
