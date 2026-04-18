@@ -158,9 +158,15 @@ export type AdapterSkillState =
   | "stale"
   | "external";
 
+/**
+ * `paperclip_required` is kept alongside `founderos_required` because upstream
+ * adapter packages (e.g., hermes-paperclip-adapter) ship with the legacy value.
+ * Treat them as synonyms — both mean "bundled by the host platform".
+ */
 export type AdapterSkillOrigin =
   | "company_managed"
   | "founderos_required"
+  | "paperclip_required"
   | "user_installed"
   | "external_unknown";
 

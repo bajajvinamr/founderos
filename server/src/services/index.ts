@@ -28,6 +28,31 @@ export { executionWorkspaceService } from "./execution-workspaces.js";
 export { workspaceOperationService } from "./workspace-operations.js";
 export { workProductService } from "./work-products.js";
 export { logActivity, type LogActivityInput } from "./activity-log.js";
+export {
+  templateSpawnService,
+  type SpawnFromTemplateInput,
+  type SpawnFromTemplateResult,
+} from "./template-spawn.js";
+export {
+  resolveAgentAdapter,
+  resolveAgentAdaptersBatch,
+  type ProviderAvailability,
+  type ProviderStrategy,
+  type ResolvedAdapter,
+  type ResolverError,
+} from "./adapter-resolver.js";
+export {
+  getProviderAvailability,
+  getProviderCredentialReport,
+  type ProviderCredentialReport,
+  type ProviderCredentialSource,
+} from "./provider-credentials.js";
+export {
+  instanceApiKeysService,
+  type ProviderFamilyKey,
+  type ExecutionMode,
+  type StoredApiKey,
+} from "./instance-api-keys.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";

@@ -697,3 +697,16 @@ export {
   type SecretsLocalEncryptedConfig,
   type ConfigMeta,
 } from "./config-schema.js";
+
+export { summarizeTemplate } from "./types/template.js";
+export type {
+  CompanyTemplate,
+  TemplateAgentSeed,
+  TemplateGoalSeed,
+  TemplateProjectSeed,
+  TemplateIssueSeed,
+  TemplateSummary,
+  FounderOSAdapterType,
+  ProviderFamily,
+  AgentProviderPreference,
+} from "./types/template.js";

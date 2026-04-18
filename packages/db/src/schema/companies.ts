@@ -1,4 +1,29 @@
-import { pgTable, uuid, text, integer, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+
+/**
+ * FounderOS company-level business metrics.
+ *
+ * Stored in companies.metrics (JSONB) so the Dashboard Pulse widget can render
+ * real financial signal (MRR/ARR/pipeline/burn/runway) without adding a column
+ * per metric. All cents values are integers.
+ */
+export type CompanyMetrics = {
+  stage?: string;                    // e.g. "Pre-seed", "Series Seed"
+  tagline?: string;                  // 1-line positioning
+  fundingRaisedCents?: number;       // total raised across rounds
+  mrrCents?: number;
+  arrCents?: number;
+  gmvMonthlyCents?: number;          // for marketplaces
+  pipelineCents?: number;
+  pipelineCount?: number;
+  customersSigned?: number;          // signed/paid accounts
+  monthlyBurnCents?: number;
+  runwayMonths?: number;
+  keyAccounts?: string[];            // logo row
+  nextMilestoneLabel?: string;       // e.g. "Series A Q4"
+  mauCount?: number;                 // monthly active users
+  deltas?: Record<string, { dir: "up" | "down" | "flat"; text: string }>;
+};
 
 export const companies = pgTable(
   "companies",
@@ -23,6 +48,7 @@ export const companies = pgTable(
     feedbackDataSharingConsentByUserId: text("feedback_data_sharing_consent_by_user_id"),
     feedbackDataSharingTermsVersion: text("feedback_data_sharing_terms_version"),
     brandColor: text("brand_color"),
+    metrics: jsonb("metrics").$type<CompanyMetrics>().notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

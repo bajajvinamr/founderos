@@ -71,4 +71,21 @@ export const authApi = {
   signOut: async () => {
     await authPost("/sign-out", {});
   },
+
+  /**
+   * Read the auth provider config from the server. Used on boot to decide
+   * whether to wrap the app in <ClerkProvider> and render Clerk's <SignIn />
+   * or the legacy email/password form.
+   */
+  getConfig: async (): Promise<{
+    provider: "clerk" | "better-auth" | "local_trusted";
+    publishableKey: string | null;
+  }> => {
+    const res = await fetch("/api/auth/config", {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to load auth config (${res.status})`);
+    return res.json();
+  },
 };

@@ -76,6 +76,23 @@ function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+/**
+ * Exposed for reuse in instance-level secret stores (e.g., provider API keys).
+ * Callers get the decrypted plaintext directly without going through the
+ * full SecretProviderModule pipeline.
+ */
+export function encryptWithMasterKey(value: string): string {
+  const masterKey = loadOrCreateMasterKey();
+  const material = encryptValue(masterKey, value);
+  return JSON.stringify(material);
+}
+
+export function decryptWithMasterKey(payload: string): string {
+  const masterKey = loadOrCreateMasterKey();
+  const material = JSON.parse(payload) as LocalEncryptedMaterial;
+  return decryptValue(masterKey, material);
+}
+
 function encryptValue(masterKey: Buffer, value: string): LocalEncryptedMaterial {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", masterKey, iv);

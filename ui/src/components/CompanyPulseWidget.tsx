@@ -1,0 +1,232 @@
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Target,
+  Flame,
+  Clock,
+  Users,
+  Zap,
+  Landmark,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/** Keep in sync with packages/db/src/schema/companies.ts → CompanyMetrics */
+type Delta = { dir: "up" | "down" | "flat"; text: string };
+export type CompanyMetrics = {
+  stage?: string;
+  tagline?: string;
+  fundingRaisedCents?: number;
+  mrrCents?: number;
+  arrCents?: number;
+  gmvMonthlyCents?: number;
+  pipelineCents?: number;
+  pipelineCount?: number;
+  customersSigned?: number;
+  monthlyBurnCents?: number;
+  runwayMonths?: number;
+  keyAccounts?: string[];
+  nextMilestoneLabel?: string;
+  mauCount?: number;
+  deltas?: Record<string, Delta>;
+};
+
+type PulseMetric = {
+  label: string;
+  value: string;
+  delta?: Delta;
+  sub?: string;
+  icon: typeof DollarSign;
+};
+
+interface CompanyPulseWidgetProps {
+  companyName: string | undefined;
+  metrics: CompanyMetrics | undefined | null;
+}
+
+/**
+ * Dashboard widget that surfaces business-level KPIs from the company's
+ * stored metrics JSON. Pulls from DB via the company object — no hardcoded
+ * per-company data.
+ */
+export function CompanyPulseWidget({ companyName, metrics }: CompanyPulseWidgetProps) {
+  if (!companyName || !metrics || isEmpty(metrics)) return null;
+
+  const pulseMetrics = buildMetrics(metrics);
+
+  return (
+    <section
+      aria-label="Company pulse"
+      className="relative overflow-hidden rounded-xl border border-border bg-card"
+    >
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(135deg, color-mix(in oklch, var(--brand) 10%, transparent) 0%, transparent 55%)",
+        }}
+      />
+      <div className="relative p-5">
+        <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--brand)] mb-1.5">
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: "var(--brand)" }}
+              />
+              Company Pulse
+            </div>
+            {metrics.tagline && (
+              <div className="text-sm text-foreground font-medium">{metrics.tagline}</div>
+            )}
+          </div>
+          {metrics.stage && (
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] border border-[color:color-mix(in_oklch,var(--brand)_35%,var(--border))] text-[var(--brand)]">
+              {metrics.stage}
+            </span>
+          )}
+        </div>
+
+        {pulseMetrics.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {pulseMetrics.map((m) => (
+              <PulseCell key={m.label} metric={m} />
+            ))}
+          </div>
+        )}
+
+        {metrics.keyAccounts && metrics.keyAccounts.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-border flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Key accounts
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {metrics.keyAccounts.map((c) => (
+                <span
+                  key={c}
+                  className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium bg-secondary text-secondary-foreground border border-border"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function isEmpty(m: CompanyMetrics): boolean {
+  return !m.stage && !m.tagline && !m.fundingRaisedCents && !m.mrrCents && !m.arrCents &&
+    !m.gmvMonthlyCents && !m.pipelineCents && !m.pipelineCount && !m.monthlyBurnCents &&
+    !m.runwayMonths && !m.mauCount;
+}
+
+/**
+ * Pick the 4 most important metrics to display based on what's set.
+ * Priority buckets:
+ *  - Funding/ARR/GMV signal (revenue or traction)
+ *  - Pipeline/customers/MAU (growth signal)
+ *  - Monthly burn (ops signal)
+ *  - Runway or milestone (future signal)
+ */
+function buildMetrics(m: CompanyMetrics): PulseMetric[] {
+  const out: PulseMetric[] = [];
+  const deltas = m.deltas ?? {};
+
+  // Revenue/funding signal
+  if (m.arrCents && m.arrCents > 0) {
+    out.push({ label: "ARR", value: formatMoney(m.arrCents), delta: deltas.arr, sub: m.customersSigned ? `${m.customersSigned} paying accounts` : undefined, icon: DollarSign });
+  } else if (m.mrrCents && m.mrrCents > 0) {
+    out.push({ label: "MRR", value: formatMoney(m.mrrCents), delta: deltas.mrr, icon: DollarSign });
+  } else if (m.gmvMonthlyCents && m.gmvMonthlyCents > 0) {
+    out.push({ label: "GMV / mo", value: formatMoney(m.gmvMonthlyCents), delta: deltas.gmvMonthly, sub: "marketplace volume", icon: DollarSign });
+  } else if (m.fundingRaisedCents && m.fundingRaisedCents > 0) {
+    out.push({ label: "Raised", value: formatMoney(m.fundingRaisedCents), delta: deltas.fundingRaised, sub: m.stage?.includes("Pre-seed") ? "pre-seed" : "to date", icon: Landmark });
+  } else if (m.fundingRaisedCents === 0) {
+    out.push({ label: "Raised", value: "—", delta: { dir: "flat", text: "bootstrapped" }, sub: "raising first round", icon: Landmark });
+  }
+
+  // Growth signal
+  if (m.mauCount && m.mauCount > 0) {
+    out.push({ label: "MAU", value: formatCompact(m.mauCount), delta: deltas.mau, icon: Users });
+  } else if (m.pipelineCount !== undefined && m.pipelineCount > 0) {
+    out.push({
+      label: "Pipeline",
+      value: m.pipelineCount.toString(),
+      delta: deltas.pipeline,
+      sub: m.pipelineCents ? `${formatMoney(m.pipelineCents)} weighted` : (m.customersSigned ? `${m.customersSigned} signed` : undefined),
+      icon: Target,
+    });
+  } else if (m.customersSigned && m.customersSigned > 0) {
+    out.push({ label: "Customers", value: m.customersSigned.toString(), delta: deltas.customersSigned, sub: m.stage?.includes("seed") || m.stage?.includes("Pre-seed") ? "design partners" : undefined, icon: Users });
+  }
+
+  // Burn
+  if (m.monthlyBurnCents !== undefined && m.monthlyBurnCents > 0) {
+    out.push({ label: "Monthly burn", value: formatMoney(m.monthlyBurnCents), delta: deltas.monthlyBurn, icon: Flame });
+  }
+
+  // Runway or milestone
+  if (m.runwayMonths !== undefined && m.runwayMonths > 0) {
+    out.push({ label: "Runway", value: `${m.runwayMonths} mo`, delta: deltas.runway, sub: m.nextMilestoneLabel ? `→ ${m.nextMilestoneLabel}` : undefined, icon: Clock });
+  } else if (m.nextMilestoneLabel) {
+    out.push({ label: "Next", value: m.nextMilestoneLabel, icon: Zap });
+  }
+
+  return out.slice(0, 4);
+}
+
+function formatMoney(cents: number): string {
+  const dollars = cents / 100;
+  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(dollars >= 10_000_000 ? 0 : 1)}M`;
+  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000)}K`;
+  return `$${dollars.toFixed(0)}`;
+}
+
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}K`;
+  return n.toString();
+}
+
+function PulseCell({ metric }: { metric: PulseMetric }) {
+  const Icon = metric.icon;
+  const Delta =
+    metric.delta?.dir === "up"
+      ? TrendingUp
+      : metric.delta?.dir === "down"
+        ? TrendingDown
+        : null;
+  const deltaColor =
+    metric.delta?.dir === "up"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : metric.delta?.dir === "down"
+        ? "text-red-600 dark:text-red-400"
+        : "text-muted-foreground";
+
+  return (
+    <div className="rounded-lg bg-background/60 border border-border px-3.5 py-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
+        <Icon className="h-3 w-3" />
+        {metric.label}
+      </div>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <div className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+          {metric.value}
+        </div>
+        {metric.delta && (
+          <div className={cn("flex items-center gap-0.5 text-[11px] font-medium", deltaColor)}>
+            {Delta && <Delta className="h-3 w-3" />}
+            <span>{metric.delta.text}</span>
+          </div>
+        )}
+      </div>
+      {metric.sub && (
+        <div className="mt-1 text-[11px] text-muted-foreground leading-snug">{metric.sub}</div>
+      )}
+    </div>
+  );
+}

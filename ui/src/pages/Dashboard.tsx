@@ -13,7 +13,8 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/EmptyState";
-import { FounderOSWelcome } from "../components/FounderOSWelcome";
+import { TemplatePicker } from "../components/TemplatePicker";
+import { CompanyPulseWidget } from "../components/CompanyPulseWidget";
 import { StatusIcon } from "../components/StatusIcon";
 
 import { ActivityRow } from "../components/ActivityRow";
@@ -166,7 +167,7 @@ export function Dashboard() {
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
-      return <FounderOSWelcome onStart={openOnboarding} />;
+      return <TemplatePicker />;
     }
     return (
       <EmptyState icon={LayoutDashboard} message="Create or select a company to view the dashboard." />
@@ -179,9 +180,16 @@ export function Dashboard() {
 
   const hasNoAgents = agents !== undefined && agents.length === 0;
 
+  const selectedCompany = companies?.find((c) => c.id === selectedCompanyId);
+  const companyMetrics = (selectedCompany as { metrics?: unknown } | undefined)?.metrics as
+    | import("../components/CompanyPulseWidget").CompanyMetrics
+    | undefined;
+
   return (
     <div className="space-y-6">
       {error && <p className="text-sm text-destructive">{error.message}</p>}
+
+      <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
 
       {hasNoAgents && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-950/60">

@@ -1,0 +1,78 @@
+# FounderOS — Fly.io deployment config
+#
+# One-time setup:
+#   fly launch --no-deploy --copy-config
+#   fly secrets set DATABASE_URL="postgresql://..."
+#   fly secrets set CLAUDE_CODE_OAUTH_TOKEN="..."   # if running in headless bot mode
+#   fly volumes create founderos_data --region bom --size 3
+#
+# Deploy:
+#   fly deploy
+#
+# Single-tenant model: one fly app per customer. Upgrade to a shared-infra
+# deploy pattern once you have >5 customers.
+
+app = "founderos"
+primary_region = "bom"   # Mumbai — closest to Supabase primary if you're using Mumbai region
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  strategy = "rolling"
+  # Migrations run automatically on boot via ensureMigrations() in server/src/index.ts
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3100"
+  HOST = "0.0.0.0"
+  SERVE_UI = "true"
+  FOUNDEROS_HOME = "/founderos"
+  FOUNDEROS_INSTANCE_ID = "default"
+  FOUNDEROS_DEPLOYMENT_MODE = "authenticated"
+  FOUNDEROS_DEPLOYMENT_EXPOSURE = "private"
+
+# Persistent volume for /founderos — holds instance config, secrets key,
+# workspace files, agent session state. Survives deploys + restarts.
+[mounts]
+  source = "founderos_data"
+  destination = "/founderos"
+  initial_size = "3gb"
+
+[[services]]
+  internal_port = 3100
+  protocol = "tcp"
+  processes = ["app"]
+  auto_stop_machines = "stop"     # Scale to zero when idle (single-tenant friendly)
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/api/health"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

@@ -26,6 +26,7 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { inboxDismissalRoutes } from "./routes/inbox-dismissals.js";
 import { instanceSettingsRoutes } from "./routes/instance-settings.js";
+import { templateRoutes } from "./routes/templates.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
@@ -85,6 +86,10 @@ export async function createApp(
     localPluginDir?: string;
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
+    /** Auth provider in use — surfaced to the UI via /api/auth/config. */
+    authProvider?: "clerk" | "better-auth" | "local_trusted";
+    /** Clerk publishable key — safe to send to the browser. */
+    authPublishableKey?: string;
   },
 ) {
   const app = express();
@@ -133,6 +138,18 @@ export async function createApp(
       },
     });
   });
+  /**
+   * Public-safe auth config — consumed by the UI on boot to decide whether
+   * to render ClerkProvider + <SignIn /> or the legacy email/password form.
+   * Never returns the secret key; only the publishable key (safe in client
+   * JS) + the provider tag.
+   */
+  app.get("/api/auth/config", (_req, res) => {
+    res.json({
+      provider: opts.authProvider ?? "local_trusted",
+      publishableKey: opts.authPublishableKey ?? null,
+    });
+  });
   if (opts.betterAuthHandler) {
     app.all("/api/auth/{*authPath}", opts.betterAuthHandler);
   }
@@ -169,6 +186,7 @@ export async function createApp(
   api.use(sidebarBadgeRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
+  api.use(templateRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
   const pluginRegistry = pluginRegistryService(db);
@@ -282,7 +300,10 @@ export async function createApp(
           port: hmrPort,
           clientPort: hmrPort,
         },
-        allowedHosts: privateHostnameGateEnabled ? Array.from(privateHostnameAllowSet) : undefined,
+        // Explicitly allow the tunnel + lan hosts — Vite otherwise restricts to localhost.
+        // `true` disables the host check entirely (acceptable because the server sits
+        // behind auth + CORS + the overall deployment-mode gate).
+        allowedHosts: privateHostnameGateEnabled ? Array.from(privateHostnameAllowSet) : true,
       },
     });
 

@@ -1,0 +1,41 @@
+{
+  "name": "@founderos/templates",
+  "version": "0.3.1",
+  "description": "FounderOS company templates — pre-built company blueprints (agents, goals, projects, issues) that power one-click company spawn in onboarding.",
+  "license": "MIT",
+  "homepage": "https://github.com/founderos-ai/founderos",
+  "bugs": {
+    "url": "https://github.com/founderos-ai/founderos/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/founderos-ai/founderos",
+    "directory": "packages/templates"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "dependencies": {
+    "@founderos/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

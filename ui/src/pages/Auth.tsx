@@ -5,6 +5,7 @@ import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { FounderOSLogo } from "@/components/FounderOSLogo";
+import { ClerkAuthPanel } from "../auth/ClerkAuthPanel";
 
 type AuthMode = "sign_in" | "sign_up";
 
@@ -69,13 +70,14 @@ export function AuthPage() {
 
   return (
     <div className="fixed inset-0 flex bg-background">
-      {/* Left half — form */}
+      {/* Left half — form. Renders Clerk's SignIn if Clerk is the active
+          auth provider; otherwise falls back to legacy email/password. */}
       <div className="w-full md:w-1/2 flex flex-col overflow-y-auto">
         <div className="w-full max-w-md mx-auto my-auto px-8 py-12">
           <div className="mb-10">
             <FounderOSLogo size={22} />
           </div>
-
+          <ClerkAuthPanel nextPath={nextPath}>
           <h1 className="text-2xl font-semibold tracking-tight">
             {mode === "sign_in" ? "Welcome back" : "Start your company"}
           </h1>
@@ -166,6 +168,7 @@ export function AuthPage() {
               {mode === "sign_in" ? "Create one" : "Sign in"}
             </button>
           </div>
+          </ClerkAuthPanel>
         </div>
       </div>
 
@@ -208,8 +211,13 @@ export function AuthPage() {
             <Stat label="Tenancy" value="Single" sub="One isolated instance per founder" />
           </div>
         </div>
-        <div className="relative text-xs text-muted-foreground">
-          BYO Anthropic key · MIT-licensed engine · Your data, your infra
+        <div className="relative text-xs text-muted-foreground space-y-1">
+          <div>BYO Anthropic key · MIT-licensed engine · Your data, your infra</div>
+          <div className="flex items-center gap-2 text-[11px]">
+            <a href="/legal/terms" className="hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40">Terms</a>
+            <span className="text-muted-foreground/50">·</span>
+            <a href="/legal/privacy" className="hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40">Privacy</a>
+          </div>
         </div>
       </aside>
     </div>

@@ -81,6 +81,11 @@ export interface StartedServer {
 
 export async function startServer(): Promise<StartedServer> {
   let config = loadConfig();
+  // Bring up Sentry first so uncaught exceptions during the rest of boot
+  // get captured. No-op when SENTRY_DSN isn't set.
+  const { initServerSentry } = await import("./observability/sentry.js");
+  const sentryUp = await initServerSentry();
+  if (sentryUp) logger.info("Sentry initialized");
   initTelemetry({ enabled: config.telemetryEnabled });
   if (process.env.FOUNDEROS_SECRETS_PROVIDER === undefined) {
     process.env.FOUNDEROS_SECRETS_PROVIDER = config.secretsProvider;
@@ -442,6 +447,17 @@ export async function startServer(): Promise<StartedServer> {
   if (config.deploymentMode === "local_trusted" && config.deploymentExposure !== "private") {
     throw new Error("local_trusted mode only supports private exposure");
   }
+
+  // Hydrate DB-stored provider API keys into process.env so adapter
+  // subprocesses inherit them without per-adapter plumbing.
+  try {
+    const { instanceApiKeysService } = await import("./services/instance-api-keys.js");
+    const svc = instanceApiKeysService(db as any);
+    const loaded = await svc.hydrateProcessEnv();
+    if (loaded > 0) logger.info({ providerKeysLoaded: loaded }, "Hydrated provider API keys into env");
+  } catch (err) {
+    logger.warn({ err }, "Failed to hydrate provider API keys — agents may fall back to env vars");
+  }
   
   if (config.deploymentMode === "authenticated") {
     if (config.authBaseUrlMode === "explicit" && !config.authPublicBaseUrl) {
@@ -468,39 +484,73 @@ export async function startServer(): Promise<StartedServer> {
   if (config.deploymentMode === "local_trusted") {
     await ensureLocalTrustedBoardPrincipal(db as any);
   }
+  let authProvider: "clerk" | "better-auth" | "local_trusted" = "local_trusted";
+  let authPublishableKey: string | undefined;
   if (config.deploymentMode === "authenticated") {
-    const {
-      createBetterAuthHandler,
-      createBetterAuthInstance,
-      deriveAuthTrustedOrigins,
-      resolveBetterAuthSession,
-      resolveBetterAuthSessionFromHeaders,
-    } = await import("./auth/better-auth.js");
-    const derivedTrustedOrigins = deriveAuthTrustedOrigins(config);
-    const envTrustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-    const effectiveTrustedOrigins = Array.from(new Set([...derivedTrustedOrigins, ...envTrustedOrigins]));
-    logger.info(
-      {
-        authBaseUrlMode: config.authBaseUrlMode,
-        authPublicBaseUrl: config.authPublicBaseUrl ?? null,
-        trustedOrigins: effectiveTrustedOrigins,
-        trustedOriginsSource: {
-          derived: derivedTrustedOrigins.length,
-          env: envTrustedOrigins.length,
+    const { isClerkEnabled } = await import("./auth/clerk.js");
+    if (isClerkEnabled()) {
+      // Clerk path — production default when CLERK_* env vars are set.
+      const { createClerkAuth, resolveClerkSession } = await import("./auth/clerk.js");
+      const clerk = createClerkAuth();
+      resolveSession = (req) => resolveClerkSession(clerk, req);
+      // Websocket session resolution from headers (API clients passing
+      // `Authorization: Bearer`): convert headers → minimal Request.
+      resolveSessionFromHeaders = async (headers) => {
+        const fakeReq = {
+          headers: Object.fromEntries(headers.entries()),
+          protocol: "http",
+          originalUrl: "/",
+          url: "/",
+        } as unknown as ExpressRequest;
+        return resolveClerkSession(clerk, fakeReq);
+      };
+      authProvider = "clerk";
+      authPublishableKey = clerk.publishableKey;
+      authReady = true;
+      logger.info({ authProvider }, "Authenticated mode: using Clerk");
+    } else {
+      // Legacy better-auth path — kept for backward-compat with existing
+      // accounts and dev setups that didn't migrate.
+      const {
+        createBetterAuthHandler,
+        createBetterAuthInstance,
+        deriveAuthTrustedOrigins,
+        resolveBetterAuthSession,
+        resolveBetterAuthSessionFromHeaders,
+      } = await import("./auth/better-auth.js");
+      const derivedTrustedOrigins = deriveAuthTrustedOrigins(config);
+      const envTrustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      const effectiveTrustedOrigins = Array.from(new Set([...derivedTrustedOrigins, ...envTrustedOrigins]));
+      logger.info(
+        {
+          authProvider: "better-auth",
+          authBaseUrlMode: config.authBaseUrlMode,
+          authPublicBaseUrl: config.authPublicBaseUrl ?? null,
+          trustedOrigins: effectiveTrustedOrigins,
+          trustedOriginsSource: {
+            derived: derivedTrustedOrigins.length,
+            env: envTrustedOrigins.length,
+          },
         },
-      },
-      "Authenticated mode auth origin configuration",
-    );
-    const auth = createBetterAuthInstance(db as any, config, effectiveTrustedOrigins);
-    betterAuthHandler = createBetterAuthHandler(auth);
-    resolveSession = (req) => resolveBetterAuthSession(auth, req);
-    resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);
-    await initializeBoardClaimChallenge(db as any, { deploymentMode: config.deploymentMode });
-    authReady = true;
+        "Authenticated mode auth origin configuration",
+      );
+      const auth = createBetterAuthInstance(db as any, config, effectiveTrustedOrigins);
+      betterAuthHandler = createBetterAuthHandler(auth);
+      resolveSession = (req) => resolveBetterAuthSession(auth, req);
+      resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);
+      await initializeBoardClaimChallenge(db as any, { deploymentMode: config.deploymentMode });
+      authProvider = "better-auth";
+      authReady = true;
+    }
   }
+  // Make auth metadata readable by the app layer for /api/auth/config.
+  (config as unknown as { authProvider?: typeof authProvider; authPublishableKey?: string })
+    .authProvider = authProvider;
+  (config as unknown as { authProvider?: typeof authProvider; authPublishableKey?: string })
+    .authPublishableKey = authPublishableKey;
   
   const listenPort = await detectPort(config.port);
   if (listenPort !== config.port) {
@@ -534,6 +584,8 @@ export async function startServer(): Promise<StartedServer> {
     companyDeletionEnabled: config.companyDeletionEnabled,
     betterAuthHandler,
     resolveSession,
+    authProvider,
+    authPublishableKey,
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
 
