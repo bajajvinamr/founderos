@@ -8,6 +8,9 @@ export default defineConfig({
       lexical: path.resolve(__dirname, "./node_modules/lexical/Lexical.mjs"),
     },
   },
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("test"),
+  },
   test: {
     environment: "node",
   },

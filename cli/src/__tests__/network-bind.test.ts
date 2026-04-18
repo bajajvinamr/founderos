@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveRuntimeBind, validateConfiguredBindMode } from "@founderos/shared";
 import { buildPresetServerConfig } from "../config/server-bind.js";
+import * as child_process from "child_process";
+
+vi.mock("child_process", async (importOriginal) => {
+  const orig = await importOriginal<typeof child_process>();
+  return { ...orig, execFileSync: vi.fn() };
+});
+
+const mockedExecFileSync = vi.mocked(child_process.execFileSync);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("network bind helpers", () => {
   it("rejects non-loopback bind modes in local_trusted", () => {
@@ -36,6 +48,9 @@ describe("network bind helpers", () => {
 
   it("stores the detected tailscale address for tailnet presets", () => {
     process.env.FOUNDEROS_TAILNET_BIND_HOST = "100.64.0.8";
+    mockedExecFileSync.mockImplementation(() => {
+      throw new Error("tailscale not found");
+    });
 
     const preset = buildPresetServerConfig("tailnet", {
       port: 3100,
@@ -50,6 +65,9 @@ describe("network bind helpers", () => {
 
   it("falls back to loopback when no tailscale address is available for tailnet presets", () => {
     delete process.env.FOUNDEROS_TAILNET_BIND_HOST;
+    mockedExecFileSync.mockImplementation(() => {
+      throw new Error("tailscale not found");
+    });
 
     const preset = buildPresetServerConfig("tailnet", {
       port: 3100,
