@@ -43,19 +43,38 @@ const providerStrategySchema = z.union([
   }),
 ]);
 
-const spawnTemplateSchema = z.object({
-  templateId: z.string().min(1).max(100),
-  companyName: z.string().min(1).max(200).optional(),
-  providerStrategy: providerStrategySchema.optional(),
-  agentOverrides: z
-    .record(
-      z.string(),
-      z.object({
-        budgetUsd: z.number().int().positive().optional(),
-      }),
-    )
-    .optional(),
-});
+// Loose schema for inline templates — we accept anything shaped like a
+// CompanyTemplate at the top level; deep key-graph validation happens
+// inside the spawn service's `assertTemplateShape` so we don't duplicate.
+const inlineTemplateSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    agents: z.array(z.unknown()).min(1),
+    goals: z.array(z.unknown()),
+    projects: z.array(z.unknown()),
+    issues: z.array(z.unknown()),
+  })
+  .passthrough();
+
+const spawnTemplateSchema = z
+  .object({
+    templateId: z.string().min(1).max(100).optional(),
+    inlineTemplate: inlineTemplateSchema.optional(),
+    companyName: z.string().min(1).max(200).optional(),
+    providerStrategy: providerStrategySchema.optional(),
+    agentOverrides: z
+      .record(
+        z.string(),
+        z.object({
+          budgetUsd: z.number().int().positive().optional(),
+        }),
+      )
+      .optional(),
+  })
+  .refine((data) => data.templateId || data.inlineTemplate, {
+    message: "Provide either templateId (built-in) or inlineTemplate (custom)",
+  });
 
 export function templateRoutes(db: Db) {
   const router = Router();
@@ -178,6 +197,7 @@ export function templateRoutes(db: Db) {
       const body = req.body as z.infer<typeof spawnTemplateSchema>;
       const result = await spawner.spawn({
         templateId: body.templateId,
+        inlineTemplate: body.inlineTemplate as Parameters<typeof spawner.spawn>[0]["inlineTemplate"],
         companyName: body.companyName,
         ownerUserId,
         providerStrategy: body.providerStrategy as ProviderStrategy | undefined,

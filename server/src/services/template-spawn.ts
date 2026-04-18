@@ -32,7 +32,13 @@ import { getProviderAvailability } from "./provider-credentials.js";
 import { instanceApiKeysService } from "./instance-api-keys.js";
 
 export type SpawnFromTemplateInput = {
-  templateId: string;
+  /**
+   * Either reference a built-in template by id, OR pass an inline template
+   * JSON (the shape returned by /api/companies/:id/template-export).
+   * `inlineTemplate` wins if both are provided.
+   */
+  templateId?: string;
+  inlineTemplate?: CompanyTemplate;
   /** Company name override. Defaults to template.name if not provided. */
   companyName?: string;
   /**
@@ -68,9 +74,18 @@ export type SpawnFromTemplateResult = {
 
 export function templateSpawnService(db: Db) {
   async function spawn(input: SpawnFromTemplateInput): Promise<SpawnFromTemplateResult> {
-    const template = getTemplate(input.templateId);
+    let template: CompanyTemplate | null = null;
+    if (input.inlineTemplate) {
+      template = input.inlineTemplate;
+    } else if (input.templateId) {
+      template = getTemplate(input.templateId);
+    }
     if (!template) {
-      throw notFound(`Unknown template: ${input.templateId}`);
+      throw notFound(
+        input.templateId
+          ? `Unknown template: ${input.templateId}`
+          : "spawn requires either templateId or inlineTemplate",
+      );
     }
     assertTemplateShape(template);
 
