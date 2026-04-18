@@ -42,17 +42,21 @@ header() { echo ""; echo "━━ $* ━━"; }
 # ────────────────────────────────────────────────────────────────────────
 header "Target: $BASE"
 
-# 1. Health
+# 1. Health — liveness + readiness + rich status
 header "1. Health check"
+LIVEZ=$(curl -sL -m 5 -o /dev/null -w "%{http_code}" "$BASE/api/healthz" || echo "000")
+if [[ "$LIVEZ" == "200" ]]; then pass "/api/healthz 200 (liveness)"; else fail "/api/healthz returned $LIVEZ"; fi
+READYZ=$(curl -sL -m 10 -o /dev/null -w "%{http_code}" "$BASE/api/readyz" || echo "000")
+if [[ "$READYZ" == "200" ]]; then pass "/api/readyz 200 (readiness)"; else fail "/api/readyz returned $READYZ"; fi
 HEALTH=$(curl -sL -m 10 -w "\n%{http_code}" "$BASE/api/health" || echo "000")
 STATUS="${HEALTH##*$'\n'}"
 BODY="${HEALTH%$'\n'*}"
 if [[ "$STATUS" == "200" ]]; then
-  pass "HTTP 200"
+  pass "/api/health HTTP 200"
   if echo "$BODY" | grep -q '"status":"ok"'; then pass "status=ok"; else fail "status not ok: $BODY"; fi
   if echo "$BODY" | grep -q '"authReady":true'; then pass "authReady=true"; else fail "authReady not true"; fi
 else
-  fail "health returned $STATUS"
+  fail "/api/health returned $STATUS"
 fi
 
 # 2. Auth config

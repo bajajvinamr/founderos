@@ -159,6 +159,39 @@ export async function createApp(
   // Mount API routes
   const api = Router();
   api.use(boardMutationGuard());
+
+  /**
+   * Liveness probe — cheap (no DB call) so Fly.io / k8s can hit it every
+   * second without worrying about latency. Returns 200 if the process is
+   * alive and the event loop responds.
+   */
+  api.get("/healthz", (_req, res) => {
+    res.status(200).type("text/plain").send("ok");
+  });
+
+  /**
+   * Readiness probe — stricter: verifies DB connectivity + auth bootstrap
+   * state. Use this for deploy gating and scale-up decisions.
+   */
+  api.get("/readyz", async (_req, res) => {
+    if (!db) {
+      res.status(200).type("text/plain").send("ready");
+      return;
+    }
+    try {
+      const { sql } = await import("drizzle-orm");
+      await db.execute(sql`SELECT 1`);
+    } catch {
+      res.status(503).type("text/plain").send("db unreachable");
+      return;
+    }
+    if (opts.deploymentMode === "authenticated" && !opts.authReady) {
+      res.status(503).type("text/plain").send("auth not ready");
+      return;
+    }
+    res.status(200).type("text/plain").send("ready");
+  });
+
   api.use(
     "/health",
     healthRoutes(db, {
