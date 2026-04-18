@@ -89,4 +89,33 @@ export const templatesApi = {
     api.delete<void>(`/providers/keys/${family}/${executionMode}`),
   companyProvidersOverview: (companyId: string) =>
     api.get<CompanyProvidersOverview>(`/companies/${companyId}/providers-overview`),
+  /**
+   * Download the company as a reusable CompanyTemplate JSON.
+   * Triggers a browser download and also returns the parsed template.
+   */
+  exportCompanyAsTemplate: async (companyId: string): Promise<CompanyTemplate> => {
+    const res = await fetch(`/api/companies/${companyId}/template-export`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error((err as { error?: string } | null)?.error ?? `Export failed (${res.status})`);
+    }
+    const template = (await res.json()) as CompanyTemplate;
+    try {
+      const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${template.id}.template.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Non-browser contexts — caller still gets the JSON back.
+    }
+    return template;
+  },
 };

@@ -10,7 +10,8 @@ import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check, Download, Upload } from "lucide-react";
+import { Settings, Check, Download, Upload, FileJson, Loader2 } from "lucide-react";
+import { templatesApi } from "../api/templates";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
 import {
   Field,
@@ -544,14 +545,14 @@ export function CompanySettings() {
         </div>
         <div className="rounded-md border border-border px-4 py-4">
           <p className="text-sm text-muted-foreground">
-            Import and export have moved to dedicated pages accessible from the{" "}
-            <a href="/org" className="underline hover:text-foreground">Org Chart</a> header.
+            Import/export a full company backup, or export just the structure as
+            a reusable template you can fork into a new company later.
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" asChild>
               <Link to="/company/export">
                 <Download className="mr-1.5 h-3.5 w-3.5" />
-                Export
+                Export full backup
               </Link>
             </Button>
             <Button size="sm" variant="outline" asChild>
@@ -560,6 +561,7 @@ export function CompanySettings() {
                 Import
               </Link>
             </Button>
+            <TemplateExportButton companyId={selectedCompanyId ?? ""} />
           </div>
         </div>
       </div>
@@ -732,4 +734,47 @@ function buildResolutionTestUrl(input: AgentSnippetInput): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Download the current company as a reusable CompanyTemplate JSON.
+ * Complements the full-backup export by shipping only the structural
+ * blueprint (agents + goals + projects + starter issues) so it can be
+ * forked into a new company via POST /api/templates/spawn with a body
+ * upload — or simply kept as a portable backup of the team shape.
+ */
+function TemplateExportButton({ companyId }: { companyId: string }) {
+  const { pushToast } = useToast();
+  const mutation = useMutation({
+    mutationFn: () => templatesApi.exportCompanyAsTemplate(companyId),
+    onSuccess: (t) => {
+      pushToast({
+        title: "Template exported",
+        body: `${t.name} — saved as ${t.id}.template.json`,
+        tone: "success",
+      });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Export failed",
+        body: err instanceof Error ? err.message : "Unknown error",
+        tone: "error",
+      });
+    },
+  });
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => mutation.mutate()}
+      disabled={!companyId || mutation.isPending}
+    >
+      {mutation.isPending ? (
+        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <FileJson className="mr-1.5 h-3.5 w-3.5" />
+      )}
+      Export as template
+    </Button>
+  );
 }

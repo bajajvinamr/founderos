@@ -11,9 +11,10 @@ import {
   getProviderCredentialReport,
   getProviderAvailability,
   instanceApiKeysService,
+  templateExportService,
   type ProviderStrategy,
 } from "../services/index.js";
-import { assertBoard, assertInstanceAdmin } from "./authz.js";
+import { assertBoard, assertCompanyAccess, assertInstanceAdmin } from "./authz.js";
 
 const setProviderKeySchema = z.object({
   family: z.enum(["anthropic", "openai", "google"]),
@@ -61,6 +62,7 @@ export function templateRoutes(db: Db) {
   const spawner = templateSpawnService(db);
   const companies = companyService(db);
   const apiKeys = instanceApiKeysService(db);
+  const exporter = templateExportService(db);
 
   /**
    * List all built-in templates (summary shape — enough for the picker).
@@ -118,6 +120,21 @@ export function templateRoutes(db: Db) {
       });
     },
   );
+
+  /**
+   * Export a company as a reusable CompanyTemplate JSON. Output can be
+   * replayed through /api/templates/spawn to produce a fresh copy.
+   * Heartbeat runs, cost events, and API keys are stripped.
+   */
+  router.get("/companies/:companyId/template-export", async (req, res) => {
+    assertCompanyAccess(req, req.params.companyId);
+    const template = await exporter.exportCompany(req.params.companyId);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${template.id}.template.json"`,
+    );
+    res.json(template);
+  });
 
   router.delete("/providers/keys/:family/:mode", async (req, res) => {
     assertInstanceAdmin(req);

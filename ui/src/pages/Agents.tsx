@@ -54,6 +54,52 @@ function filterOrgTree(nodes: OrgNode[], tab: FilterTab, showTerminated: boolean
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+type ProviderFilter = "all" | "anthropic" | "openai" | "google" | "other";
+const PROVIDER_FILTER_KEY = "founderos.agents.providerFilter";
+
+function isValidProviderFilter(v: string | null): v is ProviderFilter {
+  return v === "all" || v === "anthropic" || v === "openai" || v === "google" || v === "other";
+}
+
+function agentProviderFamily(adapterType: string | null | undefined): ProviderFilter {
+  if (!adapterType) return "other";
+  if (adapterType === "claude_local" || adapterType === "claude_api") return "anthropic";
+  if (adapterType === "codex_local" || adapterType === "openai_api") return "openai";
+  if (adapterType === "gemini_local") return "google";
+  return "other";
+}
+
+/**
+ * Prune an org tree to only branches where the leaf agent matches the
+ * selected provider. A parent node is kept if it — or any descendant — is
+ * a match. Prevents the filter from collapsing manager→report structure
+ * when the manager happens to run on a different provider.
+ */
+function countNonZeroFamilies(counts: Record<ProviderFilter, number>): number {
+  let n = 0;
+  for (const fam of ["anthropic", "openai", "google", "other"] as const) {
+    if (counts[fam] > 0) n++;
+  }
+  return n;
+}
+
+function filterOrgByProvider(
+  nodes: OrgNode[],
+  family: Exclude<ProviderFilter, "all">,
+  agentMap: Map<string, Agent>,
+): OrgNode[] {
+  return nodes
+    .reduce<OrgNode[]>((acc, node) => {
+      const descendants = filterOrgByProvider(node.reports ?? [], family, agentMap);
+      const agent = agentMap.get(node.id);
+      const selfMatches = agent && agentProviderFamily(agent.adapterType) === family;
+      if (selfMatches || descendants.length > 0) {
+        acc.push({ ...node, reports: descendants });
+      }
+      return acc;
+    }, []);
+}
+
 export function Agents() {
   const { selectedCompanyId } = useCompany();
   const { openNewAgent } = useDialog();
@@ -68,6 +114,18 @@ export function Agents() {
   const effectiveView: "list" | "org" = forceListView ? "list" : view;
   const [showTerminated, setShowTerminated] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [providerFilter, setProviderFilterState] = useState<ProviderFilter>(() => {
+    try {
+      const stored = localStorage.getItem(PROVIDER_FILTER_KEY);
+      return isValidProviderFilter(stored) ? stored : "all";
+    } catch {
+      return "all";
+    }
+  });
+  const setProviderFilter = (v: ProviderFilter) => {
+    setProviderFilterState(v);
+    try { localStorage.setItem(PROVIDER_FILTER_KEY, v); } catch { /* quota / incognito */ }
+  };
 
   const { data: agents, isLoading, error } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -121,8 +179,26 @@ export function Agents() {
     return <PageSkeleton variant="list" />;
   }
 
-  const filtered = filterAgents(agents ?? [], tab, showTerminated);
-  const filteredOrg = filterOrgTree(orgTree ?? [], tab, showTerminated);
+  const filteredByStatus = filterAgents(agents ?? [], tab, showTerminated);
+  const filtered =
+    providerFilter === "all"
+      ? filteredByStatus
+      : filteredByStatus.filter((a) => agentProviderFamily(a.adapterType) === providerFilter);
+  const orgFilteredByStatus = filterOrgTree(orgTree ?? [], tab, showTerminated);
+  const filteredOrg =
+    providerFilter === "all"
+      ? orgFilteredByStatus
+      : filterOrgByProvider(orgFilteredByStatus, providerFilter, agentMap);
+
+  // Count agents per provider family for the filter chips.
+  const providerCounts = useMemo(() => {
+    const counts: Record<ProviderFilter, number> = { all: 0, anthropic: 0, openai: 0, google: 0, other: 0 };
+    for (const a of agents ?? []) {
+      counts.all++;
+      counts[agentProviderFamily(a.adapterType)]++;
+    }
+    return counts;
+  }, [agents]);
 
   return (
     <div className="space-y-4">
@@ -199,6 +275,35 @@ export function Agents() {
           </Button>
         </div>
       </div>
+
+      {/* Provider-family chip row — only when multiple families are in play */}
+      {(agents?.length ?? 0) > 0 && countNonZeroFamilies(providerCounts) > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+          <span className="text-muted-foreground">Provider:</span>
+          {(["all", "anthropic", "openai", "google", "other"] as ProviderFilter[]).map((fam) => {
+            const count = providerCounts[fam];
+            if (fam !== "all" && count === 0) return null;
+            const active = providerFilter === fam;
+            const label = fam === "all" ? "All" : fam === "anthropic" ? "Claude" : fam === "openai" ? "OpenAI" : fam === "google" ? "Gemini" : "Other";
+            return (
+              <button
+                key={fam}
+                type="button"
+                onClick={() => setProviderFilter(fam)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition-colors",
+                  active
+                    ? "border-[var(--brand)] bg-[color:color-mix(in_oklch,var(--brand)_10%,transparent)] text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-[color:color-mix(in_oklch,var(--brand)_40%,var(--border))]",
+                )}
+              >
+                <span>{label}</span>
+                <span className="tabular-nums text-muted-foreground">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {filtered.length > 0 && (
         <p className="text-xs text-muted-foreground">{filtered.length} agent{filtered.length !== 1 ? "s" : ""}</p>
