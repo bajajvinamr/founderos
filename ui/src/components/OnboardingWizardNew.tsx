@@ -109,6 +109,7 @@ export function OnboardingWizardNew() {
           templates={templatesQuery.data ?? []}
           loading={templatesQuery.isLoading}
           selectedId={selectedId}
+          importedTemplate={importedTemplate}
           onSelect={(id, t) => {
             setImportedTemplate(null);
             setSelectedId(id);
@@ -119,8 +120,12 @@ export function OnboardingWizardNew() {
             setImportedTemplate(t);
             setSelectedId(null);
             setCompanyName(t.name);
-            setStep("providers");
           }}
+          onClearImported={() => {
+            setImportedTemplate(null);
+            setCompanyName("");
+          }}
+          onContinueImported={() => setStep("providers")}
           onBack={() => setStep("welcome")}
         />
       )}
@@ -228,16 +233,22 @@ function TemplateStep({
   templates,
   loading,
   selectedId,
+  importedTemplate,
   onSelect,
   onImportedTemplate,
+  onClearImported,
+  onContinueImported,
   onBack,
 }: {
   templates: TemplateSummary[];
   loading: boolean;
   selectedId: string | null;
+  importedTemplate: CompanyTemplate | null;
   onSelect: (id: string, t: TemplateSummary) => void;
-  /** Fired when a user uploads a .template.json file. */
+  /** Fired when a user uploads a .template.json file. Does NOT advance the step. */
   onImportedTemplate: (template: CompanyTemplate) => void;
+  onClearImported: () => void;
+  onContinueImported: () => void;
   onBack: () => void;
 }) {
   if (loading) {
@@ -247,6 +258,19 @@ function TemplateStep({
       </div>
     );
   }
+
+  // When a template has been imported, swap the grid for an inline preview
+  // so the user can review what's about to spawn before committing.
+  if (importedTemplate) {
+    return (
+      <ImportedTemplatePreview
+        template={importedTemplate}
+        onContinue={onContinueImported}
+        onDiscard={onClearImported}
+      />
+    );
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -293,6 +317,121 @@ function TemplateStep({
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <TemplateImportButton onImported={onImportedTemplate} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Preview panel shown immediately after a user uploads a `.template.json`.
+ * Gives them a last chance to inspect the roster (agents + goal/project counts)
+ * before moving on to the providers step. Prevents "wrong file" regret-spawns.
+ */
+function ImportedTemplatePreview({
+  template,
+  onContinue,
+  onDiscard,
+}: {
+  template: CompanyTemplate;
+  onContinue: () => void;
+  onDiscard: () => void;
+}) {
+  // Collapse long agent rosters to a preview + "show all" toggle so the
+  // panel doesn't become a wall of text for 20-agent templates.
+  const [expanded, setExpanded] = useState(false);
+  const PREVIEW_COUNT = 6;
+  const agents = template.agents;
+  const visibleAgents = expanded ? agents : agents.slice(0, PREVIEW_COUNT);
+  const remaining = agents.length - visibleAgents.length;
+
+  return (
+    <div>
+      <div className="mb-6">
+        <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-1">Imported template</div>
+        <h2 className="text-2xl font-semibold tracking-tight">Does this look right?</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Review the roster before we spin up a company from this file. Nothing is created yet.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+        <div className="flex items-start gap-4">
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-xl text-xl shrink-0"
+            style={{ background: "color-mix(in oklch, var(--brand) 14%, transparent)" }}
+          >
+            {template.icon ?? "📂"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-base font-semibold text-foreground">{template.name}</div>
+            {template.tagline && (
+              <div className="text-sm text-muted-foreground mt-0.5">{template.tagline}</div>
+            )}
+            {template.summary && (
+              <div className="text-[13px] text-muted-foreground/90 leading-relaxed mt-2">
+                {template.summary}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-3 pt-3 border-t border-border">
+          <MetaRow label="Agents" value={template.agents.length.toString()} />
+          <MetaRow label="Goals" value={template.goals.length.toString()} />
+          <MetaRow label="Projects" value={template.projects.length.toString()} />
+          <MetaRow label="Issues" value={template.issues.length.toString()} />
+        </div>
+
+        <div className="pt-3 border-t border-border">
+          <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-2">Agent roster</div>
+          <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-background/30">
+            {visibleAgents.map((a) => (
+              <li key={a.key} className="flex items-center gap-3 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate">
+                    {a.name}
+                    <span className="ml-2 text-[11px] font-normal text-muted-foreground">{a.title}</span>
+                  </div>
+                  {a.reportsTo && (
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      reports to <code className="font-mono">{a.reportsTo}</code>
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px] tabular-nums text-muted-foreground shrink-0">
+                  ${a.budgetUsd}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="mt-2 text-xs text-[var(--brand)] font-medium hover:underline"
+            >
+              Show {remaining} more {remaining === 1 ? "agent" : "agents"}
+            </button>
+          )}
+          {expanded && agents.length > PREVIEW_COUNT && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Collapse
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 flex items-center justify-between gap-3">
+        <Button type="button" variant="ghost" onClick={onDiscard} className="gap-1.5">
+          <ArrowLeft className="h-4 w-4" /> Choose a different template
+        </Button>
+        <Button type="button" onClick={onContinue} className="gap-1.5">
+          Use this template <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
