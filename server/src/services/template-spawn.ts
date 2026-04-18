@@ -268,7 +268,7 @@ export function templateSpawnService(db: Db) {
 
 // ──────────────────────────────────────────────────────────────────────────
 
-function assertTemplateShape(template: CompanyTemplate) {
+export function assertTemplateShape(template: CompanyTemplate) {
   if (template.agents.length === 0) {
     throw unprocessable(`Template "${template.id}" has no agents`);
   }
