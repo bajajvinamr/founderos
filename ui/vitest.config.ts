@@ -13,5 +13,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["./vitest.jsdom-setup.ts"],
+    env: { NODE_ENV: "test" },
   },
 });
