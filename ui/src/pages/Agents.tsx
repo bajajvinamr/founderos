@@ -21,6 +21,7 @@ import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@founderos/shared";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
+import { AgentProviderBadge } from "../components/AgentProviderBadge";
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -253,9 +254,14 @@ export function Agents() {
                           liveCount={liveRunByAgent.get(agent.id)!.liveCount}
                         />
                       )}
-                      <span className="text-xs text-muted-foreground font-mono w-14 text-right">
-                        {getAdapterLabel(agent.adapterType)}
-                      </span>
+                      <AgentProviderBadge
+                        adapterType={agent.adapterType}
+                        model={
+                          typeof (agent.adapterConfig as Record<string, unknown> | undefined)?.model === "string"
+                            ? ((agent.adapterConfig as Record<string, unknown>).model as string)
+                            : null
+                        }
+                      />
                       <span className="text-xs text-muted-foreground w-16 text-right">
                         {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
                       </span>
@@ -356,9 +362,14 @@ function OrgTreeNode({
             )}
             {agent && (
               <>
-                <span className="text-xs text-muted-foreground font-mono w-14 text-right">
-                  {getAdapterLabel(agent.adapterType)}
-                </span>
+                <AgentProviderBadge
+                  adapterType={agent.adapterType}
+                  model={
+                    typeof (agent.adapterConfig as Record<string, unknown> | undefined)?.model === "string"
+                      ? ((agent.adapterConfig as Record<string, unknown>).model as string)
+                      : null
+                  }
+                />
                 <span className="text-xs text-muted-foreground w-16 text-right">
                   {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
                 </span>

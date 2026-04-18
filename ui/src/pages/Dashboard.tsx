@@ -13,8 +13,9 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/EmptyState";
-import { TemplatePicker } from "../components/TemplatePicker";
+import { OnboardingWizardNew } from "../components/OnboardingWizardNew";
 import { CompanyPulseWidget } from "../components/CompanyPulseWidget";
+import { CompanyProvidersWidget } from "../components/CompanyProvidersWidget";
 import { StatusIcon } from "../components/StatusIcon";
 
 import { ActivityRow } from "../components/ActivityRow";
@@ -167,7 +168,7 @@ export function Dashboard() {
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
-      return <TemplatePicker />;
+      return <OnboardingWizardNew />;
     }
     return (
       <EmptyState icon={LayoutDashboard} message="Create or select a company to view the dashboard." />
@@ -190,6 +191,7 @@ export function Dashboard() {
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
+      <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
 
       {hasNoAgents && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-950/60">

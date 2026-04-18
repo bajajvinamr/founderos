@@ -62,6 +62,21 @@ export type SpawnFromTemplateResponse = {
   company: Company;
 };
 
+export type CompanyProvidersOverview = {
+  adapters: Array<{
+    adapterType: string;
+    family: "anthropic" | "openai" | "google" | "other";
+    agentCount: number;
+  }>;
+  monthSpendByFamily: {
+    anthropic: number;
+    openai: number;
+    google: number;
+    other: number;
+  };
+  totalMonthSpendCents: number;
+};
+
 export const templatesApi = {
   list: () => api.get<TemplateSummary[]>("/templates"),
   get: (id: string) => api.get<CompanyTemplate>(`/templates/${encodeURIComponent(id)}`),
@@ -72,4 +87,6 @@ export const templatesApi = {
     api.post<StoredApiKeyRecord>("/providers/keys", req),
   deleteProviderKey: (family: "anthropic" | "openai" | "google", executionMode: "api" | "cli_oauth" = "api") =>
     api.delete<void>(`/providers/keys/${family}/${executionMode}`),
+  companyProvidersOverview: (companyId: string) =>
+    api.get<CompanyProvidersOverview>(`/companies/${companyId}/providers-overview`),
 };
