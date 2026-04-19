@@ -11,8 +11,9 @@ import {
   Boxes,
   Repeat,
   Settings,
+  LogOut,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarProjects } from "./SidebarProjects";
@@ -20,15 +21,31 @@ import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
+import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
 import { PluginSlotOutlet } from "@/plugins/slots";
+import { useNavigate } from "@/lib/router";
 
 export function Sidebar() {
   const { openNewIssue } = useDialog();
   const { selectedCompanyId, selectedCompany } = useCompany();
   const inboxBadge = useInboxBadge(selectedCompanyId);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+    retry: false,
+  });
+  const signOut = useMutation({
+    mutationFn: () => authApi.signOut(),
+    onSuccess: async () => {
+      await queryClient.clear();
+      navigate("/auth");
+    },
+  });
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
@@ -123,6 +140,32 @@ export function Sidebar() {
           missingBehavior="placeholder"
         />
       </nav>
+
+      {/* Footer — current user + sign out. Always visible so founders don't
+          have to dig into settings to end their session. */}
+      {session?.user && (
+        <div className="border-t border-border px-3 py-2.5 flex items-center gap-2 shrink-0">
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-medium text-foreground truncate">
+              {session.user.name ?? session.user.email ?? "Signed in"}
+            </div>
+            {session.user.email && session.user.name && (
+              <div className="text-[10px] text-muted-foreground truncate">
+                {session.user.email}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => signOut.mutate()}
+            disabled={signOut.isPending}
+            title="Sign out"
+            aria-label="Sign out"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors disabled:opacity-50"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
