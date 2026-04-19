@@ -201,8 +201,31 @@ export function Agents() {
     return counts;
   }, [agents]);
 
+  const activeCount = (agents ?? []).filter((a) => a.status === "active" || a.status === "running" || a.status === "idle").length;
+  const totalCount = (agents ?? []).filter((a) => a.status !== "terminated").length;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Page header — editorial, business-serious. Gives the Team page a
+          clear identity instead of jumping straight into tabs + filters. */}
+      <header className="flex flex-col gap-1.5 pt-1">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Your team
+        </div>
+        <div className="flex items-baseline justify-between gap-4 flex-wrap">
+          <h1 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
+            {totalCount === 0
+              ? "No teammates yet"
+              : `${totalCount} ${totalCount === 1 ? "teammate" : "teammates"} on the roster`}
+          </h1>
+          {totalCount > 0 && (
+            <span className="text-[12px] text-muted-foreground tabular-nums">
+              {activeCount} ready · {totalCount - activeCount} off
+            </span>
+          )}
+        </div>
+      </header>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={tab} onValueChange={(v) => navigate(`/agents/${v}`)}>
           <PageTabBar
@@ -597,16 +620,18 @@ function TeammateCard({
           : agent.status === "terminated"
             ? "Off-boarded"
             : "Ready";
-  const statusClass =
+  // Small colored dot + short label — reads as a database cell, not a
+  // loud status chip. Matches the restrained Notion/Coda tone.
+  const dotClass =
     liveRun != null
-      ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
+      ? "bg-blue-500"
       : agent.status === "error"
-        ? "bg-red-500/15 text-red-700 dark:text-red-300"
+        ? "bg-red-500"
         : agent.status === "paused" || isPaused
-          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+          ? "bg-amber-500"
           : agent.status === "terminated"
-            ? "bg-muted text-muted-foreground"
-            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+            ? "bg-muted-foreground/50"
+            : "bg-emerald-500";
 
   const adapterModel =
     typeof (agent.adapterConfig as Record<string, unknown> | undefined)?.model === "string"
@@ -617,45 +642,37 @@ function TeammateCard({
     <Link
       to={agentUrl(agent)}
       className={cn(
-        "group flex flex-col rounded-xl border bg-card p-4 no-underline transition-all",
-        "border-border hover:border-[color:color-mix(in_oklch,var(--brand)_45%,var(--border))] hover:shadow-sm",
-        isPaused && "opacity-75",
+        "group flex flex-col rounded-lg border bg-card p-5 no-underline transition-all",
+        "border-border hover:border-foreground/25 hover:shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_8px_rgba(0,0,0,0.04)]",
+        isPaused && "opacity-70",
       )}
     >
       <div className="flex items-start gap-3">
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-          style={{ background: "color-mix(in oklch, var(--brand) 14%, transparent)" }}
-        >
-          <AgentIcon icon={agent.icon} className="h-5 w-5 text-foreground" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+          <AgentIcon icon={agent.icon} className="h-4 w-4 text-foreground/80" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-foreground">{agent.name}</span>
-            <span
-              className={cn(
-                "shrink-0 text-[10px] uppercase tracking-[0.1em] rounded-full px-1.5 py-0.5 font-semibold",
-                statusClass,
-              )}
-            >
-              {statusLabel}
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground truncate mt-0.5">
+          <div className="truncate text-[14px] font-semibold text-foreground tracking-tight">{agent.name}</div>
+          <div className="text-[12px] text-muted-foreground truncate mt-0.5">
             {agent.title || roleLabel}
           </div>
           {reportsTo && (
-            <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
               <CornerDownRight className="h-3 w-3" />
-              <span className="truncate">reports to {reportsTo}</span>
+              <span className="truncate">{reportsTo}</span>
             </div>
           )}
         </div>
       </div>
 
+      <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
+        <span className="font-medium text-foreground/80">{statusLabel}</span>
+      </div>
+
       <div className="mt-3 flex items-center justify-between gap-2 pt-3 border-t border-border/60">
         <AgentProviderBadge adapterType={agent.adapterType} model={adapterModel} />
-        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+        <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums">
           <DollarSign className="h-3 w-3" />
           {Math.round((agent.budgetMonthlyCents ?? 0) / 100)}/mo
         </span>
@@ -680,16 +697,16 @@ function BudgetBar({ spentCents, budgetCents }: { spentCents: number; budgetCent
   const pct = Math.min(100, Math.round((spentCents / budgetCents) * 100));
   const overBudget = spentCents > budgetCents;
   return (
-    <div className="mt-2">
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums mb-1">
-        <span>${(spentCents / 100).toFixed(0)} used</span>
+    <div className="mt-3">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums mb-1.5">
+        <span>${(spentCents / 100).toFixed(0)} spent</span>
         <span>{pct}%</span>
       </div>
-      <div className="h-1 rounded-full bg-secondary overflow-hidden">
+      <div className="h-[3px] rounded-full bg-muted overflow-hidden">
         <div
           className={cn(
             "h-full rounded-full transition-all",
-            overBudget ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-[var(--brand)]",
+            overBudget ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-foreground/70",
           )}
           style={{ width: `${pct}%` }}
         />

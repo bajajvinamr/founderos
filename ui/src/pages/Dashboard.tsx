@@ -187,8 +187,19 @@ export function Dashboard() {
     | undefined;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {error && <p className="text-sm text-destructive">{error.message}</p>}
+
+      {/* Editorial page header — gives the dashboard an identity that reads
+          as a considered product, not a generic metrics screen. */}
+      <header className="flex flex-col gap-1.5 pt-1">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Company dashboard
+        </div>
+        <h1 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
+          {selectedCompany?.name ?? "Your company"}
+        </h1>
+      </header>
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
       <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
