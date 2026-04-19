@@ -57,32 +57,23 @@ export function CompanyPulseWidget({ companyName, metrics }: CompanyPulseWidgetP
   return (
     <section
       aria-label="Company pulse"
-      className="relative overflow-hidden rounded-xl border border-border bg-card"
+      className="relative rounded-lg border border-border bg-card"
     >
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "linear-gradient(135deg, color-mix(in oklch, var(--brand) 10%, transparent) 0%, transparent 55%)",
-        }}
-      />
-      <div className="relative p-5">
-        <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--brand)] mb-1.5">
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full"
-                style={{ background: "var(--brand)" }}
-              />
-              Company Pulse
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-2">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+              Company pulse
             </div>
             {metrics.tagline && (
-              <div className="text-sm text-foreground font-medium">{metrics.tagline}</div>
+              <div className="font-display text-[22px] leading-[1.15] tracking-tight text-foreground max-w-xl">
+                {metrics.tagline}
+              </div>
             )}
           </div>
           {metrics.stage && (
-            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] border border-[color:color-mix(in_oklch,var(--brand)_35%,var(--border))] text-[var(--brand)]">
+            <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               {metrics.stage}
             </span>
           )}
@@ -208,13 +199,13 @@ function PulseCell({ metric }: { metric: PulseMetric }) {
         : "text-muted-foreground";
 
   return (
-    <div className="rounded-lg bg-background/60 border border-border px-3.5 py-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
+    <div className="border-l border-border pl-4 py-1">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground mb-1.5">
         <Icon className="h-3 w-3" />
         {metric.label}
       </div>
       <div className="flex items-baseline gap-2 flex-wrap">
-        <div className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+        <div className="text-[28px] font-display leading-none tabular-nums text-foreground">
           {metric.value}
         </div>
         {metric.delta && (
