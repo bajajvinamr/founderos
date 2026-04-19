@@ -14,6 +14,7 @@ import { Agents } from "./pages/Agents";
 import { Issues } from "./pages/Issues";
 import { Inbox } from "./pages/Inbox";
 import { AuthPage } from "./pages/Auth";
+import { Landing } from "./pages/Landing";
 import { NotFoundPage } from "./pages/NotFound";
 
 // Everything else is lazy — downloaded on first navigation, not on app load.
@@ -120,6 +121,12 @@ function CloudAccessGate() {
   }
 
   if (isAuthenticatedMode && !sessionQuery.data) {
+    // Unauthenticated users landing on the root path get the public
+    // marketing page, not the bare sign-in form. Deep links into protected
+    // surfaces still go straight to /auth so the next= param round-trips.
+    if (location.pathname === "/" || location.pathname === "") {
+      return <Navigate to="/landing" replace />;
+    }
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/auth?next=${next}`} replace />;
   }
@@ -333,6 +340,7 @@ export function App() {
   return (
     <>
       <Routes>
+        <Route path="landing" element={<Landing />} />
         <Route path="auth" element={<AuthPage />} />
         <Route path="legal/terms" element={<LegalTerms />} />
         <Route path="legal/privacy" element={<LegalPrivacy />} />
