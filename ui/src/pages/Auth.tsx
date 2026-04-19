@@ -195,7 +195,7 @@ export function AuthPage() {
         </div>
         <div className="relative max-w-lg">
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-[var(--brand)] mb-4">
-            Run a company with 50 agents
+            Build your company. Hire your team.
           </p>
           <h2 className="text-4xl font-semibold leading-[1.1] tracking-tight text-foreground">
             The operating system for
@@ -203,16 +203,17 @@ export function AuthPage() {
             <span className="text-[var(--brand)]">solo founders.</span>
           </h2>
           <p className="mt-6 text-base text-muted-foreground leading-relaxed">
-            Ready-made departments. Governed budgets. BYO-key billing. Your company, alive in under ten minutes — running while you sleep.
+            Pick a starting team. Plug in Claude, Codex, or Gemini. A full roster of AI
+            teammates — with an org chart, budgets, and goals — alive in under five minutes.
           </p>
           <div className="mt-10 grid grid-cols-3 gap-6">
-            <Stat label="Departments" value="4+" sub="CoS, Growth, Content, Finance" />
-            <Stat label="Onboarding" value="<10m" sub="Template → key → live" />
+            <Stat label="Providers" value="3" sub="Claude, Codex, Gemini — CLI or API" />
+            <Stat label="Onboarding" value="<5m" sub="Template → providers → launch" />
             <Stat label="Tenancy" value="Single" sub="One isolated instance per founder" />
           </div>
         </div>
         <div className="relative text-xs text-muted-foreground space-y-1">
-          <div>BYO Anthropic key · MIT-licensed engine · Your data, your infra</div>
+          <div>BYO provider keys · Your data, your infra</div>
           <div className="flex items-center gap-2 text-[11px]">
             <a href="/legal/terms" className="hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40">Terms</a>
             <span className="text-muted-foreground/50">·</span>
