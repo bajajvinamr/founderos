@@ -1594,9 +1594,9 @@ function ConfigurationTab({
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
   const taskAssignHint =
     taskAssignSource === "ceo_role"
-      ? "Enabled automatically for CEO agents."
+      ? "Enabled automatically for anyone in the CEO seat."
       : taskAssignSource === "agent_creator"
-        ? "Enabled automatically while this agent can create new agents."
+        ? "Enabled automatically while this teammate can hire new teammates."
         : taskAssignSource === "explicit_grant"
           ? "Enabled via explicit company permission grant."
           : "Disabled unless explicitly granted.";
@@ -2118,7 +2118,7 @@ function PromptsTab({
                       <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" sideOffset={4}>
-                      The main file the agent reads first when loading instructions. Defaults to AGENTS.md.
+                      The main file this teammate reads first when loading instructions. Defaults to AGENTS.md.
                     </TooltipContent>
                   </Tooltip>
                 </span>
@@ -2590,7 +2590,7 @@ function AgentSkillsTab({
       case "persistent":
         return "Kept in the workspace";
       case "ephemeral":
-        return "Applied when the agent runs";
+        return "Applied when this teammate runs";
       case "unsupported":
         return "Tracked only";
       default:
