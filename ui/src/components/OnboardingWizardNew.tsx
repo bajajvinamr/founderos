@@ -137,6 +137,7 @@ export function OnboardingWizardNew() {
           onStrategyChange={setStrategy}
           onBack={() => setStep("template")}
           onNext={() => setStep("review")}
+          importedTemplate={importedTemplate}
         />
       )}
 
@@ -452,14 +453,29 @@ function ProvidersStep({
   onStrategyChange,
   onBack,
   onNext,
+  importedTemplate,
 }: {
   providers: ProvidersResponse | undefined;
   strategy: ProviderStrategy;
   onStrategyChange: (s: ProviderStrategy) => void;
   onBack: () => void;
   onNext: () => void;
+  importedTemplate: CompanyTemplate | null;
 }) {
   const ready = providers?.availability.anyConfigured ?? false;
+
+  // For imported templates, count how many agents prefer each family as their
+  // top-priority provider. Lets us tag each family row with "3 agents prefer
+  // this" so the user can decide whether to configure missing providers.
+  const demand = importedTemplate ? computeFamilyDemand(importedTemplate) : null;
+
+  // Count unmet demand: agents whose top-priority family isn't configured and
+  // whose fallback families (if any) are also unconfigured. "mixed" strategy
+  // means the spawner will fall back, but the user should still know.
+  const gapCount = demand && providers
+    ? countUnmetDemand(importedTemplate!, providers)
+    : 0;
+
   return (
     <div>
       <div className="mb-6">
@@ -470,11 +486,24 @@ function ProvidersStep({
         </p>
       </div>
 
+      {importedTemplate && gapCount > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed">
+          <div className="font-medium text-foreground">
+            {gapCount} {gapCount === 1 ? "agent prefers" : "agents prefer"} a provider you haven&apos;t configured.
+          </div>
+          <div className="mt-0.5 text-muted-foreground">
+            With mixed strategy they&apos;ll fall back automatically. Configure more providers below
+            for exact template behavior.
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border bg-card p-5 space-y-3">
         {(["anthropic", "openai", "google"] as const).map((fam) => {
           const report = providers?.providers.find((p) => p.family === fam);
           const ok = report ? report.api.configured || report.cli.installed : false;
           const meta = FAMILY_INFO[fam];
+          const demandCount = demand?.[fam] ?? 0;
           return (
             <div key={fam} className="flex items-center gap-3">
               <span
@@ -484,7 +513,14 @@ function ProvidersStep({
                 {meta.icon}
               </span>
               <div className="flex-1">
-                <div className="text-sm font-medium text-foreground">{meta.label}</div>
+                <div className="text-sm font-medium text-foreground flex items-center gap-2">
+                  {meta.label}
+                  {demandCount > 0 && (
+                    <span className="text-[10px] uppercase tracking-[0.1em] rounded-full px-1.5 py-0.5 font-semibold bg-[color:color-mix(in_oklch,var(--brand)_14%,transparent)] text-[var(--brand)]">
+                      {demandCount} {demandCount === 1 ? "agent" : "agents"}
+                    </span>
+                  )}
+                </div>
                 <div className="text-[11px] text-muted-foreground">
                   {ok ? (
                     <>
@@ -684,6 +720,45 @@ const FAMILY_INFO: Record<"anthropic" | "openai" | "google", { label: string; ic
   openai: { label: "OpenAI Codex / GPT-5", icon: "🔵", bg: "color-mix(in oklch, #10a37f 18%, transparent)" },
   google: { label: "Google Gemini", icon: "🟢", bg: "color-mix(in oklch, #4285f4 18%, transparent)" },
 };
+
+/**
+ * Count how many agents in the template prefer each provider family as their
+ * top-priority choice. Agents without an explicit `provider.families` fall back
+ * to anthropic (matches the server-side default in adapter-resolver).
+ */
+function computeFamilyDemand(template: CompanyTemplate): Record<"anthropic" | "openai" | "google", number> {
+  const out: Record<"anthropic" | "openai" | "google", number> = {
+    anthropic: 0,
+    openai: 0,
+    google: 0,
+  };
+  for (const a of template.agents) {
+    const top = a.provider?.families?.[0] ?? "anthropic";
+    if (top === "anthropic" || top === "openai" || top === "google") {
+      out[top] += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Count agents whose entire preferred-families chain has zero configured
+ * providers. These are agents that will fall back to "any configured" family
+ * under mixed strategy — worth flagging so the user can decide.
+ */
+function countUnmetDemand(template: CompanyTemplate, providers: ProvidersResponse): number {
+  const configured = new Set<string>();
+  for (const p of providers.providers) {
+    if (p.api.configured || p.cli.installed) configured.add(p.family);
+  }
+  let unmet = 0;
+  for (const a of template.agents) {
+    const families = a.provider?.families ?? ["anthropic"];
+    const hasAny = families.some((f) => configured.has(f));
+    if (!hasAny) unmet += 1;
+  }
+  return unmet;
+}
 
 /**
  * Upload a `.template.json` exported from another FounderOS instance.
