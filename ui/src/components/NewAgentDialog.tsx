@@ -84,7 +84,7 @@ export function NewAgentDialog() {
     closeNewAgent();
     openNewIssue({
       assigneeAgentId: ceoAgent?.id,
-      title: "Create a new agent",
+      title: "Hire a new teammate",
       description: "(type in what kind of agent you want here)",
     });
   }

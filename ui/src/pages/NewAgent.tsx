@@ -198,9 +198,9 @@ export function NewAgent() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">New Agent</h1>
+        <h1 className="text-lg font-semibold">Hire a teammate</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Advanced agent configuration
+          Advanced setup — choose their name, role, adapter, and budget
         </p>
       </div>
 
@@ -209,7 +209,7 @@ export function NewAgent() {
         <div className="px-4 pt-4 pb-2">
           <input
             className="w-full text-lg font-semibold bg-transparent outline-none placeholder:text-muted-foreground/50"
-            placeholder="Agent name"
+            placeholder="Teammate name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
