@@ -44,7 +44,7 @@ export function CompanyProvidersWidget({ companyId }: { companyId: string | unde
       <div className="flex items-center gap-2 mb-4">
         <Cpu className="h-3.5 w-3.5 text-[var(--brand)]" />
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--brand)]">
-          Agents by provider · this month
+          Team by provider · this month
         </h2>
       </div>
       <div className="space-y-2.5">
@@ -66,7 +66,7 @@ export function CompanyProvidersWidget({ companyId }: { companyId: string | unde
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-medium text-foreground truncate">{meta.label}</div>
                   <div className="text-xs text-muted-foreground tabular-nums">
-                    {row.agentCount} agent{row.agentCount === 1 ? "" : "s"}
+                    {row.agentCount} {row.agentCount === 1 ? "teammate" : "teammates"}
                     {spend > 0 && <> · <span className="text-foreground font-medium">${(spend / 100).toFixed(2)}</span></>}
                   </div>
                 </div>
@@ -83,7 +83,7 @@ export function CompanyProvidersWidget({ companyId }: { companyId: string | unde
       </div>
       {totalMonthSpendCents > 0 && (
         <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-          <span>Total this-month agent spend</span>
+          <span>Total this-month team spend</span>
           <span className="font-mono font-medium text-foreground tabular-nums">
             ${(totalMonthSpendCents / 100).toFixed(2)}
           </span>
