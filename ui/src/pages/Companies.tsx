@@ -235,7 +235,7 @@ export function Companies() {
                 <div className="flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" />
                   <span>
-                    {agentCount} {agentCount === 1 ? "agent" : "agents"}
+                    {agentCount} {agentCount === 1 ? "teammate" : "teammates"}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">

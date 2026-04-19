@@ -429,11 +429,11 @@ function generateReadmeFromSelection(
 
   lines.push("## What's Inside");
   lines.push("");
-  lines.push("This is an [Agent Company](https://founderos.ai) package.");
+  lines.push("This is a [FounderOS company](https://founderos.ai) package.");
   lines.push("");
 
   const counts: Array<[string, number]> = [];
-  if (agents.length > 0) counts.push(["Agents", agents.length]);
+  if (agents.length > 0) counts.push(["Teammates", agents.length]);
   if (projects.length > 0) counts.push(["Projects", projects.length]);
   if (skills.length > 0) counts.push(["Skills", skills.length]);
   if (tasks.length > 0) counts.push(["Tasks", tasks.length]);
@@ -448,10 +448,10 @@ function generateReadmeFromSelection(
   }
 
   if (agents.length > 0) {
-    lines.push("### Agents");
+    lines.push("### Team");
     lines.push("");
-    lines.push("| Agent | Role | Reports To |");
-    lines.push("|-------|------|------------|");
+    lines.push("| Teammate | Role | Reports To |");
+    lines.push("|----------|------|------------|");
     for (const agent of agents) {
       const roleLabel = ROLE_LABELS[agent.role] ?? agent.role;
       const reportsTo = agent.reportsToSlug ?? "\u2014";
