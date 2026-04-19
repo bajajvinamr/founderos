@@ -660,6 +660,40 @@ function TeammateCard({
           {Math.round((agent.budgetMonthlyCents ?? 0) / 100)}/mo
         </span>
       </div>
+
+      <BudgetBar
+        spentCents={agent.spentMonthlyCents ?? 0}
+        budgetCents={agent.budgetMonthlyCents ?? 0}
+      />
     </Link>
+  );
+}
+
+/**
+ * Compact monthly-budget utilization bar for the roster view. Surfaces
+ * how much of each teammate's comp has been spent this month so founders
+ * see salary burn without drilling into the cost pages. Hidden when
+ * budget is unlimited (0 == no cap).
+ */
+function BudgetBar({ spentCents, budgetCents }: { spentCents: number; budgetCents: number }) {
+  if (budgetCents <= 0) return null;
+  const pct = Math.min(100, Math.round((spentCents / budgetCents) * 100));
+  const overBudget = spentCents > budgetCents;
+  return (
+    <div className="mt-2">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums mb-1">
+        <span>${(spentCents / 100).toFixed(0)} used</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-1 rounded-full bg-secondary overflow-hidden">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all",
+            overBudget ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-[var(--brand)]",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
   );
 }
