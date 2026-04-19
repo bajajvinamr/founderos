@@ -1,5 +1,5 @@
 import { Link } from "@/lib/router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FounderOSLogo } from "@/components/FounderOSLogo";
 
 /**
@@ -16,6 +16,30 @@ import { FounderOSLogo } from "@/components/FounderOSLogo";
  * Instrument Serif + teal set.
  */
 export function Landing() {
+  // The authenticated app sets body { overflow: hidden; height: 100% }
+  // to anchor its single-viewport layout. The landing needs normal page
+  // scroll, so flip the body overflow on mount and restore on unmount.
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
+    const prev = {
+      bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
+      htmlOverflow: html.style.overflow,
+      htmlHeight: html.style.height,
+    };
+    body.style.overflow = "auto";
+    body.style.height = "auto";
+    html.style.overflow = "auto";
+    html.style.height = "auto";
+    return () => {
+      body.style.overflow = prev.bodyOverflow;
+      body.style.height = prev.bodyHeight;
+      html.style.overflow = prev.htmlOverflow;
+      html.style.height = prev.htmlHeight;
+    };
+  }, []);
+
   return (
     <div className="pulse-root min-h-screen font-pulse bg-pulse-void text-pulse-bone antialiased">
       <style>{PULSE_SCOPED_CSS}</style>
@@ -47,6 +71,13 @@ export function Landing() {
 // ─────────────────────────────────────────────────────────────────────────
 
 const PULSE_SCOPED_CSS = `
+/* The authenticated app sets body { overflow: hidden } for its own
+   fixed-viewport layout. The landing is a full-scroll marketing page,
+   so override at the root and give the page its own scroll context. */
+html:has(.pulse-root), body:has(.pulse-root) {
+  overflow: auto !important;
+  height: auto !important;
+}
 .pulse-root {
   --pulse-void: #0a0a0c;
   --pulse-void-2: #0f1012;
@@ -59,6 +90,7 @@ const PULSE_SCOPED_CSS = `
   --pulse-dim: #52504a;
   --pulse-accent: #ff5b29;
   color-scheme: dark;
+  min-height: 100vh;
 }
 .pulse-root .bg-pulse-void { background: var(--pulse-void); }
 .pulse-root .bg-pulse-elev { background: var(--pulse-void-2); }
