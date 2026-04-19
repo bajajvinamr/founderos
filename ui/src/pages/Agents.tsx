@@ -17,8 +17,9 @@ import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, List, GitBranch, SlidersHorizontal, LayoutGrid, DollarSign, CornerDownRight, Users, UserPlus } from "lucide-react";
+import { Bot, Plus, List, GitBranch, SlidersHorizontal, LayoutGrid, DollarSign, CornerDownRight, Users, UserPlus, CheckCircle2 } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@founderos/shared";
+import { issuesApi } from "../api/issues";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
 import { AgentProviderBadge } from "../components/AgentProviderBadge";
@@ -147,6 +148,14 @@ export function Agents() {
     refetchInterval: 15_000,
   });
 
+  // Pull issues so we can show "N closed this month" on each roster card
+  // — the other half of ROI (alongside the monthly spend bar).
+  const { data: issues } = useQuery({
+    queryKey: queryKeys.issues.list(selectedCompanyId!),
+    queryFn: () => issuesApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId && effectiveView === "roster",
+  });
+
   // Map agentId -> first live run + live run count
   const liveRunByAgent = useMemo(() => {
     const map = new Map<string, { runId: string; liveCount: number }>();
@@ -167,6 +176,19 @@ export function Agents() {
     for (const a of agents ?? []) map.set(a.id, a);
     return map;
   }, [agents]);
+
+  /** Closed-this-month tally per agent. Derived once per issues refresh. */
+  const closedThisMonthByAgent = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const tally = new Map<string, number>();
+    for (const i of issues ?? []) {
+      if (i.status !== "done" || !i.assigneeAgentId) continue;
+      if (new Date(i.updatedAt).getTime() < startOfMonth) continue;
+      tally.set(i.assigneeAgentId, (tally.get(i.assigneeAgentId) ?? 0) + 1);
+    }
+    return tally;
+  }, [issues]);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Team" }]);
@@ -374,6 +396,7 @@ export function Agents() {
                 reportsTo={reportsTo}
                 liveRun={liveRun ?? null}
                 roleLabel={roleLabels[agent.role] ?? agent.role}
+                closedThisMonth={closedThisMonthByAgent.get(agent.id) ?? 0}
               />
             );
           })}
@@ -603,11 +626,13 @@ function TeammateCard({
   reportsTo,
   liveRun,
   roleLabel,
+  closedThisMonth,
 }: {
   agent: Agent;
   reportsTo: string | null;
   liveRun: { runId: string; liveCount: number } | null;
   roleLabel: string;
+  closedThisMonth: number;
 }) {
   const isPaused = agent.pausedAt != null;
   const statusLabel =
@@ -672,10 +697,21 @@ function TeammateCard({
 
       <div className="mt-3 flex items-center justify-between gap-2 pt-3 border-t border-border/60">
         <AgentProviderBadge adapterType={agent.adapterType} model={adapterModel} />
-        <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums">
-          <DollarSign className="h-3 w-3" />
-          {Math.round((agent.budgetMonthlyCents ?? 0) / 100)}/mo
-        </span>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums">
+          {closedThisMonth > 0 && (
+            <span
+              className="inline-flex items-center gap-0.5"
+              title={`${closedThisMonth} closed this month`}
+            >
+              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              {closedThisMonth}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-0.5">
+            <DollarSign className="h-3 w-3" />
+            {Math.round((agent.budgetMonthlyCents ?? 0) / 100)}/mo
+          </span>
+        </div>
       </div>
 
       <BudgetBar
