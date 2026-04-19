@@ -58,6 +58,20 @@ export function OnboardingWizardNew() {
     queryFn: () => templatesApi.providers(),
     refetchInterval: step === "providers" ? 5_000 : false,
   });
+  // Fetch the full template for the selected built-in so demand + roster
+  // preview can use the same code path as imported templates.
+  const fullTemplateQuery = useQuery({
+    queryKey: ["templates", "get", selectedId],
+    queryFn: () => templatesApi.get(selectedId!),
+    enabled: !!selectedId,
+  });
+
+  /**
+   * Whichever template is active — inline import wins, falls back to the
+   * fetched built-in. Null until the user has picked something.
+   */
+  const activeTemplate: CompanyTemplate | null =
+    importedTemplate ?? fullTemplateQuery.data ?? null;
 
   const spawnMutation = useMutation({
     mutationFn: () =>
@@ -137,7 +151,7 @@ export function OnboardingWizardNew() {
           onStrategyChange={setStrategy}
           onBack={() => setStep("template")}
           onNext={() => setStep("review")}
-          importedTemplate={importedTemplate}
+          activeTemplate={activeTemplate}
         />
       )}
 
@@ -453,27 +467,28 @@ function ProvidersStep({
   onStrategyChange,
   onBack,
   onNext,
-  importedTemplate,
+  activeTemplate,
 }: {
   providers: ProvidersResponse | undefined;
   strategy: ProviderStrategy;
   onStrategyChange: (s: ProviderStrategy) => void;
   onBack: () => void;
   onNext: () => void;
-  importedTemplate: CompanyTemplate | null;
+  /** The active template (imported or fetched built-in). Null while built-in loads. */
+  activeTemplate: CompanyTemplate | null;
 }) {
   const ready = providers?.availability.anyConfigured ?? false;
 
-  // For imported templates, count how many agents prefer each family as their
-  // top-priority provider. Lets us tag each family row with "3 agents prefer
-  // this" so the user can decide whether to configure missing providers.
-  const demand = importedTemplate ? computeFamilyDemand(importedTemplate) : null;
+  // Count how many agents prefer each family as their top-priority provider,
+  // so each family row can be tagged with "N agents" chip. Works uniformly
+  // for imported templates and fetched built-ins.
+  const demand = activeTemplate ? computeFamilyDemand(activeTemplate) : null;
 
   // Count unmet demand: agents whose top-priority family isn't configured and
   // whose fallback families (if any) are also unconfigured. "mixed" strategy
   // means the spawner will fall back, but the user should still know.
-  const gapCount = demand && providers
-    ? countUnmetDemand(importedTemplate!, providers)
+  const gapCount = activeTemplate && providers
+    ? countUnmetDemand(activeTemplate, providers)
     : 0;
 
   return (
@@ -486,7 +501,7 @@ function ProvidersStep({
         </p>
       </div>
 
-      {importedTemplate && gapCount > 0 && (
+      {activeTemplate && gapCount > 0 && (
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed">
           <div className="font-medium text-foreground">
             {gapCount} {gapCount === 1 ? "agent prefers" : "agents prefer"} a provider you haven&apos;t configured.
