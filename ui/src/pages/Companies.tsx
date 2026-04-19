@@ -88,13 +88,23 @@ export function Companies() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <Button size="sm" onClick={() => openOnboarding()}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          New Company
+    <div className="space-y-8">
+      <header className="flex items-end justify-between gap-4 pt-1">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-1.5">
+            Your workspaces
+          </div>
+          <h1 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
+            {companies.length === 0
+              ? "No companies yet"
+              : `${companies.length} ${companies.length === 1 ? "company" : "companies"}`}
+          </h1>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => openOnboarding()} className="gap-1.5">
+          <Plus className="h-3.5 w-3.5" />
+          New company
         </Button>
-      </div>
+      </header>
 
       <div className="h-6">
         {loading && <p className="text-sm text-muted-foreground">Loading companies...</p>}
