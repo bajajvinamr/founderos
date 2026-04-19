@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@/lib/router";
-import { AlertTriangle, ArrowRight, CheckCircle2, Flame, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Flame, PenLine, Sparkles } from "lucide-react";
 import type { ActivityEvent, Agent, DashboardSummary, Issue } from "@founderos/shared";
 import { authApi } from "../api/auth";
+import { useDialog } from "../context/DialogContext";
+import { Button } from "@/components/ui/button";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, formatCents } from "../lib/utils";
 
@@ -37,8 +39,24 @@ export function FounderBriefing({
     queryFn: () => authApi.getSession(),
     retry: false,
   });
+  const { openNewIssue } = useDialog();
   const firstName = deriveFirstName(session?.user?.name, session?.user?.email);
   const greeting = timeOfDayGreeting();
+
+  /**
+   * Brief the team — one-message founder-to-team channel. Creates a
+   * high-priority issue with the founder's direction, which flows down
+   * through the CEO's heartbeat and fans out to reports. We pre-fill
+   * only the priority + a stem title and let the founder write the
+   * actual brief in the dialog.
+   */
+  const briefTheTeam = () => {
+    const today = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    openNewIssue({
+      title: `Founder brief · ${today}: `,
+      priority: "urgent",
+    });
+  };
 
   // Reference points for "overnight" framing — the last 12h captures what
   // happened while a typical founder was away from the keyboard.
@@ -93,6 +111,24 @@ export function FounderBriefing({
           shippedIssues={shippedIssues}
           sessionCount={sessionCount}
         />
+      </div>
+
+      {/* Founder action bar — the one thing only a human can do: give the
+          team direction for the day. Everything else is derived. */}
+      <div className="mt-7 pt-5 border-t border-border/70 flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-[12px] text-muted-foreground max-w-md">
+          Set today&apos;s focus. Write one line and the team picks it up on
+          their next shift.
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={briefTheTeam}
+          className="gap-1.5 shrink-0"
+        >
+          <PenLine className="h-3.5 w-3.5" />
+          Brief the team
+        </Button>
       </div>
     </section>
   );
