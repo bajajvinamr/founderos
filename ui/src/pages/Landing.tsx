@@ -1,16 +1,30 @@
 import { Link } from "@/lib/router";
-import { ArrowRight, BarChart3, Briefcase, Building2, CheckCircle2, PenLine, Shield } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Briefcase,
+  Building2,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  MessageCircle,
+  PenLine,
+  Shield,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FounderOSLogo } from "@/components/FounderOSLogo";
 
 /**
- * Public marketing landing page. The first surface anyone hits when they
- * visit the product unauthenticated. Designed to sell the AI-native-CEO
- * value prop in one screen + two scrolls.
+ * Public marketing landing page.
  *
- * Editorial Notion/Coda register: serif display headlines, restrained
- * accent, generous whitespace, no gradient bloat, no stock shadcn card
- * shadow flood. Copy is business-first ("a company staffed by AI").
+ * Aesthetic: editorial Notion/Coda register with pulse-style data beats
+ * — serif display headlines, restrained accent, tight section rhythm,
+ * and a dark "night" panel breaking the middle so the page has a
+ * heartbeat rather than scrolling as one flat surface.
+ *
+ * Copy register: a founder talking to a founder. Specific, confident,
+ * outcome-first, never feature-listy.
  */
 export function Landing() {
   return (
@@ -18,8 +32,12 @@ export function Landing() {
       <TopBar />
       <main className="flex-1">
         <Hero />
+        <PulseStrip />
+        <MeetTheTeam />
+        <ForYouAgainstOldWay />
         <HowItWorks />
         <FeatureGrid />
+        <BuiltForCta />
         <FinalCta />
       </main>
       <Footer />
@@ -27,13 +45,20 @@ export function Landing() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Top nav
+// ─────────────────────────────────────────────────────────────────────────
+
 function TopBar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur">
       <div className="mx-auto max-w-6xl px-6 md:px-10 h-14 flex items-center justify-between">
         <FounderOSLogo size={20} />
         <nav className="flex items-center gap-2">
-          <Link to="/auth" className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5">
+          <Link
+            to="/auth"
+            className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5"
+          >
             Sign in
           </Link>
           <Link to="/auth">
@@ -47,6 +72,10 @@ function TopBar() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Hero
+// ─────────────────────────────────────────────────────────────────────────
+
 function Hero() {
   return (
     <section className="border-b border-border/70">
@@ -54,14 +83,21 @@ function Hero() {
         <div className="grid grid-cols-1 md:grid-cols-[1.1fr,1fr] gap-12 md:gap-20 items-start">
           <div>
             <div className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-8">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
-              The AI company OS for solo founders
+              <span className="relative inline-flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--brand)] opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--brand)]" />
+              </span>
+              Live — the AI company OS
             </div>
             <h1 className="font-display text-[52px] md:text-[76px] leading-[0.98] tracking-tight text-foreground">
-              Run a company
+              Run a million-dollar
+              <br />
+              company as a
               <br />
               <span className="relative inline-block">
-                <span className="font-display-italic text-[var(--brand)] relative z-[1]">staffed by AI.</span>
+                <span className="font-display-italic text-[var(--brand)] relative z-[1]">
+                  party of one.
+                </span>
                 <span
                   aria-hidden
                   className="absolute left-0 right-0 bottom-[6px] h-[10px] md:h-[14px] rounded-full"
@@ -73,9 +109,10 @@ function Hero() {
               </span>
             </h1>
             <p className="mt-8 max-w-xl text-[17px] md:text-[18px] text-foreground/80 leading-[1.6]">
-              A CEO, a CTO, a head of growth, an ops lead — twenty AI teammates reporting
-              into a real org chart, working on real goals, on the providers you already
-              pay for. Live in under five minutes.
+              FounderOS ships you a complete AI team — CEO, CTO, head of growth,
+              ops lead, and a dozen direct reports — with an org chart, shift
+              schedule, monthly comp caps, and a Morning Brief that tells you
+              what happened while you slept.
             </p>
             <div className="mt-10 flex items-center gap-4 flex-wrap">
               <Link to="/auth">
@@ -85,18 +122,16 @@ function Hero() {
                 </Button>
               </Link>
               <span className="text-[13px] text-muted-foreground">
-                Free to start · Bring your own Claude, Codex, or Gemini key
+                Free while you&apos;re under $10k MRR · BYO provider keys
               </span>
             </div>
-            <div className="mt-16 grid grid-cols-3 gap-6 max-w-md">
-              <Stat label="Providers" value="3" sub="Claude · Codex · Gemini" />
+            <div className="mt-14 grid grid-cols-3 gap-6 max-w-md">
               <Stat label="Setup" value="<5m" sub="Template → launch" />
-              <Stat label="Tenancy" value="Single" sub="One isolated instance" />
+              <Stat label="Team" value="20" sub="Across 3 providers" />
+              <Stat label="Hosting" value="Single" sub="One tenant per founder" />
             </div>
           </div>
 
-          {/* Right column — a structured "morning brief" preview. Serves as
-              the product's own screenshot without dropping an actual PNG. */}
           <BriefPreview />
         </div>
       </div>
@@ -115,8 +150,8 @@ function BriefPreview() {
         Good morning, Alex.
       </h3>
       <p className="mt-3 text-[14px] text-foreground/80 leading-[1.6]">
-        Acme Labs ran 14 work sessions and shipped 3 things in the last 12 hours.
-        Spend this month: $340 (12% of cap).
+        Acme Labs ran 14 work sessions and shipped 3 things in the last 12
+        hours. Spend this month: $340 (12% of cap).
       </p>
 
       <div className="grid grid-cols-2 gap-5 mt-6">
@@ -145,16 +180,16 @@ function BriefPreview() {
             </li>
             <li className="flex items-start gap-2">
               <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-500" />
-              <span className="text-foreground font-medium truncate">Outreach sent to 14 prospects</span>
+              <span className="text-foreground font-medium truncate">
+                Outreach sent to 14 prospects
+              </span>
             </li>
           </ul>
         </div>
       </div>
 
       <div className="mt-6 pt-5 border-t border-border/70 flex items-center justify-between gap-3">
-        <div className="text-[11px] text-muted-foreground">
-          Set today&apos;s focus.
-        </div>
+        <div className="text-[11px] text-muted-foreground">Set today&apos;s focus.</div>
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">
           <PenLine className="h-3 w-3" />
           Brief the team
@@ -164,22 +199,170 @@ function BriefPreview() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Pulse strip — a sub-hero that shows the product's heartbeat numbers
+// ─────────────────────────────────────────────────────────────────────────
+
+function PulseStrip() {
+  const beats: Array<{ value: string; label: string }> = [
+    { value: "38", label: "Work sessions today" },
+    { value: "14", label: "Issues closed this week" },
+    { value: "$340", label: "Spent this month" },
+    { value: "6 mo", label: "Runway at current pace" },
+  ];
+  return (
+    <section className="border-b border-border/70 bg-[color:color-mix(in_oklch,var(--muted)_28%,var(--background))]">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-10 md:py-14">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+          {beats.map((b) => (
+            <div key={b.label} className="flex flex-col gap-1">
+              <div className="font-display text-[36px] md:text-[44px] leading-none tabular-nums text-foreground">
+                {b.value}
+              </div>
+              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                {b.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Meet the team — product's concrete "what you get day one"
+// ─────────────────────────────────────────────────────────────────────────
+
+function MeetTheTeam() {
+  const roster: Array<{ name: string; title: string; comp: string; focus: string }> = [
+    { name: "Nova", title: "Chief Executive Officer", comp: "$200/mo", focus: "Runs the week, writes the brief" },
+    { name: "Atlas", title: "Chief Technology Officer", comp: "$250/mo", focus: "Ships code, reviews PRs" },
+    { name: "Orbit", title: "Head of Growth", comp: "$200/mo", focus: "Runs outbound, tracks pipeline" },
+    { name: "Ledger", title: "Head of Finance & Ops", comp: "$150/mo", focus: "Burn, runway, vendor contracts" },
+  ];
+  return (
+    <section className="border-b border-border/70">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
+        <div className="max-w-2xl mb-14">
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
+            Meet the team
+          </div>
+          <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-foreground">
+            Your first four hires, ready on day one.
+          </h2>
+          <p className="mt-4 text-[14px] text-muted-foreground leading-[1.65]">
+            Every template ships a complete starter roster. Comp caps are real.
+            Each teammate knows who they report to and what they&apos;re supposed
+            to ship.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {roster.map((r) => (
+            <div
+              key={r.name}
+              className="rounded-lg border border-border bg-card p-5 hover:border-foreground/25 transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-[13px] font-semibold text-foreground">
+                  {r.name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-foreground tracking-tight truncate">
+                    {r.name}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground truncate">{r.title}</div>
+                </div>
+              </div>
+              <div className="mt-4 text-[13px] text-foreground/80 leading-snug">{r.focus}</div>
+              <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> On call
+                </span>
+                <span className="inline-flex items-center gap-0.5">
+                  <DollarSign className="h-3 w-3" />
+                  {r.comp}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// You vs the old way — hiring comparison table
+// ─────────────────────────────────────────────────────────────────────────
+
+function ForYouAgainstOldWay() {
+  const rows: Array<{ item: string; old: string; newWay: string }> = [
+    { item: "Time to a working team", old: "6 months of hiring", newWay: "5 minutes from a template" },
+    { item: "Monthly burn", old: "$80k+ in comp", newWay: "$500 in provider spend" },
+    { item: "Management overhead", old: "1:1s, reviews, offsites", newWay: "Morning brief · one line" },
+    { item: "Scaling a new function", old: "Recruit, interview, onboard", newWay: "Hire a teammate · 30 seconds" },
+    { item: "Who's accountable", old: "Trust, over time", newWay: "Reports-to graph from day one" },
+  ];
+  return (
+    <section className="border-b border-border/70 bg-[color:color-mix(in_oklch,var(--muted)_12%,var(--background))]">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
+        <div className="max-w-2xl mb-10">
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
+            The shift
+          </div>
+          <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-foreground">
+            You, against the old way of building a company.
+          </h2>
+        </div>
+        <div className="rounded-lg border border-border bg-background overflow-hidden">
+          <div className="grid grid-cols-[1.25fr,1fr,1fr] text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="px-5 py-3 border-b border-r border-border">What</div>
+            <div className="px-5 py-3 border-b border-r border-border">Classic startup</div>
+            <div className="px-5 py-3 border-b border-border">With FounderOS</div>
+          </div>
+          {rows.map((r, i) => (
+            <div
+              key={r.item}
+              className={`grid grid-cols-[1.25fr,1fr,1fr] text-[13.5px] ${
+                i < rows.length - 1 ? "border-b border-border" : ""
+              }`}
+            >
+              <div className="px-5 py-4 font-medium text-foreground border-r border-border">
+                {r.item}
+              </div>
+              <div className="px-5 py-4 text-muted-foreground line-through decoration-muted-foreground/40 border-r border-border">
+                {r.old}
+              </div>
+              <div className="px-5 py-4 text-foreground font-medium">{r.newWay}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// How it works
+// ─────────────────────────────────────────────────────────────────────────
+
 function HowItWorks() {
   const steps: Array<{ n: string; label: string; sub: string }> = [
     {
       n: "01",
       label: "Pick a starting team",
-      sub: "Three prebuilt org shapes or import a team exported from another company.",
+      sub: "Three prebuilt org shapes — Pre-seed AI Lab, Solo Indie SaaS, Bootstrapped B2B — or import a roster exported from another company.",
     },
     {
       n: "02",
       label: "Connect an AI provider",
-      sub: "Use your Claude Code subscription, OpenAI Codex CLI, Gemini CLI, or an API key.",
+      sub: "Log in with your Claude Code subscription, OpenAI Codex CLI, or Gemini CLI. Or paste an API key. FounderOS detects what's available and routes automatically.",
     },
     {
       n: "03",
       label: "Launch and brief the team",
-      sub: "Your CEO, CTO, and direct reports go live. Write one line to set the week's focus.",
+      sub: "The team goes live. Write one line in the Morning Brief to set the week's focus — the CEO fans it out to reports on the next shift.",
     },
   ];
   return (
@@ -202,7 +385,7 @@ function HowItWorks() {
               <h3 className="font-display text-[22px] leading-[1.15] tracking-tight text-foreground mb-2">
                 {s.label}
               </h3>
-              <p className="text-[13px] text-muted-foreground leading-[1.6]">{s.sub}</p>
+              <p className="text-[13px] text-muted-foreground leading-[1.65]">{s.sub}</p>
             </div>
           ))}
         </div>
@@ -211,31 +394,41 @@ function HowItWorks() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Feature grid
+// ─────────────────────────────────────────────────────────────────────────
+
 function FeatureGrid() {
-  const features: Array<{
-    icon: typeof Briefcase;
-    label: string;
-    sub: string;
-  }> = [
+  const features: Array<{ icon: typeof Briefcase; label: string; sub: string }> = [
     {
       icon: Briefcase,
-      label: "Real org chart",
-      sub: "Every teammate has a title, a manager, standing instructions, and a monthly comp cap. It reads like a company, not a pool of agents.",
+      label: "A real org chart",
+      sub: "Every teammate has a title, a manager, standing instructions, a shift schedule, and a monthly comp cap. It reads like a company, not a pool of agents.",
     },
     {
-      icon: Building2,
-      label: "Morning brief",
-      sub: "What happened overnight, what needs your call, what shipped. The first 30 seconds of your day, answered.",
+      icon: Sparkles,
+      label: "Morning Brief",
+      sub: "What happened overnight, who's blocked, what shipped, today's focus, and your runway — all above the fold, every morning.",
     },
     {
       icon: BarChart3,
       label: "Honest ROI",
-      sub: "See who's earning their comp. Monthly spend next to issues closed. Runway chip next to the greeting. No dashboards to assemble.",
+      sub: "Each roster card shows spend this month next to issues closed this month. See who's earning their comp without opening a spreadsheet.",
+    },
+    {
+      icon: MessageCircle,
+      label: "Brief the team",
+      sub: "Write one line — \"Focus the week on Acme onboarding\" — and it flows down the org chart to every relevant teammate on their next shift.",
+    },
+    {
+      icon: Building2,
+      label: "Import / export",
+      sub: "Companies travel. Export any running company as a template, replay it into a fresh instance, or clone your own org for a new experiment.",
     },
     {
       icon: Shield,
       label: "Your keys, your infra",
-      sub: "Single-tenant by default. AES-256-GCM encrypted key vault. Deploy on Fly.io in a single command or bring your own VPC.",
+      sub: "Single-tenant by default. AES-256-GCM encrypted key vault. Deploy on Fly.io in one command or bring your own VPC.",
     },
   ];
 
@@ -250,18 +443,16 @@ function FeatureGrid() {
             An operating system for your first million.
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 md:gap-12">
           {features.map((f) => (
-            <div key={f.label} className="flex items-start gap-5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border">
+            <div key={f.label}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border mb-4">
                 <f.icon className="h-4 w-4 text-foreground/80" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-[15px] font-semibold text-foreground tracking-tight mb-1.5">
-                  {f.label}
-                </h3>
-                <p className="text-[13.5px] text-muted-foreground leading-[1.65]">{f.sub}</p>
-              </div>
+              <h3 className="text-[15px] font-semibold text-foreground tracking-tight mb-1.5">
+                {f.label}
+              </h3>
+              <p className="text-[13.5px] text-muted-foreground leading-[1.65]">{f.sub}</p>
             </div>
           ))}
         </div>
@@ -269,6 +460,50 @@ function FeatureGrid() {
     </section>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Built for — audience quotes / framing
+// ─────────────────────────────────────────────────────────────────────────
+
+function BuiltForCta() {
+  return (
+    <section className="border-b border-border/70 bg-foreground text-background">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr] gap-12 md:gap-20 items-start">
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-background/70 mb-3">
+              Built for
+            </div>
+            <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-background">
+              Solo operators who
+              <br />
+              refuse to hire six people.
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
+            {[
+              { title: "Technical founders", sub: "Ship product without a team. Your CTO teammate handles PRs while you talk to customers." },
+              { title: "Indie builders", sub: "Keep $80k/year out of burn. Your Head of Growth teammate runs outbound at $200/month." },
+              { title: "Pre-seed CEOs", sub: "Stretch your first $250k. Pilot GTM, content, and ops with AI before hiring humans." },
+              { title: "Bootstrappers", sub: "Stay profitable. Your team scales with provider spend, not salaries." },
+            ].map((x) => (
+              <div key={x.title}>
+                <div className="text-[14px] font-semibold text-background mb-1">
+                  {x.title}
+                </div>
+                <p className="text-[12.5px] text-background/75 leading-[1.65]">{x.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Final CTA
+// ─────────────────────────────────────────────────────────────────────────
 
 function FinalCta() {
   return (
@@ -278,7 +513,9 @@ function FinalCta() {
           Start your company.
           <br />
           <span className="relative inline-block">
-            <span className="font-display-italic text-[var(--brand)] relative z-[1]">Hire your team.</span>
+            <span className="font-display-italic text-[var(--brand)] relative z-[1]">
+              Hire your team.
+            </span>
             <span
               aria-hidden
               className="absolute left-0 right-0 bottom-[4px] h-[8px] md:h-[12px] rounded-full"
@@ -290,20 +527,26 @@ function FinalCta() {
           </span>
         </h2>
         <p className="mt-6 mx-auto max-w-xl text-[15px] text-muted-foreground leading-[1.65]">
-          Five minutes of setup and you&apos;re running a company of twenty AI teammates.
-          Bring your own provider keys. Your data stays on your infra.
+          Five minutes of setup and you&apos;re running a team of twenty AI
+          teammates. Bring your own provider keys. Your data stays on your
+          infra.
         </p>
-        <div className="mt-10">
+        <div className="mt-10 flex items-center justify-center gap-4 flex-wrap">
           <Link to="/auth">
             <Button size="lg" className="gap-2">
               Build your company <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
+          <span className="text-[12.5px] text-muted-foreground">Free while you&apos;re under $10k MRR</span>
         </div>
       </div>
     </section>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Footer
+// ─────────────────────────────────────────────────────────────────────────
 
 function Footer() {
   return (
@@ -316,14 +559,29 @@ function Footer() {
           </span>
         </div>
         <div className="flex items-center gap-5 text-[12px] text-muted-foreground">
-          <a href="/legal/terms" className="hover:text-foreground">Terms</a>
-          <a href="/legal/privacy" className="hover:text-foreground">Privacy</a>
-          <a href="https://github.com/founderos-ai/founderos" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
+          <a href="/legal/terms" className="hover:text-foreground">
+            Terms
+          </a>
+          <a href="/legal/privacy" className="hover:text-foreground">
+            Privacy
+          </a>
+          <a
+            href="https://github.com/founderos-ai/founderos"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-foreground"
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </footer>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Primitives
+// ─────────────────────────────────────────────────────────────────────────
 
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
