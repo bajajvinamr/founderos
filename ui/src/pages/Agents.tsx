@@ -17,7 +17,7 @@ import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, List, GitBranch, SlidersHorizontal, LayoutGrid, DollarSign, CornerDownRight } from "lucide-react";
+import { Bot, Plus, List, GitBranch, SlidersHorizontal, LayoutGrid, DollarSign, CornerDownRight, Users, UserPlus } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@founderos/shared";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
@@ -173,7 +173,7 @@ export function Agents() {
   }, [setBreadcrumbs]);
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Bot} message="Select a company to view your team." />;
+    return <EmptyState icon={Users} message="Select a company to view your team." />;
   }
 
   if (isLoading) {
@@ -329,7 +329,7 @@ export function Agents() {
 
       {agents && agents.length === 0 && (
         <EmptyState
-          icon={Bot}
+          icon={UserPlus}
           message="Hire your first teammate to get started."
           action="Hire teammate"
           onAction={openNewAgent}
