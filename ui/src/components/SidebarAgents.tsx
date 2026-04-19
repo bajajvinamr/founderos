@@ -82,7 +82,7 @@ export function SidebarAgents() {
               )}
             />
             <span className="text-[10px] font-medium uppercase tracking-widest font-mono text-muted-foreground/60">
-              Agents
+              Team
             </span>
           </CollapsibleTrigger>
           <button
@@ -91,7 +91,7 @@ export function SidebarAgents() {
               openNewAgent();
             }}
             className="flex items-center justify-center h-4 w-4 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent/50 transition-colors"
-            aria-label="New agent"
+            aria-label="Hire teammate"
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -122,7 +122,7 @@ export function SidebarAgents() {
                 {(agent.pauseReason === "budget" || runCount > 0) && (
                   <span className="ml-auto flex items-center gap-1.5 shrink-0">
                     {agent.pauseReason === "budget" ? (
-                      <BudgetSidebarMarker title="Agent paused by budget" />
+                      <BudgetSidebarMarker title="Paused — out of budget" />
                     ) : null}
                     {runCount > 0 ? (
                       <span className="relative flex h-2 w-2">

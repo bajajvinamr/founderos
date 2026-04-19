@@ -237,13 +237,13 @@ export function Dashboard() {
             <MetricCard
               icon={Bot}
               value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
-              label="Agents Enabled"
+              label="Team Size"
               to="/agents"
               description={
                 <span>
-                  {data.agents.running} running{", "}
+                  {data.agents.running} working{", "}
                   {data.agents.paused} paused{", "}
-                  {data.agents.error} errors
+                  {data.agents.error} blocked
                 </span>
               }
             />

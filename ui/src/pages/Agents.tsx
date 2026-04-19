@@ -17,11 +17,12 @@ import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
+import { Bot, Plus, List, GitBranch, SlidersHorizontal, LayoutGrid, DollarSign, CornerDownRight } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@founderos/shared";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
 import { AgentProviderBadge } from "../components/AgentProviderBadge";
+import { AgentIcon } from "../components/AgentIconPicker";
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -109,9 +110,9 @@ export function Agents() {
   const { isMobile } = useSidebar();
   const pathSegment = location.pathname.split("/").pop() ?? "all";
   const tab: FilterTab = (pathSegment === "all" || pathSegment === "active" || pathSegment === "paused" || pathSegment === "error") ? pathSegment : "all";
-  const [view, setView] = useState<"list" | "org">("org");
+  const [view, setView] = useState<"list" | "org" | "roster">("roster");
   const forceListView = isMobile;
-  const effectiveView: "list" | "org" = forceListView ? "list" : view;
+  const effectiveView: "list" | "org" | "roster" = forceListView ? "list" : view;
   const [showTerminated, setShowTerminated] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [providerFilter, setProviderFilterState] = useState<ProviderFilter>(() => {
@@ -168,11 +169,11 @@ export function Agents() {
   }, [agents]);
 
   useEffect(() => {
-    setBreadcrumbs([{ label: "Agents" }]);
+    setBreadcrumbs([{ label: "Team" }]);
   }, [setBreadcrumbs]);
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Bot} message="Select a company to view agents." />;
+    return <EmptyState icon={Bot} message="Select a company to view your team." />;
   }
 
   if (isLoading) {
@@ -250,6 +251,19 @@ export function Agents() {
           {!forceListView && (
             <div className="flex items-center border border-border">
               <button
+                aria-label="Roster view"
+                title="Roster"
+                className={cn(
+                  "p-1.5 transition-colors",
+                  effectiveView === "roster" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50"
+                )}
+                onClick={() => setView("roster")}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+              <button
+                aria-label="List view"
+                title="List"
                 className={cn(
                   "p-1.5 transition-colors",
                   effectiveView === "list" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50"
@@ -259,6 +273,8 @@ export function Agents() {
                 <List className="h-3.5 w-3.5" />
               </button>
               <button
+                aria-label="Org chart view"
+                title="Org chart"
                 className={cn(
                   "p-1.5 transition-colors",
                   effectiveView === "org" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50"
@@ -271,7 +287,7 @@ export function Agents() {
           )}
           <Button size="sm" variant="outline" onClick={openNewAgent}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
-            New Agent
+            Hire teammate
           </Button>
         </div>
       </div>
@@ -306,7 +322,7 @@ export function Agents() {
       )}
 
       {filtered.length > 0 && (
-        <p className="text-xs text-muted-foreground">{filtered.length} agent{filtered.length !== 1 ? "s" : ""}</p>
+        <p className="text-xs text-muted-foreground">{filtered.length} {filtered.length !== 1 ? "teammates" : "teammate"}</p>
       )}
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
@@ -314,10 +330,36 @@ export function Agents() {
       {agents && agents.length === 0 && (
         <EmptyState
           icon={Bot}
-          message="Create your first agent to get started."
-          action="New Agent"
+          message="Hire your first teammate to get started."
+          action="Hire teammate"
           onAction={openNewAgent}
         />
+      )}
+
+      {/* Roster view — team-card grid */}
+      {effectiveView === "roster" && filtered.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((agent) => {
+            const liveRun = liveRunByAgent.get(agent.id);
+            const reportsTo = agent.reportsTo
+              ? agentMap.get(agent.reportsTo)?.name ?? null
+              : null;
+            return (
+              <TeammateCard
+                key={agent.id}
+                agent={agent}
+                reportsTo={reportsTo}
+                liveRun={liveRun ?? null}
+                roleLabel={roleLabels[agent.role] ?? agent.role}
+              />
+            );
+          })}
+        </div>
+      )}
+      {effectiveView === "roster" && agents && agents.length > 0 && filtered.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-8">
+          No teammates match the selected filter.
+        </p>
       )}
 
       {/* List view */}
@@ -384,7 +426,7 @@ export function Agents() {
 
       {effectiveView === "list" && agents && agents.length > 0 && filtered.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          No agents match the selected filter.
+          No teammates match the selected filter.
         </p>
       )}
 
@@ -399,7 +441,7 @@ export function Agents() {
 
       {effectiveView === "org" && orgTree && orgTree.length > 0 && filteredOrg.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          No agents match the selected filter.
+          No teammates match the selected filter.
         </p>
       )}
 
@@ -519,6 +561,105 @@ function LiveRunIndicator({
       <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">
         Live{liveCount > 1 ? ` (${liveCount})` : ""}
       </span>
+    </Link>
+  );
+}
+
+/**
+ * Roster-view card — each teammate as a hire-style card rather than a
+ * data-table row. Shows avatar, name, title/role, live-work indicator,
+ * who they report to, provider, and monthly comp.
+ *
+ * The goal is to make the founder feel like they're looking at an actual
+ * team roster instead of a list of "agents". All copy is employee-style
+ * (Working now / Paused / Out-of-budget) and the salary chip makes the
+ * budget feel concrete.
+ */
+function TeammateCard({
+  agent,
+  reportsTo,
+  liveRun,
+  roleLabel,
+}: {
+  agent: Agent;
+  reportsTo: string | null;
+  liveRun: { runId: string; liveCount: number } | null;
+  roleLabel: string;
+}) {
+  const isPaused = agent.pausedAt != null;
+  const statusLabel =
+    liveRun != null
+      ? "Working"
+      : agent.status === "error"
+        ? "Blocked"
+        : agent.status === "paused" || isPaused
+          ? "Paused"
+          : agent.status === "terminated"
+            ? "Off-boarded"
+            : "Ready";
+  const statusClass =
+    liveRun != null
+      ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
+      : agent.status === "error"
+        ? "bg-red-500/15 text-red-700 dark:text-red-300"
+        : agent.status === "paused" || isPaused
+          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+          : agent.status === "terminated"
+            ? "bg-muted text-muted-foreground"
+            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+
+  const adapterModel =
+    typeof (agent.adapterConfig as Record<string, unknown> | undefined)?.model === "string"
+      ? ((agent.adapterConfig as Record<string, unknown>).model as string)
+      : null;
+
+  return (
+    <Link
+      to={agentUrl(agent)}
+      className={cn(
+        "group flex flex-col rounded-xl border bg-card p-4 no-underline transition-all",
+        "border-border hover:border-[color:color-mix(in_oklch,var(--brand)_45%,var(--border))] hover:shadow-sm",
+        isPaused && "opacity-75",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+          style={{ background: "color-mix(in oklch, var(--brand) 14%, transparent)" }}
+        >
+          <AgentIcon icon={agent.icon} className="h-5 w-5 text-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold text-foreground">{agent.name}</span>
+            <span
+              className={cn(
+                "shrink-0 text-[10px] uppercase tracking-[0.1em] rounded-full px-1.5 py-0.5 font-semibold",
+                statusClass,
+              )}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground truncate mt-0.5">
+            {agent.title || roleLabel}
+          </div>
+          {reportsTo && (
+            <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <CornerDownRight className="h-3 w-3" />
+              <span className="truncate">reports to {reportsTo}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2 pt-3 border-t border-border/60">
+        <AgentProviderBadge adapterType={agent.adapterType} model={adapterModel} />
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+          <DollarSign className="h-3 w-3" />
+          {Math.round((agent.budgetMonthlyCents ?? 0) / 100)}/mo
+        </span>
+      </div>
     </Link>
   );
 }
