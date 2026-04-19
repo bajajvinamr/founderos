@@ -228,13 +228,13 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           Welcome to FounderOS
         </div>
         <h1 className="mt-4 text-4xl md:text-5xl font-semibold tracking-tight leading-[1.05] text-foreground">
-          Let&apos;s bring your{" "}
-          <span className="text-[var(--brand)]">AI company</span> to life.
+          Build your company.{" "}
+          <span className="text-[var(--brand)]">Hire your team.</span>
         </h1>
         <p className="mt-5 mx-auto max-w-lg text-base text-muted-foreground leading-relaxed">
-          We&apos;ll walk you through four steps: pick a template, confirm your AI providers,
-          review the roster, and launch. You&apos;ll have a fully-staffed company running
-          in under five minutes.
+          Four steps: pick a starting team, connect your AI provider,
+          review the roster, and launch. A full team of AI teammates, reporting into a CEO,
+          working from day one — in under five minutes.
         </p>
         <Button size="lg" onClick={onNext} className="mt-8 gap-2">
           Get started <ArrowRight className="h-4 w-4" />
@@ -497,7 +497,7 @@ function ProvidersStep({
         <h2 className="text-2xl font-semibold tracking-tight">Which AI provider?</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Agents can run on Claude, OpenAI/Codex, or Gemini — using the local CLI of whichever
-          you have subscribed, or a direct API key. You can mix + match per agent later.
+          you have subscribed, or a direct API key. Each teammate can use their own provider later.
         </p>
       </div>
 

@@ -255,7 +255,7 @@ export function RoutineRunVariablesDialog({
         <DialogHeader>
           <DialogTitle>Run routine</DialogTitle>
           <DialogDescription>
-            Choose the agent and optional project for this one run. Routine defaults are prefilled and won&apos;t be changed.
+            Choose the teammate and optional project for this one run. Routine defaults are prefilled and won&apos;t be changed.
           </DialogDescription>
         </DialogHeader>
 

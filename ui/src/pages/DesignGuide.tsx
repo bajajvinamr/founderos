@@ -638,7 +638,7 @@ export function DesignGuide() {
           <CollapsibleContent className="rounded-md border border-border p-3">
             <div className="space-y-2">
               <Label htmlFor="owner-filter">Owner</Label>
-              <Input id="owner-filter" placeholder="Filter by agent name" />
+              <Input id="owner-filter" placeholder="Filter by teammate name" />
             </div>
           </CollapsibleContent>
         </Collapsible>
