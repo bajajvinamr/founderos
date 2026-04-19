@@ -991,7 +991,7 @@ export function AgentDetail() {
                 }}
               >
                 <Trash2 className="h-3 w-3" />
-                Terminate
+                Let them go
               </button>
             </PopoverContent>
           </Popover>

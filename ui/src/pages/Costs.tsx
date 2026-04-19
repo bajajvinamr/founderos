@@ -756,10 +756,10 @@ export function Costs() {
                                 </div>
                                 {(row.apiRunCount > 0 || row.subscriptionRunCount > 0) ? (
                                   <div className="text-xs text-muted-foreground">
-                                    {row.apiRunCount > 0 ? `${row.apiRunCount} api` : "0 api"}
+                                    {row.apiRunCount > 0 ? `${row.apiRunCount} API session${row.apiRunCount === 1 ? "" : "s"}` : "0 API"}
                                     {" · "}
                                     {row.subscriptionRunCount > 0
-                                      ? `${row.subscriptionRunCount} subscription`
+                                      ? `${row.subscriptionRunCount} subscription session${row.subscriptionRunCount === 1 ? "" : "s"}`
                                       : "0 subscription"}
                                   </div>
                                 ) : null}
@@ -810,7 +810,7 @@ export function Costs() {
                   <Card>
                     <CardHeader className="px-5 pt-5 pb-2">
                       <CardTitle className="text-base">By project</CardTitle>
-                      <CardDescription>Run costs attributed through project-linked issues.</CardDescription>
+                      <CardDescription>Work-session costs attributed to each project via linked issues.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2 px-5 pb-5 pt-2">
                       {(spendData?.byProject.length ?? 0) === 0 ? (
