@@ -33,8 +33,8 @@ export function InstanceSettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: "Instance Settings" },
-      { label: "Heartbeats" },
+      { label: "Workspace settings" },
+      { label: "Shift schedule" },
     ]);
   }, [setBreadcrumbs]);
 
