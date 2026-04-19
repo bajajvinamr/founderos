@@ -541,8 +541,13 @@ export function Costs() {
       <div className="space-y-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-                <h1 className="text-3xl font-semibold tracking-tight">Costs</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-1.5">
+                  Spend
+                </div>
+                <h1 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
+                  Costs &amp; budgets
+                </h1>
+                <p className="mt-3 max-w-2xl text-[14px] leading-[1.65] text-muted-foreground">
                   Inference spend, platform fees, credits, and live quota windows.
                 </p>
             </div>
