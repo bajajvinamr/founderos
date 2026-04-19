@@ -1119,7 +1119,7 @@ export function OnboardingWizard() {
                     <textarea
                       ref={textareaRef}
                       className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[120px] max-h-[300px] overflow-y-auto"
-                      placeholder="Add more detail about what the agent should do..."
+                      placeholder="Add more detail about what this teammate should do..."
                       value={taskDescription}
                       onChange={(e) => setTaskDescription(e.target.value)}
                     />
@@ -1137,7 +1137,7 @@ export function OnboardingWizard() {
                       <h3 className="font-medium">Ready to launch</h3>
                       <p className="text-xs text-muted-foreground">
                         Everything is set up. Launching now will create the
-                        starter task, wake the agent, and open the issue.
+                        starter task, put this teammate on the clock, and open the issue.
                       </p>
                     </div>
                   </div>
