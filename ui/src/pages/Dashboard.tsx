@@ -16,6 +16,7 @@ import { EmptyState } from "../components/EmptyState";
 import { OnboardingWizardNew } from "../components/OnboardingWizardNew";
 import { CompanyPulseWidget } from "../components/CompanyPulseWidget";
 import { CompanyProvidersWidget } from "../components/CompanyProvidersWidget";
+import { FounderBriefing } from "../components/FounderBriefing";
 import { StatusIcon } from "../components/StatusIcon";
 
 import { ActivityRow } from "../components/ActivityRow";
@@ -190,16 +191,16 @@ export function Dashboard() {
     <div className="space-y-8">
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
-      {/* Editorial page header — gives the dashboard an identity that reads
-          as a considered product, not a generic metrics screen. */}
-      <header className="flex flex-col gap-1.5 pt-1">
-        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          Company dashboard
-        </div>
-        <h1 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
-          {selectedCompany?.name ?? "Your company"}
-        </h1>
-      </header>
+      {/* The Morning Brief — what a founder actually wants in their first 30
+          seconds of the day. Narrative + decisions + wins. Everything that
+          follows (pulse widget, metric cards, charts) is for "dig deeper". */}
+      <FounderBriefing
+        companyName={selectedCompany?.name}
+        summary={data}
+        activity={activity}
+        agents={agents}
+        issues={issues}
+      />
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
       <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
