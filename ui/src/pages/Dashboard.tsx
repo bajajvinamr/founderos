@@ -244,36 +244,33 @@ export function Dashboard() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-1 sm:gap-2">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
             <MetricCard
               icon={Bot}
               value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
-              label="Team Size"
+              label="Team size"
               to="/agents"
               description={
                 <span>
-                  {data.agents.running} working{", "}
-                  {data.agents.paused} paused{", "}
-                  {data.agents.error} blocked
+                  {data.agents.running} working · {data.agents.paused} paused · {data.agents.error} blocked
                 </span>
               }
             />
             <MetricCard
               icon={CircleDot}
               value={data.tasks.inProgress}
-              label="Tasks In Progress"
+              label="Work in flight"
               to="/issues"
               description={
                 <span>
-                  {data.tasks.open} open{", "}
-                  {data.tasks.blocked} blocked
+                  {data.tasks.open} open · {data.tasks.blocked} blocked
                 </span>
               }
             />
             <MetricCard
               icon={DollarSign}
               value={formatCents(data.costs.monthSpendCents)}
-              label="Month Spend"
+              label="Month spend"
               to="/costs"
               description={
                 <span>
@@ -286,12 +283,12 @@ export function Dashboard() {
             <MetricCard
               icon={ShieldCheck}
               value={data.pendingApprovals + data.budgets.pendingApprovals}
-              label="Pending Approvals"
+              label="Pending approvals"
               to="/approvals"
               description={
                 <span>
                   {data.budgets.pendingApprovals > 0
-                    ? `${data.budgets.pendingApprovals} budget overrides awaiting board review`
+                    ? `${data.budgets.pendingApprovals} budget overrides awaiting review`
                     : "Awaiting board review"}
                 </span>
               }
