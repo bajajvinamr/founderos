@@ -1,44 +1,41 @@
 import { Link } from "@/lib/router";
-import {
-  ArrowRight,
-  BarChart3,
-  Briefcase,
-  Building2,
-  CheckCircle2,
-  Clock,
-  DollarSign,
-  MessageCircle,
-  PenLine,
-  Shield,
-  Sparkles,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { FounderOSLogo } from "@/components/FounderOSLogo";
 
 /**
  * Public marketing landing page.
  *
- * Aesthetic: editorial Notion/Coda register with pulse-style data beats
- * — serif display headlines, restrained accent, tight section rhythm,
- * and a dark "night" panel breaking the middle so the page has a
- * heartbeat rather than scrolling as one flat surface.
+ * Visual direction: Pulse Builders register. Near-black editorial void,
+ * bone off-white foreground, warm signal-orange accent used sparingly,
+ * Fraunces display serif pushed sharp, JetBrains Mono for every data row.
+ * Horizontal rules separate sections. "INDEX 001" editorial numbering.
  *
- * Copy register: a founder talking to a founder. Specific, confident,
- * outcome-first, never feature-listy.
+ * Scope: the entire pulse-register design system is inlined at the page
+ * root so it does NOT leak into the authenticated app (which stays on
+ * the Instrument Serif + Inter set from index.css).
  */
 export function Landing() {
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="pulse-root min-h-screen font-pulse bg-pulse-void text-pulse-bone antialiased">
+      <style>{PULSE_SCOPED_CSS}</style>
       <TopBar />
-      <main className="flex-1">
+      <main>
         <Hero />
-        <PulseStrip />
+        <SectionRule />
+        <Services />
+        <SectionRule />
+        <MetricStrip />
+        <SectionRule />
         <MeetTheTeam />
-        <ForYouAgainstOldWay />
-        <HowItWorks />
-        <FeatureGrid />
-        <BuiltForCta />
-        <FinalCta />
+        <SectionRule />
+        <ShiftSection />
+        <SectionRule />
+        <Process />
+        <SectionRule />
+        <Pricing />
+        <SectionRule />
+        <FaqSection />
+        <SectionRule />
+        <Contact />
       </main>
       <Footer />
     </div>
@@ -46,25 +43,124 @@ export function Landing() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Top nav
+// Scoped design tokens + typography — lives only inside the landing route.
+// Everything else in the app stays on its own fonts + tokens.
+// ─────────────────────────────────────────────────────────────────────────
+
+const PULSE_SCOPED_CSS = `
+.pulse-root {
+  --pulse-void: #0a0a0c;
+  --pulse-void-2: #0f1012;
+  --pulse-elev: #17181b;
+  --pulse-line: #1e2024;
+  --pulse-line-hi: #2c2f35;
+  --pulse-bone: #f2efe5;
+  --pulse-bone-2: #cdc9bb;
+  --pulse-muted: #807c72;
+  --pulse-dim: #52504a;
+  --pulse-accent: #ff5b29;
+  color-scheme: dark;
+}
+.pulse-root .bg-pulse-void { background: var(--pulse-void); }
+.pulse-root .bg-pulse-elev { background: var(--pulse-void-2); }
+.pulse-root .text-pulse-bone { color: var(--pulse-bone); }
+.pulse-root .text-pulse-muted { color: var(--pulse-muted); }
+.pulse-root .text-pulse-accent { color: var(--pulse-accent); }
+.pulse-root .border-pulse-line { border-color: var(--pulse-line); }
+.pulse-root .border-pulse-line-hi { border-color: var(--pulse-line-hi); }
+.pulse-root .font-pulse {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "ss02", "cv11";
+}
+.pulse-root .font-display {
+  font-family: "Fraunces", "Times New Roman", Georgia, serif;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 0, "opsz" 144, "WONK" 0;
+  letter-spacing: -0.035em;
+  line-height: 0.94;
+}
+.pulse-root .font-display-italic {
+  font-family: "Fraunces", "Times New Roman", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 50, "opsz" 144;
+  letter-spacing: -0.03em;
+}
+.pulse-root .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  letter-spacing: 0;
+}
+.pulse-root .caps-wide { text-transform: uppercase; letter-spacing: 0.18em; }
+.pulse-root .caps { text-transform: uppercase; letter-spacing: 0.12em; }
+.pulse-root ::selection { background: var(--pulse-accent); color: var(--pulse-void); }
+
+.pulse-root .led {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--pulse-accent);
+  box-shadow: 0 0 14px var(--pulse-accent);
+  position: relative;
+}
+.pulse-root .led::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  background: var(--pulse-accent);
+  opacity: 0.35;
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.4; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+.pulse-root .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.125rem;
+  border: 1px solid var(--pulse-bone);
+  background: var(--pulse-bone);
+  color: var(--pulse-void);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  transition: all 0.18s ease;
+}
+.pulse-root .btn:hover {
+  background: var(--pulse-accent);
+  border-color: var(--pulse-accent);
+  color: var(--pulse-void);
+}
+.pulse-root .btn-ghost {
+  background: transparent;
+  border-color: var(--pulse-line-hi);
+  color: var(--pulse-bone);
+}
+.pulse-root .btn-ghost:hover {
+  border-color: var(--pulse-accent);
+  color: var(--pulse-accent);
+  background: transparent;
+}
+`;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Top nav — agency-style minimal
 // ─────────────────────────────────────────────────────────────────────────
 
 function TopBar() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-pulse-line backdrop-blur bg-[rgba(10,10,12,0.8)]">
       <div className="mx-auto max-w-6xl px-6 md:px-10 h-14 flex items-center justify-between">
-        <FounderOSLogo size={20} />
-        <nav className="flex items-center gap-2">
-          <Link
-            to="/auth"
-            className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5"
-          >
+        <FounderOSLogo size={18} />
+        <nav className="flex items-center gap-4 font-mono caps text-[10px]">
+          <Link to="/auth" className="text-pulse-muted hover:text-pulse-bone transition-colors">
             Sign in
           </Link>
-          <Link to="/auth">
-            <Button size="sm" className="gap-1.5">
-              Get started <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
+          <Link to="/auth" className="btn">
+            Build your company <span aria-hidden>→</span>
           </Link>
         </nav>
       </div>
@@ -73,153 +169,193 @@ function TopBar() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Hero
+// Hero — editorial, huge Fraunces display, with live "This week" pulse
 // ─────────────────────────────────────────────────────────────────────────
 
 function Hero() {
   return (
-    <section className="border-b border-border/70">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-28">
-        <div className="grid grid-cols-1 md:grid-cols-[1.1fr,1fr] gap-12 md:gap-20 items-start">
-          <div>
-            <div className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-8">
-              <span className="relative inline-flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--brand)] opacity-70" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--brand)]" />
-              </span>
-              Live — the AI company OS
-            </div>
-            <h1 className="font-display text-[52px] md:text-[76px] leading-[0.98] tracking-tight text-foreground">
-              Run a million-dollar
-              <br />
-              company as a
-              <br />
-              <span className="relative inline-block">
-                <span className="font-display-italic text-[var(--brand)] relative z-[1]">
-                  party of one.
-                </span>
-                <span
-                  aria-hidden
-                  className="absolute left-0 right-0 bottom-[6px] h-[10px] md:h-[14px] rounded-full"
-                  style={{
-                    background: "color-mix(in oklch, var(--brand) 18%, transparent)",
-                    zIndex: 0,
-                  }}
-                />
-              </span>
-            </h1>
-            <p className="mt-8 max-w-xl text-[17px] md:text-[18px] text-foreground/80 leading-[1.6]">
-              FounderOS ships you a complete AI team — CEO, CTO, head of growth,
-              ops lead, and a dozen direct reports — with an org chart, shift
-              schedule, monthly comp caps, and a Morning Brief that tells you
-              what happened while you slept.
-            </p>
-            <div className="mt-10 flex items-center gap-4 flex-wrap">
-              <Link to="/auth">
-                <Button size="lg" className="gap-2">
-                  Build your company
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <span className="text-[13px] text-muted-foreground">
-                Free while you&apos;re under $10k MRR · BYO provider keys
-              </span>
-            </div>
-            <div className="mt-14 grid grid-cols-3 gap-6 max-w-md">
-              <Stat label="Setup" value="<5m" sub="Template → launch" />
-              <Stat label="Team" value="20" sub="Across 3 providers" />
-              <Stat label="Hosting" value="Single" sub="One tenant per founder" />
-            </div>
-          </div>
-
-          <BriefPreview />
+    <section className="relative min-h-[92svh] flex flex-col justify-between pt-28 md:pt-32 pb-12">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 w-full flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono caps-wide text-[10px] text-pulse-accent">INDEX 001</span>
+          <span className="font-mono caps text-[11px] text-pulse-muted">
+            FounderOS · The AI company OS · Est 2026
+          </span>
+        </div>
+        <div className="font-mono caps text-[11px] text-pulse-muted md:max-w-[320px] md:text-right">
+          <span className="led inline-block mr-2 align-middle" />
+          Live — 18 founders running companies this week
         </div>
       </div>
+
+      <div className="mx-auto max-w-6xl px-6 md:px-10 w-full mt-20 md:mt-0">
+        <h1
+          className="font-display"
+          style={{ fontSize: "clamp(3.5rem, 1.8rem + 8vw, 10.5rem)" }}
+        >
+          <span>Run a</span>{" "}
+          <span className="font-display-italic text-pulse-accent">million-dollar</span>
+          <br />
+          <span>company as a</span>{" "}
+          <span className="font-display-italic text-pulse-accent">party of one.</span>
+        </h1>
+
+        <p
+          className="mt-8 max-w-[58ch] text-pulse-bone/75"
+          style={{ fontSize: "clamp(1rem, 0.95rem + 0.4vw, 1.2rem)", lineHeight: 1.5 }}
+        >
+          FounderOS ships you a complete AI team — CEO, CTO, head of growth, ops
+          lead — with an org chart, shift schedule, monthly comp caps, and a
+          Morning Brief that tells you what happened while you slept.
+        </p>
+
+        <div className="mt-10 flex flex-wrap items-center gap-4">
+          <Link to="/auth" className="btn">
+            Start your company <span aria-hidden>→</span>
+          </Link>
+          <a href="#how" className="btn btn-ghost">
+            How it works <span aria-hidden>↓</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Live pulse module — the "This week" data strip */}
+      <ThisWeekPulse />
     </section>
   );
 }
 
-function BriefPreview() {
+function ThisWeekPulse() {
   return (
-    <div className="rounded-lg border border-border bg-card p-6 md:p-7 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
-        Morning brief · Thursday
-      </div>
-      <h3 className="font-display text-[32px] leading-[1.05] tracking-tight text-foreground">
-        Good morning, Alex.
-      </h3>
-      <p className="mt-3 text-[14px] text-foreground/80 leading-[1.6]">
-        Acme Labs ran 14 work sessions and shipped 3 things in the last 12
-        hours. Spend this month: $340 (12% of cap).
-      </p>
-
-      <div className="grid grid-cols-2 gap-5 mt-6">
-        <div>
-          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground mb-2">
-            Needs your call
+    <div className="mx-auto max-w-6xl px-6 md:px-10 w-full mt-20 md:mt-0">
+      <div className="grid grid-cols-12 gap-6 border-t border-pulse-line pt-6">
+        <div className="col-span-12 md:col-span-3">
+          <div className="flex items-center gap-2.5">
+            <span className="led" />
+            <span className="font-mono caps-wide text-[10px] text-pulse-accent">
+              This week · Apr 19
+            </span>
           </div>
-          <ul className="space-y-2 text-[12px]">
-            <li className="flex items-start gap-2">
-              <span className="mt-[5px] inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-              <div>
-                <div className="font-medium text-foreground">2 approvals pending</div>
-                <div className="text-muted-foreground">Review and sign off</div>
-              </div>
-            </li>
+        </div>
+        <div className="col-span-12 md:col-span-3">
+          <div className="font-mono caps text-[10px] text-pulse-muted mb-1.5">
+            Teams building now
+          </div>
+          <ul className="space-y-0.5 font-mono text-[13px]">
+            <li>agnost.ai <span className="text-pulse-muted">· pre-seed</span></li>
+            <li>Pred <span className="text-pulse-muted">· seed</span></li>
+            <li>Gravton Labs <span className="text-pulse-muted">· bootstrap</span></li>
           </ul>
         </div>
-        <div>
-          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground mb-2">
-            Your team shipped
+        <div className="col-span-12 md:col-span-3">
+          <div className="font-mono caps text-[10px] text-pulse-muted mb-1.5">
+            Last company shipped
           </div>
-          <ul className="space-y-2 text-[12px]">
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-500" />
-              <span className="text-foreground font-medium truncate">Q4 pricing page draft</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-500" />
-              <span className="text-foreground font-medium truncate">
-                Outreach sent to 14 prospects
-              </span>
-            </li>
-          </ul>
+          <div className="font-mono text-[13px]">Solo Indie SaaS</div>
+          <div className="font-mono text-[12px] text-pulse-muted">
+            CEO + 6 direct reports · 5m setup
+          </div>
         </div>
-      </div>
-
-      <div className="mt-6 pt-5 border-t border-border/70 flex items-center justify-between gap-3">
-        <div className="text-[11px] text-muted-foreground">Set today&apos;s focus.</div>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">
-          <PenLine className="h-3 w-3" />
-          Brief the team
-        </span>
+        <div className="col-span-12 md:col-span-3">
+          <div className="font-mono caps text-[10px] text-pulse-muted mb-1.5">
+            Open slots this quarter
+          </div>
+          <div className="font-mono text-[13px]">Unlimited</div>
+          <div className="font-mono text-[12px] text-pulse-muted">Self-serve · always open</div>
+        </div>
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Pulse strip — a sub-hero that shows the product's heartbeat numbers
+// Services — what we hire for you
 // ─────────────────────────────────────────────────────────────────────────
 
-function PulseStrip() {
+function Services() {
+  const services: Array<{ n: string; label: string; sub: string }> = [
+    {
+      n: "01",
+      label: "CEO / COS",
+      sub: "Runs the week. Writes the brief. Unblocks direct reports. The first teammate to wake up every morning.",
+    },
+    {
+      n: "02",
+      label: "Engineering",
+      sub: "CTO + engineers on Claude Code / Codex / Cursor. Open PRs, review each other's work, ship features.",
+    },
+    {
+      n: "03",
+      label: "Growth",
+      sub: "Head of growth, content, outbound. Uses your data to run experiments and book meetings.",
+    },
+    {
+      n: "04",
+      label: "Finance & Ops",
+      sub: "Runway tracking, vendor management, burn alerts, end-of-month books. The part you hate most — automated.",
+    },
+  ];
+
+  return (
+    <section id="services" className="mx-auto max-w-6xl px-6 md:px-10 py-24 md:py-32">
+      <div className="grid grid-cols-12 gap-8 md:gap-12">
+        <div className="col-span-12 md:col-span-4">
+          <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">002 — ROLES</div>
+          <h2
+            className="font-display"
+            style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}
+          >
+            Every role a
+            <br />
+            <span className="font-display-italic">young company</span>{" "}
+            needs.
+          </h2>
+        </div>
+        <div className="col-span-12 md:col-span-8 md:col-start-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-10">
+            {services.map((s) => (
+              <div key={s.n}>
+                <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-2">{s.n}</div>
+                <h3
+                  className="font-display mb-3"
+                  style={{ fontSize: "clamp(1.5rem, 1.2rem + 0.8vw, 1.875rem)" }}
+                >
+                  {s.label}
+                </h3>
+                <p className="text-[14px] text-pulse-bone/70 leading-[1.55]">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Metric strip — the "pulse" as big editorial numbers
+// ─────────────────────────────────────────────────────────────────────────
+
+function MetricStrip() {
   const beats: Array<{ value: string; label: string }> = [
-    { value: "38", label: "Work sessions today" },
-    { value: "14", label: "Issues closed this week" },
-    { value: "$340", label: "Spent this month" },
-    { value: "6 mo", label: "Runway at current pace" },
+    { value: "<5m", label: "Zero to a running company" },
+    { value: "20", label: "AI teammates per org" },
+    { value: "3", label: "Providers · Claude, Codex, Gemini" },
+    { value: "$0", label: "Until you're over $10k MRR" },
   ];
   return (
-    <section className="border-b border-border/70 bg-[color:color-mix(in_oklch,var(--muted)_28%,var(--background))]">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-10 md:py-14">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+    <section className="bg-pulse-elev">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
           {beats.map((b) => (
-            <div key={b.label} className="flex flex-col gap-1">
-              <div className="font-display text-[36px] md:text-[44px] leading-none tabular-nums text-foreground">
+            <div key={b.label}>
+              <div
+                className="font-display"
+                style={{ fontSize: "clamp(3rem, 2rem + 3vw, 4.5rem)" }}
+              >
                 {b.value}
               </div>
-              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <div className="font-mono caps-wide text-[10px] text-pulse-muted mt-3">
                 {b.label}
               </div>
             </div>
@@ -231,110 +367,118 @@ function PulseStrip() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Meet the team — product's concrete "what you get day one"
+// Meet the team — four sample teammates as mini-profiles
 // ─────────────────────────────────────────────────────────────────────────
 
 function MeetTheTeam() {
-  const roster: Array<{ name: string; title: string; comp: string; focus: string }> = [
-    { name: "Nova", title: "Chief Executive Officer", comp: "$200/mo", focus: "Runs the week, writes the brief" },
-    { name: "Atlas", title: "Chief Technology Officer", comp: "$250/mo", focus: "Ships code, reviews PRs" },
-    { name: "Orbit", title: "Head of Growth", comp: "$200/mo", focus: "Runs outbound, tracks pipeline" },
-    { name: "Ledger", title: "Head of Finance & Ops", comp: "$150/mo", focus: "Burn, runway, vendor contracts" },
+  const roster: Array<{ name: string; role: string; comp: string; ship: string }> = [
+    { name: "Nova", role: "Chief Executive", comp: "$200/mo", ship: "Runs the week. Writes the brief." },
+    { name: "Atlas", role: "Chief Technology", comp: "$250/mo", ship: "Ships PRs. Reviews code." },
+    { name: "Orbit", role: "Head of Growth", comp: "$200/mo", ship: "Runs outbound. Tracks pipeline." },
+    { name: "Ledger", role: "Finance & Ops", comp: "$150/mo", ship: "Watches burn. Closes books." },
   ];
   return (
-    <section className="border-b border-border/70">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
-        <div className="max-w-2xl mb-14">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
-            Meet the team
-          </div>
-          <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-foreground">
-            Your first four hires, ready on day one.
+    <section className="mx-auto max-w-6xl px-6 md:px-10 py-24 md:py-32">
+      <div className="grid grid-cols-12 gap-8 md:gap-12 mb-16">
+        <div className="col-span-12 md:col-span-4">
+          <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">003 — ROSTER</div>
+          <h2
+            className="font-display"
+            style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}
+          >
+            Meet your
+            <br />
+            <span className="font-display-italic">first four hires.</span>
           </h2>
-          <p className="mt-4 text-[14px] text-muted-foreground leading-[1.65]">
-            Every template ships a complete starter roster. Comp caps are real.
-            Each teammate knows who they report to and what they&apos;re supposed
-            to ship.
+        </div>
+        <div className="col-span-12 md:col-span-7 md:col-start-6 flex items-end">
+          <p className="text-[15px] text-pulse-bone/70 leading-[1.6] max-w-[52ch]">
+            Every template ships a complete org. Each teammate has a title, a
+            manager, standing instructions, and a monthly comp cap. Edit anything
+            on day two.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {roster.map((r) => (
-            <div
-              key={r.name}
-              className="rounded-lg border border-border bg-card p-5 hover:border-foreground/25 transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-[13px] font-semibold text-foreground">
-                  {r.name[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold text-foreground tracking-tight truncate">
-                    {r.name}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground truncate">{r.title}</div>
-                </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-t border-pulse-line">
+        {roster.map((r, i) => (
+          <div
+            key={r.name}
+            className={`p-7 border-pulse-line ${i < roster.length - 1 ? "md:border-r" : ""} ${i < 2 ? "md:border-b lg:border-b-0" : ""} border-b md:last:border-b-0`}
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-pulse-line-hi font-mono text-[12px]">
+                {r.name[0]}
               </div>
-              <div className="mt-4 text-[13px] text-foreground/80 leading-snug">{r.focus}</div>
-              <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> On call
-                </span>
-                <span className="inline-flex items-center gap-0.5">
-                  <DollarSign className="h-3 w-3" />
-                  {r.comp}
-                </span>
+              <div className="flex-1 min-w-0">
+                <div className="font-mono caps text-[10px] text-pulse-muted">{r.role}</div>
               </div>
             </div>
-          ))}
-        </div>
+            <h3
+              className="font-display mb-5"
+              style={{ fontSize: "clamp(1.625rem, 1.2rem + 1vw, 2rem)" }}
+            >
+              {r.name}
+            </h3>
+            <p className="text-[13.5px] text-pulse-bone/75 leading-[1.55] mb-5">{r.ship}</p>
+            <div className="flex items-center justify-between pt-4 border-t border-pulse-line font-mono caps text-[10px]">
+              <span className="text-pulse-muted">On call</span>
+              <span className="text-pulse-bone">{r.comp}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// You vs the old way — hiring comparison table
+// The shift — old way vs FounderOS
 // ─────────────────────────────────────────────────────────────────────────
 
-function ForYouAgainstOldWay() {
-  const rows: Array<{ item: string; old: string; newWay: string }> = [
-    { item: "Time to a working team", old: "6 months of hiring", newWay: "5 minutes from a template" },
-    { item: "Monthly burn", old: "$80k+ in comp", newWay: "$500 in provider spend" },
-    { item: "Management overhead", old: "1:1s, reviews, offsites", newWay: "Morning brief · one line" },
-    { item: "Scaling a new function", old: "Recruit, interview, onboard", newWay: "Hire a teammate · 30 seconds" },
-    { item: "Who's accountable", old: "Trust, over time", newWay: "Reports-to graph from day one" },
+function ShiftSection() {
+  const rows: Array<{ item: string; old: string; next: string }> = [
+    { item: "Time to a working team", old: "6 months of hiring", next: "5 minutes from a template" },
+    { item: "Monthly burn", old: "$80k+ in comp", next: "$500 in provider spend" },
+    { item: "Scaling a function", old: "Recruit · interview · onboard", next: "Hire a teammate · 30s" },
+    { item: "Management overhead", old: "1:1s · reviews · offsites", next: "Morning brief · one line" },
+    { item: "Who's accountable", old: "Trust, over time", next: "Reports-to graph, day one" },
   ];
   return (
-    <section className="border-b border-border/70 bg-[color:color-mix(in_oklch,var(--muted)_12%,var(--background))]">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
-        <div className="max-w-2xl mb-10">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
-            The shift
+    <section className="bg-pulse-elev">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-24 md:py-32">
+        <div className="grid grid-cols-12 gap-8 md:gap-12 mb-14">
+          <div className="col-span-12 md:col-span-5">
+            <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">004 — THE SHIFT</div>
+            <h2
+              className="font-display"
+              style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}
+            >
+              You, against the
+              <br />
+              <span className="font-display-italic">old way</span> of building.
+            </h2>
           </div>
-          <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-foreground">
-            You, against the old way of building a company.
-          </h2>
         </div>
-        <div className="rounded-lg border border-border bg-background overflow-hidden">
-          <div className="grid grid-cols-[1.25fr,1fr,1fr] text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            <div className="px-5 py-3 border-b border-r border-border">What</div>
-            <div className="px-5 py-3 border-b border-r border-border">Classic startup</div>
-            <div className="px-5 py-3 border-b border-border">With FounderOS</div>
+
+        <div className="border border-pulse-line">
+          <div className="grid grid-cols-[1.2fr,1fr,1fr] font-mono caps-wide text-[10px] text-pulse-muted">
+            <div className="px-5 py-3 border-b border-r border-pulse-line">What</div>
+            <div className="px-5 py-3 border-b border-r border-pulse-line">Classic startup</div>
+            <div className="px-5 py-3 border-b border-pulse-line text-pulse-accent">With FounderOS</div>
           </div>
           {rows.map((r, i) => (
             <div
               key={r.item}
-              className={`grid grid-cols-[1.25fr,1fr,1fr] text-[13.5px] ${
-                i < rows.length - 1 ? "border-b border-border" : ""
+              className={`grid grid-cols-[1.2fr,1fr,1fr] text-[13.5px] ${
+                i < rows.length - 1 ? "border-b border-pulse-line" : ""
               }`}
             >
-              <div className="px-5 py-4 font-medium text-foreground border-r border-border">
-                {r.item}
-              </div>
-              <div className="px-5 py-4 text-muted-foreground line-through decoration-muted-foreground/40 border-r border-border">
+              <div className="px-5 py-5 font-medium border-r border-pulse-line">{r.item}</div>
+              <div className="px-5 py-5 text-pulse-muted line-through decoration-pulse-muted/60 border-r border-pulse-line">
                 {r.old}
               </div>
-              <div className="px-5 py-4 text-foreground font-medium">{r.newWay}</div>
+              <div className="px-5 py-5 text-pulse-bone">{r.next}</div>
             </div>
           ))}
         </div>
@@ -344,50 +488,137 @@ function ForYouAgainstOldWay() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// How it works
+// Process — three steps
 // ─────────────────────────────────────────────────────────────────────────
 
-function HowItWorks() {
+function Process() {
   const steps: Array<{ n: string; label: string; sub: string }> = [
     {
       n: "01",
       label: "Pick a starting team",
-      sub: "Three prebuilt org shapes — Pre-seed AI Lab, Solo Indie SaaS, Bootstrapped B2B — or import a roster exported from another company.",
+      sub: "Three prebuilt org shapes or import a roster exported from another company.",
     },
     {
       n: "02",
-      label: "Connect an AI provider",
-      sub: "Log in with your Claude Code subscription, OpenAI Codex CLI, or Gemini CLI. Or paste an API key. FounderOS detects what's available and routes automatically.",
+      label: "Connect a provider",
+      sub: "Log in with your Claude Code subscription, Codex CLI, or Gemini CLI. Or paste an API key.",
     },
     {
       n: "03",
-      label: "Launch and brief the team",
-      sub: "The team goes live. Write one line in the Morning Brief to set the week's focus — the CEO fans it out to reports on the next shift.",
+      label: "Launch and brief",
+      sub: "The team goes live. Write one line to set the week's focus. The CEO fans it to reports.",
     },
   ];
   return (
-    <section className="border-b border-border/70">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
-        <div className="max-w-2xl mb-12">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
-            How it works
-          </div>
-          <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-foreground">
-            Three steps from zero to a running company.
+    <section id="how" className="mx-auto max-w-6xl px-6 md:px-10 py-24 md:py-32">
+      <div className="grid grid-cols-12 gap-8 md:gap-12 mb-14">
+        <div className="col-span-12 md:col-span-4">
+          <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">005 — PROCESS</div>
+          <h2
+            className="font-display"
+            style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}
+          >
+            Three steps.
+            <br />
+            <span className="font-display-italic">Zero to live.</span>
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
-          {steps.map((s) => (
-            <div key={s.n} className="border-l border-border pl-6">
-              <div className="text-[11px] font-medium tabular-nums text-muted-foreground mb-2">
-                {s.n}
-              </div>
-              <h3 className="font-display text-[22px] leading-[1.15] tracking-tight text-foreground mb-2">
-                {s.label}
-              </h3>
-              <p className="text-[13px] text-muted-foreground leading-[1.65]">{s.sub}</p>
-            </div>
-          ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 border-t border-pulse-line">
+        {steps.map((s, i) => (
+          <div
+            key={s.n}
+            className={`p-7 border-pulse-line border-b ${i < steps.length - 1 ? "md:border-r" : ""} md:border-b-0`}
+          >
+            <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-6">{s.n}</div>
+            <h3
+              className="font-display mb-4"
+              style={{ fontSize: "clamp(1.625rem, 1.2rem + 1vw, 2rem)" }}
+            >
+              {s.label}
+            </h3>
+            <p className="text-[13.5px] text-pulse-bone/70 leading-[1.6]">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Pricing — just two tiers, editorial
+// ─────────────────────────────────────────────────────────────────────────
+
+function Pricing() {
+  return (
+    <section className="mx-auto max-w-6xl px-6 md:px-10 py-24 md:py-32">
+      <div className="grid grid-cols-12 gap-8 md:gap-12 mb-14">
+        <div className="col-span-12 md:col-span-5">
+          <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">006 — PRICING</div>
+          <h2
+            className="font-display"
+            style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}
+          >
+            Free until
+            <br />
+            <span className="font-display-italic">you&apos;re winning.</span>
+          </h2>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 border-t border-pulse-line">
+        <div className="p-8 md:p-10 border-b md:border-r border-pulse-line">
+          <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-4">Solo</div>
+          <div
+            className="font-display mb-6"
+            style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}
+          >
+            $0<span className="font-mono text-[13px] text-pulse-muted ml-3">/ month</span>
+          </div>
+          <p className="text-[14px] text-pulse-bone/75 leading-[1.55] mb-6">
+            Everything. One company. Unlimited teammates. BYO provider keys.
+            Free while you&apos;re under $10k MRR.
+          </p>
+          <ul className="space-y-2 text-[13px] font-mono">
+            <li>— Full Morning Brief + roster</li>
+            <li>— Multi-provider routing</li>
+            <li>— Single-tenant self-host (Fly.io)</li>
+            <li>— Import / export companies</li>
+          </ul>
+          <div className="mt-8">
+            <Link to="/auth" className="btn">
+              Start free <span aria-hidden>→</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="p-8 md:p-10 bg-pulse-elev">
+          <div className="flex items-center justify-between mb-4">
+            <div className="font-mono caps-wide text-[10px] text-pulse-accent">Scale</div>
+            <span className="font-mono caps text-[10px] text-pulse-muted">Coming soon</span>
+          </div>
+          <div
+            className="font-display mb-6"
+            style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}
+          >
+            2%<span className="font-mono text-[13px] text-pulse-muted ml-3">of MRR above $10k</span>
+          </div>
+          <p className="text-[14px] text-pulse-bone/75 leading-[1.55] mb-6">
+            Multi-company. Shared templates. Audit logs. SOC 2. The CEO seat
+            stays free — you only pay when the company starts making money.
+          </p>
+          <ul className="space-y-2 text-[13px] font-mono">
+            <li>— Multiple companies per workspace</li>
+            <li>— Cross-company team templates</li>
+            <li>— Compliance + audit</li>
+            <li>— Priority provider access</li>
+          </ul>
+          <div className="mt-8">
+            <a href="mailto:hello@founderos.ai" className="btn btn-ghost">
+              Talk to us <span aria-hidden>→</span>
+            </a>
+          </div>
         </div>
       </div>
     </section>
@@ -395,104 +626,65 @@ function HowItWorks() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Feature grid
+// FAQ
 // ─────────────────────────────────────────────────────────────────────────
 
-function FeatureGrid() {
-  const features: Array<{ icon: typeof Briefcase; label: string; sub: string }> = [
+function FaqSection() {
+  const items: Array<{ q: string; a: string }> = [
     {
-      icon: Briefcase,
-      label: "A real org chart",
-      sub: "Every teammate has a title, a manager, standing instructions, a shift schedule, and a monthly comp cap. It reads like a company, not a pool of agents.",
+      q: "Do I need to know how to code?",
+      a: "No. You pick a template, plug in a provider, write one-line briefs. Your CEO teammate handles the rest — delegating work, running the standup, resolving blockers.",
     },
     {
-      icon: Sparkles,
-      label: "Morning Brief",
-      sub: "What happened overnight, who's blocked, what shipped, today's focus, and your runway — all above the fold, every morning.",
+      q: "What does it actually cost to run?",
+      a: "The platform is free. You pay your provider directly — typically $50–500/mo depending on team size and activity. No per-seat pricing, no retainer, no lock-in.",
     },
     {
-      icon: BarChart3,
-      label: "Honest ROI",
-      sub: "Each roster card shows spend this month next to issues closed this month. See who's earning their comp without opening a spreadsheet.",
+      q: "Can I export my company?",
+      a: "Yes. One click produces a JSON template — your full org, goals, projects, starter backlog — that can be replayed into a fresh instance.",
     },
     {
-      icon: MessageCircle,
-      label: "Brief the team",
-      sub: "Write one line — \"Focus the week on Acme onboarding\" — and it flows down the org chart to every relevant teammate on their next shift.",
+      q: "Is my data private?",
+      a: "Single-tenant by default. AES-256-GCM encrypted key vault. Deploy on Fly.io in one command or bring your own VPC. Your provider keys never leave your infra.",
     },
     {
-      icon: Building2,
-      label: "Import / export",
-      sub: "Companies travel. Export any running company as a template, replay it into a fresh instance, or clone your own org for a new experiment.",
-    },
-    {
-      icon: Shield,
-      label: "Your keys, your infra",
-      sub: "Single-tenant by default. AES-256-GCM encrypted key vault. Deploy on Fly.io in one command or bring your own VPC.",
+      q: "What happens when a teammate gets stuck?",
+      a: "They show up on the Morning Brief under \"Needs your call.\" You unblock with one message; the CEO teammate redirects the rest of the team accordingly.",
     },
   ];
-
   return (
-    <section className="border-b border-border/70">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
-        <div className="max-w-2xl mb-12">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-3">
-            What you get
-          </div>
-          <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-foreground">
-            An operating system for your first million.
+    <section id="faq" className="mx-auto max-w-6xl px-6 md:px-10 py-24 md:py-32">
+      <div className="grid grid-cols-12 gap-8 md:gap-12">
+        <div className="col-span-12 md:col-span-4">
+          <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">007 — QUESTIONS</div>
+          <h2
+            className="font-display"
+            style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}
+          >
+            Asked,
+            <br />
+            <span className="font-display-italic">answered.</span>
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 md:gap-12">
-          {features.map((f) => (
-            <div key={f.label}>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border mb-4">
-                <f.icon className="h-4 w-4 text-foreground/80" />
-              </div>
-              <h3 className="text-[15px] font-semibold text-foreground tracking-tight mb-1.5">
-                {f.label}
-              </h3>
-              <p className="text-[13.5px] text-muted-foreground leading-[1.65]">{f.sub}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Built for — audience quotes / framing
-// ─────────────────────────────────────────────────────────────────────────
-
-function BuiltForCta() {
-  return (
-    <section className="border-b border-border/70 bg-foreground text-background">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-20 md:py-24">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr] gap-12 md:gap-20 items-start">
-          <div>
-            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-background/70 mb-3">
-              Built for
-            </div>
-            <h2 className="font-display text-[36px] md:text-[48px] leading-[1.05] tracking-tight text-background">
-              Solo operators who
-              <br />
-              refuse to hire six people.
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
-            {[
-              { title: "Technical founders", sub: "Ship product without a team. Your CTO teammate handles PRs while you talk to customers." },
-              { title: "Indie builders", sub: "Keep $80k/year out of burn. Your Head of Growth teammate runs outbound at $200/month." },
-              { title: "Pre-seed CEOs", sub: "Stretch your first $250k. Pilot GTM, content, and ops with AI before hiring humans." },
-              { title: "Bootstrappers", sub: "Stay profitable. Your team scales with provider spend, not salaries." },
-            ].map((x) => (
-              <div key={x.title}>
-                <div className="text-[14px] font-semibold text-background mb-1">
-                  {x.title}
-                </div>
-                <p className="text-[12.5px] text-background/75 leading-[1.65]">{x.sub}</p>
-              </div>
+        <div className="col-span-12 md:col-span-8">
+          <div className="divide-y divide-pulse-line border-t border-b border-pulse-line">
+            {items.map((it) => (
+              <details key={it.q} className="group">
+                <summary className="flex items-start justify-between gap-6 py-5 cursor-pointer list-none">
+                  <h3
+                    className="font-display flex-1"
+                    style={{ fontSize: "clamp(1.25rem, 1.05rem + 0.5vw, 1.5rem)" }}
+                  >
+                    {it.q}
+                  </h3>
+                  <span className="font-mono caps-wide text-[10px] text-pulse-muted mt-1 shrink-0 group-open:text-pulse-accent">
+                    {"+"}
+                  </span>
+                </summary>
+                <p className="pb-6 max-w-[62ch] text-[14px] text-pulse-bone/75 leading-[1.65]">
+                  {it.a}
+                </p>
+              </details>
             ))}
           </div>
         </div>
@@ -502,43 +694,32 @@ function BuiltForCta() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Final CTA
+// Contact — agency-style big sign-off
 // ─────────────────────────────────────────────────────────────────────────
 
-function FinalCta() {
+function Contact() {
   return (
-    <section>
-      <div className="mx-auto max-w-3xl px-6 md:px-10 py-24 md:py-32 text-center">
-        <h2 className="font-display text-[44px] md:text-[60px] leading-[1.02] tracking-tight text-foreground">
-          Start your company.
-          <br />
-          <span className="relative inline-block">
-            <span className="font-display-italic text-[var(--brand)] relative z-[1]">
-              Hire your team.
-            </span>
-            <span
-              aria-hidden
-              className="absolute left-0 right-0 bottom-[4px] h-[8px] md:h-[12px] rounded-full"
-              style={{
-                background: "color-mix(in oklch, var(--brand) 18%, transparent)",
-                zIndex: 0,
-              }}
-            />
-          </span>
-        </h2>
-        <p className="mt-6 mx-auto max-w-xl text-[15px] text-muted-foreground leading-[1.65]">
-          Five minutes of setup and you&apos;re running a team of twenty AI
-          teammates. Bring your own provider keys. Your data stays on your
-          infra.
-        </p>
-        <div className="mt-10 flex items-center justify-center gap-4 flex-wrap">
-          <Link to="/auth">
-            <Button size="lg" className="gap-2">
-              Build your company <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <span className="text-[12.5px] text-muted-foreground">Free while you&apos;re under $10k MRR</span>
-        </div>
+    <section id="contact" className="mx-auto max-w-6xl px-6 md:px-10 py-28 md:py-40">
+      <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-6">008 — GO</div>
+      <h2
+        className="font-display"
+        style={{ fontSize: "clamp(3rem, 1.6rem + 6vw, 8.5rem)" }}
+      >
+        Start your company.
+        <br />
+        <span className="font-display-italic text-pulse-accent">Hire your team.</span>
+      </h2>
+      <p className="mt-8 max-w-[56ch] text-[15px] text-pulse-bone/70 leading-[1.55]">
+        Five minutes of setup. Bring your Claude, Codex, or Gemini key. You walk
+        in as a solo operator and walk out running a company.
+      </p>
+      <div className="mt-12 flex flex-wrap items-center gap-4">
+        <Link to="/auth" className="btn">
+          Build your company <span aria-hidden>→</span>
+        </Link>
+        <a href="mailto:hello@founderos.ai" className="btn btn-ghost">
+          Say hello <span aria-hidden>→</span>
+        </a>
       </div>
     </section>
   );
@@ -550,26 +731,20 @@ function FinalCta() {
 
 function Footer() {
   return (
-    <footer className="border-t border-border/70">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 py-8 flex items-center justify-between gap-4 flex-wrap">
+    <footer className="border-t border-pulse-line">
+      <div className="mx-auto max-w-6xl px-6 md:px-10 py-10 flex items-center justify-between gap-4 flex-wrap font-mono text-[11px] text-pulse-muted">
         <div className="flex items-center gap-3">
-          <FounderOSLogo size={18} />
-          <span className="text-[12px] text-muted-foreground">
-            © {new Date().getFullYear()} FounderOS
-          </span>
+          <FounderOSLogo size={16} />
+          <span>© {new Date().getFullYear()} FounderOS</span>
         </div>
-        <div className="flex items-center gap-5 text-[12px] text-muted-foreground">
-          <a href="/legal/terms" className="hover:text-foreground">
-            Terms
-          </a>
-          <a href="/legal/privacy" className="hover:text-foreground">
-            Privacy
-          </a>
+        <div className="flex items-center gap-5">
+          <a href="/legal/terms" className="hover:text-pulse-bone">Terms</a>
+          <a href="/legal/privacy" className="hover:text-pulse-bone">Privacy</a>
           <a
             href="https://github.com/founderos-ai/founderos"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-foreground"
+            className="hover:text-pulse-bone"
           >
             GitHub
           </a>
@@ -579,20 +754,6 @@ function Footer() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Primitives
-// ─────────────────────────────────────────────────────────────────────────
-
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div>
-      <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground mb-1.5">
-        {label}
-      </div>
-      <div className="font-display text-[28px] leading-none tabular-nums text-foreground">
-        {value}
-      </div>
-      <div className="mt-1 text-[11px] text-muted-foreground leading-snug">{sub}</div>
-    </div>
-  );
+function SectionRule() {
+  return <div className="mx-auto max-w-6xl px-6 md:px-10"><div className="border-t border-pulse-line" /></div>;
 }
