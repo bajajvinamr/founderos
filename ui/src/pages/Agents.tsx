@@ -582,7 +582,7 @@ function LiveRunIndicator({
         <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
       </span>
       <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">
-        Live{liveCount > 1 ? ` (${liveCount})` : ""}
+        Working{liveCount > 1 ? ` · ${liveCount}` : ""}
       </span>
     </Link>
   );
