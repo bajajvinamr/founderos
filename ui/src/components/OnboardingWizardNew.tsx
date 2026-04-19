@@ -113,7 +113,7 @@ export function OnboardingWizardNew() {
       : null;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 py-10 md:py-14">
+    <div className="mx-auto w-full max-w-4xl px-6 py-12 md:px-10 md:py-20">
       <WizardProgress currentStep={step} hasTemplate={!!selectedId} />
 
       {step === "welcome" && <WelcomeStep onNext={() => setStep("template")} />}
@@ -172,73 +172,103 @@ export function OnboardingWizardNew() {
   );
 }
 
+/**
+ * Notion-style minimal step indicator. Instead of numbered-dot chain, we
+ * show "Step N of M · <Label>" on the left plus a thin progress rail on
+ * the right. Takes a lot less vertical space and reads like a toolbar.
+ */
 function WizardProgress({ currentStep, hasTemplate }: { currentStep: Step; hasTemplate: boolean }) {
   const steps: Array<{ id: Step; label: string }> = [
     { id: "welcome", label: "Welcome" },
-    { id: "template", label: "Template" },
-    { id: "providers", label: "Providers" },
-    { id: "review", label: "Launch" },
+    { id: "template", label: "Pick a starting team" },
+    { id: "providers", label: "Connect an AI provider" },
+    { id: "review", label: "Review & launch" },
   ];
-  const idx = steps.findIndex((s) => s.id === currentStep);
+  const idx = Math.max(0, steps.findIndex((s) => s.id === currentStep));
+  const total = steps.length;
+  const completed = currentStep === "review" && hasTemplate ? total : idx;
+  const pct = Math.round((completed / (total - 1)) * 100);
 
   return (
-    <div className="mb-10 flex items-center gap-2">
-      {steps.map((s, i) => {
-        const done = i < idx || (i === idx && currentStep === "review" && hasTemplate);
-        const active = s.id === currentStep;
-        return (
-          <div key={s.id} className="flex items-center gap-2 flex-1">
-            <div
-              className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold border-2 transition-colors",
-                active
-                  ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--primary-foreground,white)]"
-                  : done
-                    ? "bg-[var(--brand)]/20 border-[var(--brand)]/50 text-[var(--brand)]"
-                    : "bg-background border-border text-muted-foreground",
-              )}
-            >
-              {done ? <CheckCircle2 className="h-3 w-3" /> : i + 1}
-            </div>
-            <span className={cn("text-[11px] uppercase tracking-[0.12em] font-medium", active ? "text-foreground" : "text-muted-foreground")}>
-              {s.label}
-            </span>
-            {i < steps.length - 1 && <div className="h-px flex-1 bg-border ml-1" />}
-          </div>
-        );
-      })}
+    <div className="mb-12 flex items-center gap-6">
+      <div className="flex items-center gap-3 shrink-0">
+        <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground tabular-nums font-medium">
+          {String(idx + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
+        </span>
+        <span className="text-sm font-medium text-foreground">{steps[idx]?.label}</span>
+      </div>
+      <div className="h-px flex-1 bg-border/80 relative overflow-hidden">
+        <div
+          className="absolute inset-y-0 left-0 bg-foreground/75 transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
 
+/**
+ * Welcome step — editorial, left-aligned, Notion/Coda-style.
+ *
+ * We deliberately avoid the stock "centered gradient box" treatment.
+ * The page carries the brand on typography (display serif for the
+ * headline) and on a small structured checklist that reads like a
+ * Notion database callout — it tells founders exactly what the next
+ * four steps will cost them, in a professional register.
+ */
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const agenda: Array<{ n: string; label: string; sub: string }> = [
+    { n: "01", label: "Pick a starting team", sub: "Three prebuilt org shapes or import your own JSON." },
+    { n: "02", label: "Connect an AI provider", sub: "Claude, Codex, or Gemini — via CLI subscription or API." },
+    { n: "03", label: "Review the roster", sub: "Confirm names, reports-to, and monthly spend caps." },
+    { n: "04", label: "Launch", sub: "Your team goes live and begins its first shift." },
+  ];
+
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-border">
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(135deg, color-mix(in oklch, var(--brand) 18%, var(--background)) 0%, var(--background) 55%)",
-        }}
-      />
-      <div className="relative px-8 py-14 md:px-12 md:py-20 text-center">
-        <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand)]">
-          <Sparkles className="h-3.5 w-3.5" />
-          Welcome to FounderOS
+    <div className="grid grid-cols-1 md:grid-cols-[1.15fr,1fr] gap-10 md:gap-16 items-start">
+      <div>
+        <div className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+          A new kind of company
         </div>
-        <h1 className="mt-4 text-4xl md:text-5xl font-semibold tracking-tight leading-[1.05] text-foreground">
-          Build your company.{" "}
-          <span className="text-[var(--brand)]">Hire your team.</span>
+        <h1 className="mt-6 font-display text-5xl md:text-6xl leading-[1.02] tracking-tight text-foreground">
+          Build a company.
+          <br />
+          <span className="font-display-italic text-[var(--brand)]">Staff it with AI.</span>
         </h1>
-        <p className="mt-5 mx-auto max-w-lg text-base text-muted-foreground leading-relaxed">
-          Four steps: pick a starting team, connect your AI provider,
-          review the roster, and launch. A full team of AI teammates, reporting into a CEO,
-          working from day one — in under five minutes.
+        <p className="mt-6 text-[15px] text-muted-foreground leading-[1.65] max-w-lg">
+          FounderOS gives you a full operating team — a CEO, a CTO, a head of growth,
+          an ops lead — running on the AI providers you already pay for.
+          Everyone has a role, a budget, and a working shift.
         </p>
-        <Button size="lg" onClick={onNext} className="mt-8 gap-2">
-          Get started <ArrowRight className="h-4 w-4" />
-        </Button>
+        <div className="mt-10 flex items-center gap-4">
+          <Button size="lg" onClick={onNext} className="gap-2 rounded-md">
+            Start setup
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <span className="text-xs text-muted-foreground">About 5 minutes</span>
+        </div>
+      </div>
+
+      <div className="border-l border-border/80 pl-6 md:pl-10">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-5">
+          What you&apos;ll do
+        </div>
+        <ol className="space-y-5">
+          {agenda.map((item) => (
+            <li key={item.n} className="flex items-start gap-4">
+              <span className="text-[11px] font-medium text-muted-foreground tabular-nums mt-[3px] w-5 shrink-0">
+                {item.n}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-foreground">{item.label}</div>
+                <div className="mt-0.5 text-[13px] text-muted-foreground leading-[1.55]">
+                  {item.sub}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );
@@ -288,47 +318,53 @@ function TemplateStep({
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold tracking-tight">Pick a starting template</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Each template spins up a company with pre-wired agents, goals, projects, and
-          starter issues. You can customize everything after.
+      <div className="mb-10">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-2">
+          Step 01 · Starting team
+        </div>
+        <h2 className="font-display text-4xl md:text-[2.75rem] leading-[1.05] tracking-tight text-foreground">
+          Pick the team you want to start with.
+        </h2>
+        <p className="mt-3 max-w-xl text-[14px] text-muted-foreground leading-[1.65]">
+          Each option ships a complete org: a CEO, direct reports, goals, projects, and
+          a starter backlog. Everything is editable once you&apos;re in.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {templates.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => onSelect(t.id, t)}
             className={cn(
-              "flex flex-col text-left rounded-xl border p-5 transition-all",
+              "group flex flex-col text-left rounded-lg border bg-card p-5 transition-all",
               selectedId === t.id
-                ? "border-[var(--brand)] bg-[color:color-mix(in_oklch,var(--brand)_8%,transparent)]"
-                : "border-border bg-card hover:border-[color:color-mix(in_oklch,var(--brand)_45%,var(--border))]",
+                ? "border-foreground/40 shadow-sm"
+                : "border-border hover:border-foreground/25 hover:shadow-sm",
             )}
           >
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-lg mb-4 text-xl"
-              style={{ background: "color-mix(in oklch, var(--brand) 14%, transparent)" }}
-            >
-              {t.icon}
+            <div className="flex items-center gap-2 mb-5">
+              <span className="text-2xl leading-none">{t.icon}</span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                {t.category.replace(/_/g, " ")}
+              </span>
             </div>
-            <h3 className="text-base font-semibold text-foreground mb-1">{t.name}</h3>
-            <p className="text-sm text-muted-foreground leading-snug mb-4">{t.tagline}</p>
-            <p className="text-[13px] text-muted-foreground/90 leading-relaxed mb-4 line-clamp-3">
+            <h3 className="text-[17px] font-semibold text-foreground mb-1 tracking-tight">{t.name}</h3>
+            <p className="text-[13px] text-muted-foreground leading-snug mb-4">{t.tagline}</p>
+            <p className="text-[13px] text-foreground/75 leading-[1.6] mb-5 line-clamp-3">
               {t.summary}
             </p>
-            <div className="mt-auto flex items-center gap-3 text-[11px] text-muted-foreground">
-              <StatBadge icon={Users} label={`${t.agentCount} agents`} />
-              <StatBadge icon={Flag} label={`${t.goalCount} goals`} />
-              <StatBadge icon={Target} label={`${t.projectCount} projects`} />
+            <div className="mt-auto pt-4 border-t border-border/70 flex items-center justify-between text-[11px] text-muted-foreground">
+              <StatBadge icon={Users} label={`${t.agentCount}`} />
+              <StatBadge icon={Flag} label={`${t.goalCount}`} />
+              <StatBadge icon={Target} label={`${t.projectCount}`} />
+              <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-foreground" />
             </div>
           </button>
         ))}
       </div>
-      <div className="mt-8 flex items-center justify-between gap-3 flex-wrap">
-        <Button type="button" variant="ghost" onClick={onBack} className="gap-1.5">
+      <div className="mt-10 flex items-center justify-between gap-3 flex-wrap">
+        <Button type="button" variant="ghost" onClick={onBack} className="gap-1.5 text-muted-foreground">
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <TemplateImportButton onImported={onImportedTemplate} />
@@ -361,10 +397,14 @@ function ImportedTemplatePreview({
 
   return (
     <div>
-      <div className="mb-6">
-        <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-1">Imported template</div>
-        <h2 className="text-2xl font-semibold tracking-tight">Does this look right?</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+      <div className="mb-10">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-2">
+          Imported template
+        </div>
+        <h2 className="font-display text-4xl md:text-[2.75rem] leading-[1.05] tracking-tight text-foreground">
+          Does this look right?
+        </h2>
+        <p className="mt-3 max-w-xl text-[14px] text-muted-foreground leading-[1.65]">
           Review the roster before we spin up a company from this file. Nothing is created yet.
         </p>
       </div>
@@ -454,9 +494,9 @@ function ImportedTemplatePreview({
 
 function StatBadge({ icon: Icon, label }: { icon: typeof Users; label: string }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5 tabular-nums">
       <Icon className="h-3 w-3" />
-      <span className="tabular-nums">{label}</span>
+      <span>{label}</span>
     </div>
   );
 }
@@ -493,11 +533,16 @@ function ProvidersStep({
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold tracking-tight">Which AI provider?</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Agents can run on Claude, OpenAI/Codex, or Gemini — using the local CLI of whichever
-          you have subscribed, or a direct API key. Each teammate can use their own provider later.
+      <div className="mb-10">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-2">
+          Step 02 · AI provider
+        </div>
+        <h2 className="font-display text-4xl md:text-[2.75rem] leading-[1.05] tracking-tight text-foreground">
+          Who runs the work?
+        </h2>
+        <p className="mt-3 max-w-xl text-[14px] text-muted-foreground leading-[1.65]">
+          Bring whichever provider you already use — Claude, Codex, or Gemini — via a
+          local CLI subscription or a direct API key. You can mix providers per teammate later.
         </p>
       </div>
 
@@ -638,8 +683,16 @@ function ReviewStep({
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-semibold tracking-tight">Review &amp; launch</h2>
-        <p className="mt-2 text-sm text-muted-foreground">One last look before we spin up your company.</p>
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-2">
+          Step 04 · Launch
+        </div>
+        <h2 className="font-display text-4xl md:text-[2.75rem] leading-[1.05] tracking-tight text-foreground">
+          Ready when you are.
+        </h2>
+        <p className="mt-3 text-[14px] text-muted-foreground leading-[1.65] max-w-lg">
+          Confirm the name and we&apos;ll spin up your company — agents, org chart, goals,
+          and a starter backlog, in one atomic transaction.
+        </p>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5 space-y-4">

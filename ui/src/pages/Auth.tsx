@@ -194,17 +194,19 @@ export function AuthPage() {
           <FounderOSLogo size={20} />
         </div>
         <div className="relative max-w-lg">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-[var(--brand)] mb-4">
-            Build your company. Hire your team.
-          </p>
-          <h2 className="text-4xl font-semibold leading-[1.1] tracking-tight text-foreground">
-            The operating system for
+          <div className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground mb-6">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+            For the next generation of founders
+          </div>
+          <h2 className="font-display text-[44px] md:text-[56px] leading-[1.02] tracking-tight text-foreground">
+            Run a company
             <br />
-            <span className="text-[var(--brand)]">solo founders.</span>
+            <span className="font-display-italic text-[var(--brand)]">staffed by AI.</span>
           </h2>
-          <p className="mt-6 text-base text-muted-foreground leading-relaxed">
-            Pick a starting team. Plug in Claude, Codex, or Gemini. A full roster of AI
-            teammates — with an org chart, budgets, and goals — alive in under five minutes.
+          <p className="mt-6 text-[15px] text-muted-foreground leading-[1.65]">
+            A CEO, a CTO, a head of growth, an ops lead — everyone reporting into one
+            org chart, working on real goals, on the providers you already pay for.
+            Live in under five minutes.
           </p>
           <div className="mt-10 grid grid-cols-3 gap-6">
             <Stat label="Providers" value="3" sub="Claude, Codex, Gemini — CLI or API" />
