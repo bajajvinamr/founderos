@@ -552,7 +552,7 @@ function SkillPane({
   const latestPin = shortRef(updateStatus?.latestRef);
   const removeBlocked = usedBy.length > 0;
   const removeDisabledReason = removeBlocked
-    ? "Detach this skill from all agents before removing it."
+    ? "Detach this skill from all teammates before removing it."
     : null;
 
   return (
@@ -1099,7 +1099,7 @@ export function CompanySkills() {
             ) : null}
             {(deleteTargetDetail?.usedByAgents.length ?? 0) > 0 ? (
               <p className="text-muted-foreground">
-                Detach this skill from all agents to enable removal.
+                Detach this skill from all teammates to enable removal.
               </p>
             ) : null}
           </div>

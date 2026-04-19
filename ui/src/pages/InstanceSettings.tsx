@@ -255,7 +255,7 @@ export function InstanceSettings() {
                           <Link
                             to={buildAgentHref(agent)}
                             className="text-muted-foreground hover:text-foreground"
-                            title="Full agent config"
+                            title="Open teammate profile"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </Link>
