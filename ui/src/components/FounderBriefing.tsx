@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@/lib/router";
-import { AlertTriangle, ArrowRight, CheckCircle2, Flame, PenLine, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Flame, PenLine, Sparkles, Target } from "lucide-react";
 import type { ActivityEvent, Agent, DashboardSummary, Issue } from "@founderos/shared";
 import { authApi } from "../api/auth";
 import { useDialog } from "../context/DialogContext";
 import { Button } from "@/components/ui/button";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, formatCents } from "../lib/utils";
+import type { CompanyMetrics } from "./CompanyPulseWidget";
 
 interface FounderBriefingProps {
   companyName: string | undefined;
@@ -14,6 +15,8 @@ interface FounderBriefingProps {
   activity: ActivityEvent[] | undefined;
   agents: Agent[] | undefined;
   issues: Issue[] | undefined;
+  /** Stored company metrics — source of stage, runway, burn, MRR/ARR. */
+  metrics: CompanyMetrics | undefined | null;
 }
 
 /**
@@ -33,6 +36,7 @@ export function FounderBriefing({
   activity,
   agents,
   issues,
+  metrics,
 }: FounderBriefingProps) {
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
@@ -76,6 +80,15 @@ export function FounderBriefing({
   // shows a calm "all clear" state rather than an empty list.
   const decisionCount = pendingApprovals + blockedAgents.length + budgetIncidents;
 
+  // Today's focus = the highest-priority open issue on the docket. We
+  // pick urgent first, then high, most recently updated. Surfaces one
+  // thing the founder can point at and say "that's what we're doing."
+  const focusIssue = pickFocusIssue(issues ?? []);
+
+  // Runway signal — only shown when both burn and runway are set. This
+  // is the single most-watched number for a cash-constrained founder.
+  const runwayLine = buildRunwayLine(metrics);
+
   return (
     <section
       aria-label="Founder briefing"
@@ -86,10 +99,17 @@ export function FounderBriefing({
         {formatToday()} · Morning brief
       </div>
 
-      <h2 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
-        {greeting}
-        {firstName ? `, ${firstName}` : ""}.
-      </h2>
+      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+        <h2 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
+          {greeting}
+          {firstName ? `, ${firstName}` : ""}.
+        </h2>
+        {runwayLine && (
+          <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground tabular-nums">
+            {runwayLine}
+          </span>
+        )}
+      </div>
 
       <p className="mt-4 max-w-2xl text-[15px] text-foreground/80 leading-[1.65]">
         {buildNarrative({
@@ -99,6 +119,24 @@ export function FounderBriefing({
           summary,
         })}
       </p>
+
+      {focusIssue && (
+        <Link
+          to={`/issues/${focusIssue.identifier ?? focusIssue.id}`}
+          className="group mt-5 flex items-start gap-3 rounded-md border border-border bg-background/40 px-4 py-3 no-underline text-inherit hover:border-foreground/25 transition-colors"
+        >
+          <Target className="h-3.5 w-3.5 mt-[3px] shrink-0 text-[var(--brand)]" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground mb-0.5">
+              Today&apos;s focus
+            </div>
+            <div className="text-[14px] font-medium text-foreground truncate">
+              {focusIssue.title}
+            </div>
+          </div>
+          <ArrowRight className="h-3.5 w-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+        </Link>
+      )}
 
       <div className="grid gap-5 md:gap-6 mt-7 md:grid-cols-2">
         <DecisionColumn
@@ -310,6 +348,46 @@ function buildNarrative({
   }
 
   return parts.join(" ");
+}
+
+/**
+ * Return the single open issue that most warrants founder attention
+ * right now. Ranks urgent > high priority, then most recently updated.
+ * Null when nothing qualifies — we'd rather show nothing than surface
+ * a low-signal backlog item as "today's focus."
+ */
+function pickFocusIssue(issues: Issue[]): Issue | null {
+  const open = issues.filter((i) => i.status !== "done" && i.status !== "cancelled");
+  const byRank = [...open].sort((a, b) => {
+    const rank = { urgent: 0, high: 1, medium: 2, low: 3 } as const;
+    const pa = rank[(a.priority ?? "medium") as keyof typeof rank] ?? 2;
+    const pb = rank[(b.priority ?? "medium") as keyof typeof rank] ?? 2;
+    if (pa !== pb) return pa - pb;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+  const top = byRank[0];
+  if (!top) return null;
+  // Only surface if there's a real reason — medium/low priority is noise.
+  if ((top.priority ?? "medium") === "low" || (top.priority ?? "medium") === "medium") return null;
+  return top;
+}
+
+/**
+ * One-line runway display from stored company metrics. Handles the three
+ * cases an operator cares about: healthy (green), short (amber), critical
+ * (red). The component above maps the string into a border/text color.
+ */
+function buildRunwayLine(metrics: CompanyMetrics | undefined | null): string | null {
+  if (!metrics) return null;
+  const { runwayMonths, monthlyBurnCents } = metrics;
+  if (typeof runwayMonths === "number" && runwayMonths > 0) {
+    const suffix = runwayMonths >= 12 ? `${Math.round(runwayMonths / 12 * 10) / 10} yr runway` : `${runwayMonths} mo runway`;
+    return suffix;
+  }
+  if (typeof monthlyBurnCents === "number" && monthlyBurnCents > 0) {
+    return `${formatCents(monthlyBurnCents)}/mo burn`;
+  }
+  return null;
 }
 
 function joinHuman(parts: string[]): string {
