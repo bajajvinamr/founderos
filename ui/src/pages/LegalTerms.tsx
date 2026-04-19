@@ -83,12 +83,12 @@ export function LegalTerms() {
 
         <h2>7. Open source</h2>
         <p>
-          Parts of FounderOS are derivative works of the MIT-licensed Paperclip project.
-          The license attribution is preserved in our source; see{" "}
+          FounderOS includes components under the MIT License. License attribution is
+          preserved in the source tree — see{" "}
           <a href="https://github.com/founderos-ai/founderos/blob/main/NOTICE.md" target="_blank" rel="noreferrer">
             NOTICE.md
           </a>
-          . You&apos;re free to fork / self-host the underlying engine under MIT terms.
+          . You&apos;re free to fork or self-host under the MIT terms in those components.
         </p>
 
         <h2>8. Fees and billing</h2>
