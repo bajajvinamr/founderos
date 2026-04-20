@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { useParams, useSearchParams, useNavigate } from "@/lib/router";
+import { lazy, Suspense, useEffect, useMemo } from "react";
+import { Navigate, useParams, useSearchParams } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { Gauge, GitBranch, AlertTriangle, UserPlus } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
@@ -8,7 +8,7 @@ import { approvalsApi } from "../api/approvals";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
-import { DEPARTMENTS, getDepartmentById, agentsInDepartment } from "../lib/departments";
+import { getDepartmentById, agentsInDepartment } from "../lib/departments";
 import { PageTabBar } from "../components/PageTabBar";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -18,6 +18,29 @@ import { agentUrl, cn } from "../lib/utils";
 import { Link } from "@/lib/router";
 import { AGENT_ROLE_LABELS } from "@founderos/shared";
 import type { Agent } from "@founderos/shared";
+
+// Department-specific consoles are lazy-loaded so a founder hitting
+// /departments/growth only pays the cost of the Growth bundle, not
+// all four. Matches the lazy-route pattern in App.tsx.
+const GrowthConsole = lazy(() =>
+  import("./departments/GrowthConsole").then((m) => ({ default: m.GrowthConsole })),
+);
+const ContentConsole = lazy(() =>
+  import("./departments/ContentConsole").then((m) => ({ default: m.ContentConsole })),
+);
+const CrmConsole = lazy(() =>
+  import("./departments/CrmConsole").then((m) => ({ default: m.CrmConsole })),
+);
+const FinanceConsole = lazy(() =>
+  import("./departments/FinanceConsole").then((m) => ({ default: m.FinanceConsole })),
+);
+
+/**
+ * Departments that ship with a fully-custom console (own header, own
+ * tabs, department-specific modules). Everything else falls through
+ * to the generic Team/KPIs/Workflows/Decisions shell below.
+ */
+const SPECIALIZED_CONSOLES = new Set(["growth", "content", "crm", "finance"]);
 
 type DepartmentTab = "team" | "kpis" | "workflows" | "decisions";
 
@@ -34,7 +57,6 @@ export function DepartmentConsole() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const navigate = useNavigate();
 
   const rawTab = searchParams.get("tab");
   const activeTab: DepartmentTab = isValidTab(rawTab) ? rawTab : "team";
@@ -80,6 +102,33 @@ export function DepartmentConsole() {
         icon={AlertTriangle}
         message="Department not found."
       />
+    );
+  }
+
+  // Chief of Staff = the founder's Dashboard. Send them there so there
+  // isn't a second-class landing for the department they'll live in most.
+  if (department.id === "chief-of-staff") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Specialized consoles each own their editorial header + tab bar.
+  // Render inside a Suspense boundary so lazy-loaded chunks don't jank.
+  if (SPECIALIZED_CONSOLES.has(department.id)) {
+    return (
+      <Suspense fallback={<PageSkeleton variant="list" />}>
+        {department.id === "growth" && (
+          <GrowthConsole companyId={selectedCompanyId} agents={agents ?? []} />
+        )}
+        {department.id === "content" && (
+          <ContentConsole companyId={selectedCompanyId} agents={agents ?? []} />
+        )}
+        {department.id === "crm" && (
+          <CrmConsole companyId={selectedCompanyId} agents={agents ?? []} />
+        )}
+        {department.id === "finance" && (
+          <FinanceConsole companyId={selectedCompanyId} agents={agents ?? []} />
+        )}
+      </Suspense>
     );
   }
 
