@@ -20,6 +20,14 @@ export interface CompanyMetrics {
   nextMilestoneLabel?: string;
   mauCount?: number;
   deltas?: Record<string, { dir: "up" | "down" | "flat"; text: string }>;
+  /**
+   * Free-form markdown answering "what are we building and why."
+   * Injected into every teammate's standing prompt on every shift so the
+   * whole team operates with the founder's mission in context. Editable
+   * from CompanySettings. Default empty; nudge shown on Dashboard when
+   * unset so founders are gently pushed to fill it in.
+   */
+  charter?: string;
 }
 
 export interface Company {
