@@ -189,7 +189,19 @@ export function companyService(db: Db) {
           .then((rows) => rows[0] ?? null);
         if (!existing) return null;
 
-        const { logoAssetId, ...companyPatch } = data;
+        const { logoAssetId, metrics: metricsPatch, ...companyPatch } = data;
+
+        // Deep-merge metrics JSONB: existing fields are preserved; only
+        // supplied keys are overwritten. This lets callers PATCH a single
+        // sub-field (e.g. charter) without nuking the rest of the object.
+        const mergedMetrics: Record<string, unknown> | undefined = metricsPatch !== undefined
+          ? {
+              ...(typeof existing.metrics === "object" && existing.metrics !== null
+                ? existing.metrics as Record<string, unknown>
+                : {}),
+              ...metricsPatch as Record<string, unknown>,
+            }
+          : undefined;
 
         if (logoAssetId !== undefined && logoAssetId !== null) {
           const nextLogoAsset = await tx
@@ -205,7 +217,11 @@ export function companyService(db: Db) {
 
         const updated = await tx
           .update(companies)
-          .set({ ...companyPatch, updatedAt: new Date() })
+          .set({
+            ...companyPatch,
+            ...(mergedMetrics !== undefined ? { metrics: mergedMetrics } : {}),
+            updatedAt: new Date(),
+          })
           .where(eq(companies.id, id))
           .returning()
           .then((rows) => rows[0] ?? null);

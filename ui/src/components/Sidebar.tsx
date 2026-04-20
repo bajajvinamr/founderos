@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import { DEPARTMENTS } from "../lib/departments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
@@ -113,6 +114,17 @@ export function Sidebar() {
             missingBehavior="placeholder"
           />
         </div>
+
+        <SidebarSection label="Departments">
+          {DEPARTMENTS.map((dept) => (
+            <SidebarNavItem
+              key={dept.id}
+              to={`/departments/${dept.id}`}
+              label={dept.label}
+              icon={dept.icon}
+            />
+          ))}
+        </SidebarSection>
 
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />

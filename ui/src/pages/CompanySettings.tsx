@@ -45,6 +45,9 @@ export function CompanySettings() {
   const [logoUrl, setLogoUrl] = useState("");
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
 
+  // Charter state
+  const [charter, setCharter] = useState("");
+
   // Sync local state from selected company
   useEffect(() => {
     if (!selectedCompany) return;
@@ -52,6 +55,7 @@ export function CompanySettings() {
     setDescription(selectedCompany.description ?? "");
     setBrandColor(selectedCompany.brandColor ?? "");
     setLogoUrl(selectedCompany.logoUrl ?? "");
+    setCharter(selectedCompany.metrics?.charter ?? "");
   }, [selectedCompany]);
 
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -101,6 +105,24 @@ export function CompanySettings() {
     onError: (err) => {
       pushToast({
         title: "Failed to update feedback sharing",
+        body: err instanceof Error ? err.message : "Unknown error",
+        tone: "error",
+      });
+    },
+  });
+
+  const charterMutation = useMutation({
+    mutationFn: (charterValue: string) =>
+      companiesApi.update(selectedCompanyId!, {
+        metrics: { ...selectedCompany?.metrics, charter: charterValue },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      pushToast({ title: "Company charter saved", tone: "success" });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Failed to save charter",
         body: err instanceof Error ? err.message : "Unknown error",
         tone: "error",
       });
@@ -567,6 +589,50 @@ export function CompanySettings() {
               companyId={selectedCompanyId ?? ""}
               companyName={selectedCompany?.name ?? ""}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Company Charter */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Company Charter
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <Field
+            label="Charter"
+            hint="Your AI teammates read this on every shift. Keep it short — one paragraph."
+          >
+            <textarea
+              className="w-full min-h-[10rem] resize-y rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+              value={charter}
+              onChange={(e) => setCharter(e.target.value)}
+              maxLength={10_000}
+              placeholder="We're building X for Y. Our mission this quarter is Z. This is what your AI team reads on every shift."
+              rows={8}
+            />
+            <div className="text-xs text-muted-foreground text-right">
+              {charter.length.toLocaleString()} / 10,000
+            </div>
+          </Field>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => charterMutation.mutate(charter)}
+              disabled={charterMutation.isPending}
+            >
+              {charterMutation.isPending ? "Saving..." : "Save charter"}
+            </Button>
+            {charterMutation.isSuccess && (
+              <span className="text-xs text-muted-foreground">Saved</span>
+            )}
+            {charterMutation.isError && (
+              <span className="text-xs text-destructive">
+                {charterMutation.error instanceof Error
+                  ? charterMutation.error.message
+                  : "Failed to save"}
+              </span>
+            )}
           </div>
         </div>
       </div>

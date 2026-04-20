@@ -117,6 +117,12 @@ export function templateSpawnService(db: Db) {
     return db.transaction(async (tx) => {
       // 1. Company
       const companyName = input.companyName?.trim() || template.name;
+      const defaultCharter = buildDefaultCharter(template);
+      const spawnMetrics = {
+        ...template.metrics,
+        // Only inject a default charter if the template doesn't already supply one.
+        charter: template.metrics.charter ?? defaultCharter,
+      };
       const [company] = await tx
         .insert(companies)
         .values({
@@ -125,7 +131,7 @@ export function templateSpawnService(db: Db) {
           status: "active",
           issuePrefix: await pickUniquePrefix(tx, template.issuePrefix),
           budgetMonthlyCents: template.budgetUsd * 100,
-          metrics: template.metrics,
+          metrics: spawnMetrics,
         })
         .returning();
       if (!company) throw new Error("Failed to create company row");
@@ -305,6 +311,19 @@ function buildAgentAdapterConfig(
     return { ...base, dangerouslySkipPermissions: true };
   }
   return base;
+}
+
+/**
+ * Builds a default company charter from the template summary.
+ * This placeholder is shown to the founder in CompanySettings as a
+ * starting point they can edit into their actual mission statement.
+ */
+function buildDefaultCharter(template: CompanyTemplate): string {
+  const summary = template.summary?.trim();
+  if (!summary) {
+    return "Edit this charter to describe what we're building, who for, and why.";
+  }
+  return `We are building ${summary} Our job this quarter is to find product-market fit. Edit this charter to match where we actually are today.`;
 }
 
 async function pickUniquePrefix(

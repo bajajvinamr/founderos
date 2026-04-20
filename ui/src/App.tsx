@@ -52,6 +52,7 @@ const PluginPage = lazy(() => import("./pages/PluginPage").then((m) => ({ defaul
 const IssueChatUxLab = lazy(() => import("./pages/IssueChatUxLab").then((m) => ({ default: m.IssueChatUxLab })));
 const RunTranscriptUxLab = lazy(() => import("./pages/RunTranscriptUxLab").then((m) => ({ default: m.RunTranscriptUxLab })));
 const OrgChart = lazy(() => import("./pages/OrgChart").then((m) => ({ default: m.OrgChart })));
+const DepartmentConsole = lazy(() => import("./pages/DepartmentConsole").then((m) => ({ default: m.DepartmentConsole })));
 const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ default: m.BoardClaimPage })));
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
@@ -162,6 +163,8 @@ function boardRoutes() {
       <Route path="settings/*" element={<LegacySettingsRedirect />} />
       <Route path="plugins/:pluginId" element={<PluginPage />} />
       <Route path="org" element={<OrgChart />} />
+      <Route path="departments" element={<Navigate to="/departments/chief-of-staff" replace />} />
+      <Route path="departments/:departmentId" element={<DepartmentConsole />} />
       <Route path="agents" element={<Navigate to="/agents/all" replace />} />
       <Route path="agents/all" element={<Agents />} />
       <Route path="agents/active" element={<Agents />} />

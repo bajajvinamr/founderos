@@ -13,6 +13,10 @@ export const createCompanySchema = z.object({
 
 export type CreateCompany = z.infer<typeof createCompanySchema>;
 
+const companyMetricsPatchSchema = z.object({
+  charter: z.string().max(10_000).optional(),
+}).passthrough().optional();
+
 export const updateCompanySchema = createCompanySchema
   .partial()
   .extend({
@@ -25,6 +29,7 @@ export const updateCompanySchema = createCompanySchema
     feedbackDataSharingTermsVersion: feedbackDataSharingTermsVersionSchema,
     brandColor: brandColorSchema,
     logoAssetId: logoAssetIdSchema,
+    metrics: companyMetricsPatchSchema,
   });
 
 export type UpdateCompany = z.infer<typeof updateCompanySchema>;

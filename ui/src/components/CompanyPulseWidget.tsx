@@ -29,6 +29,8 @@ export type CompanyMetrics = {
   nextMilestoneLabel?: string;
   mauCount?: number;
   deltas?: Record<string, Delta>;
+  /** Free-form markdown mission statement injected into every agent's standing prompt. */
+  charter?: string;
 };
 
 type PulseMetric = {

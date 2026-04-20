@@ -252,7 +252,7 @@ function Hero() {
         <div className="flex flex-col gap-1.5">
           <span className="font-mono caps-wide text-[10px] text-pulse-accent">INDEX 001</span>
           <span className="font-mono caps text-[11px] text-pulse-muted">
-            FounderOS · The AI company OS · Est 2026
+            FounderOS · The AI Company OS for lean founders · Est 2026
           </span>
         </div>
         <div className="font-mono caps text-[11px] text-pulse-muted md:max-w-[320px] md:text-right">
@@ -263,26 +263,29 @@ function Hero() {
 
       <div className="mx-auto max-w-6xl px-6 md:px-10 w-full mt-20 md:mt-0">
         <h1 className="font-display" style={{ fontSize: "clamp(3.5rem, 1.8rem + 8vw, 10.5rem)" }}>
-          <span>Run a</span>{" "}
-          <span className="font-display-italic text-pulse-accent">million-dollar</span>
+          <span>Build a $10M</span>
           <br />
-          <span>company as a</span>{" "}
-          <span className="font-display-italic text-pulse-accent">party of one.</span>
+          <span>company with</span>{" "}
+          <span
+            className="font-display-italic text-pulse-accent"
+            style={{ background: "rgba(255,91,41,0.15)", padding: "0 0.12em" }}
+          >
+            3 people.
+          </span>
         </h1>
 
         <p
           className="mt-8 max-w-[58ch] text-pulse-bone/75"
           style={{ fontSize: "clamp(1rem, 0.95rem + 0.4vw, 1.2rem)", lineHeight: 1.5 }}
         >
-          You get twenty AI teammates. A CEO who runs the week, a CTO who
-          ships code, a head of growth who actually does outreach. They have
-          titles, managers, shifts, and monthly comp caps. Every morning
-          you read a brief. That&apos;s the job.
+          FounderOS gives you an AI executive team in one workspace — growth,
+          content, lifecycle CRM, finance, ops — so you can run a real company
+          without building a real team. Measurable MRR lift in 14 to 30 days.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-4">
           <Link to="/auth" className="btn">
-            Start free <span aria-hidden>→</span>
+            Design partner pricing · talk to us first <span aria-hidden>→</span>
           </Link>
           <a href="#product" className="btn btn-ghost">
             See the product <span aria-hidden>↓</span>
@@ -305,6 +308,9 @@ function ThisWeekPulse() {
             <span className="font-mono caps-wide text-[10px] text-pulse-accent">
               This week · Apr 19
             </span>
+          </div>
+          <div className="font-mono caps text-[10px] text-pulse-muted mt-2">
+            Built for SaaS founders at $5k–$100k MRR
           </div>
         </div>
         <div className="col-span-12 md:col-span-3">
@@ -701,7 +707,7 @@ function MetricStrip() {
     { value: "<5m", label: "Zero to a running company" },
     { value: "20", label: "AI teammates per org" },
     { value: "3", label: "Providers · Claude, Codex, Gemini" },
-    { value: "$0", label: "Until you're over $10k MRR" },
+    { value: "$299", label: "Starts at — Solo Founder tier" },
   ];
   return (
     <section className="border-t border-pulse-line">
@@ -971,60 +977,89 @@ function Pricing() {
           <div className="col-span-12 md:col-span-5">
             <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-3">011 — PRICING</div>
             <h2 className="font-display" style={{ fontSize: "clamp(2.25rem, 1.4rem + 3vw, 3.5rem)" }}>
-              Free until
+              Built for your
               <br />
-              <span className="font-display-italic">you&apos;re winning.</span>
+              <span className="font-display-italic">stage of company.</span>
             </h2>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 border-t border-pulse-line">
+        <div className="grid grid-cols-1 md:grid-cols-3 border-t border-pulse-line">
+          {/* Tier 1 — Solo Founder */}
           <div className="p-8 md:p-10 border-b md:border-r md:border-b-0 border-pulse-line">
-            <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-4">Solo · Free</div>
-            <div className="font-display mb-6" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
-              $0<span className="font-mono text-[13px] text-pulse-muted ml-3">/ month</span>
+            <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-4">Solo Founder</div>
+            <div className="font-display mb-1" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
+              $299
             </div>
+            <div className="font-mono text-[11px] text-pulse-muted mb-6">/ month · up to $799 with add-ons</div>
             <p className="text-[14px] text-pulse-bone/75 leading-[1.55] mb-6">
-              Everything. One company. As many teammates as you can run on your
-              provider keys. Free while you&apos;re under $10k MRR — no credit
-              card, no expiry.
+              For indie founders and creators running their first real company.
+              One workspace, five departments, 20 workflows, 50k agent actions
+              per month. BYO provider keys.
             </p>
             <ul className="space-y-2 text-[13px] font-mono">
-              <li>— Full Morning Brief + roster</li>
-              <li>— Multi-provider routing</li>
-              <li>— Single-tenant self-host (Fly.io)</li>
-              <li>— Import / export companies</li>
-              <li>— Encrypted key vault</li>
+              <li>— 5 departments (CoS, Growth, Content, CRM, Finance Lite)</li>
+              <li>— 20 workflows</li>
+              <li>— 1 workspace, 1 seat</li>
+              <li>— 50k agent actions per month</li>
+              <li>— BYO provider keys</li>
             </ul>
             <div className="mt-8">
               <Link to="/auth" className="btn">
-                Start free <span aria-hidden>→</span>
+                Design partner pricing · talk to us first <span aria-hidden>→</span>
               </Link>
             </div>
           </div>
 
-          <div className="p-8 md:p-10 bg-pulse-elev">
-            <div className="flex items-center justify-between mb-4">
-              <div className="font-mono caps-wide text-[10px] text-pulse-accent">Scale</div>
-              <span className="font-mono caps text-[10px] text-pulse-muted">Coming Q3</span>
+          {/* Tier 2 — Lean Team */}
+          <div className="p-8 md:p-10 border-b md:border-r md:border-b-0 border-pulse-line bg-pulse-elev">
+            <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-4">Lean Team</div>
+            <div className="font-display mb-1" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
+              $2,000
             </div>
-            <div className="font-display mb-6" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
-              2%<span className="font-mono text-[13px] text-pulse-muted ml-3">of MRR above $10k</span>
-            </div>
+            <div className="font-mono text-[11px] text-pulse-muted mb-6">/ month · up to $5k at scale</div>
             <p className="text-[14px] text-pulse-bone/75 leading-[1.55] mb-6">
-              Multiple companies. Shared team templates. Audit logs. A SOC 2
-              report. The CEO seat stays free — you only pay when the company
-              crosses $10k MRR.
+              For startups with 2–10 people. All departments, team collaboration,
+              approvals, custom workflows, and real revenue forecasting. Designed
+              to replace your first 6 hires.
             </p>
             <ul className="space-y-2 text-[13px] font-mono">
-              <li>— Multiple companies per workspace</li>
-              <li>— Cross-company team templates</li>
-              <li>— Compliance + audit logs</li>
-              <li>— Priority provider routing</li>
-              <li>— Dedicated support</li>
+              <li>— All departments incl. Sales + Support</li>
+              <li>— Team collaboration + approval workflows</li>
+              <li>— Custom workflows + SOPs</li>
+              <li>— Finance + revenue forecasting</li>
+              <li>— Unlimited workflows</li>
+              <li>— Shared company memory</li>
+            </ul>
+            <div className="mt-8">
+              <a href="mailto:hello@founderos.ai" className="btn">
+                Design partner pricing · talk to us first <span aria-hidden>→</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Tier 3 — Venture Studio */}
+          <div className="p-8 md:p-10">
+            <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-4">Venture Studio</div>
+            <div className="font-display mb-1" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
+              $10,000
+            </div>
+            <div className="font-mono text-[11px] text-pulse-muted mb-6">/ month · up to $50k+ with portfolio size</div>
+            <p className="text-[14px] text-pulse-bone/75 leading-[1.55] mb-6">
+              For portfolios, holdings, and venture studios operating multiple
+              companies. Cross-company benchmarks, capital allocation AI,
+              treasury layer, and shared growth memory across the portfolio.
+            </p>
+            <ul className="space-y-2 text-[13px] font-mono">
+              <li>— Multi-company workspaces</li>
+              <li>— Cross-company benchmarks + PMF scoring</li>
+              <li>— Capital allocation AI + treasury layer</li>
+              <li>— Portfolio reporting</li>
+              <li>— Shared growth memory across companies</li>
+              <li>— Dedicated success + priority provider access</li>
             </ul>
             <div className="mt-8">
               <a href="mailto:hello@founderos.ai" className="btn btn-ghost">
-                Talk to us <span aria-hidden>→</span>
+                Design partner pricing · talk to us first <span aria-hidden>→</span>
               </a>
             </div>
           </div>
@@ -1046,7 +1081,7 @@ function FaqSection() {
     },
     {
       q: "What does it really cost to run?",
-      a: "The platform is free while you're under $10k MRR. You pay your provider directly — usually $50 to $500 a month depending on how hard the team works. No per-seat, no retainer, no annual lock-in.",
+      a: "Three tiers. Solo Founder starts at $299/mo for indie builders. Lean Team at $2k/mo covers startups with 2–10 people. Venture Studio at $10k+ is for portfolios running multiple companies at once. Every tier is BYO provider keys — the spend you already make on Claude/Codex/Gemini doesn't change.",
     },
     {
       q: "Can I take my company with me?",
@@ -1196,6 +1231,15 @@ function Footer() {
               { label: "Templates", href: "#" },
               { label: "Community", href: "#" },
               { label: "GitHub", href: "https://github.com/founderos-ai/founderos" },
+            ]}
+          />
+          <FooterCol
+            title="For"
+            items={[
+              { label: "SaaS founders", href: "#" },
+              { label: "Indie builders", href: "#" },
+              { label: "Venture studios", href: "#" },
+              { label: "Agencies", href: "#" },
             ]}
           />
         </div>

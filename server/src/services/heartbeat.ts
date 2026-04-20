@@ -10,6 +10,7 @@ import {
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  companies,
   heartbeatRunEvents,
   heartbeatRuns,
   issueComments,
@@ -90,6 +91,36 @@ const SESSIONED_LOCAL_ADAPTERS = new Set([
   "opencode_local",
   "pi_local",
 ]);
+
+/**
+ * Fetches the company charter from metrics JSONB.
+ * Returns null/undefined if the company is not found or charter is empty.
+ */
+async function getCompanyCharter(db: Db, companyId: string): Promise<string | null> {
+  const row = await db
+    .select({ metrics: companies.metrics })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .then((rows) => rows[0] ?? null);
+  if (!row) return null;
+  const metrics = row.metrics as Record<string, unknown> | null;
+  const charter = typeof metrics?.charter === "string" ? metrics.charter.trim() : null;
+  return charter && charter.length > 0 ? charter : null;
+}
+
+/**
+ * Prepends the company charter to the existing promptTemplate inside a
+ * <company_charter> XML tag. If charter is empty, returns promptTemplate
+ * unchanged. If promptTemplate is empty, returns just the charter block.
+ */
+export function injectCharterIntoPrompt(
+  charter: string,
+  promptTemplate: unknown,
+): string {
+  const charterBlock = `<company_charter>\n${charter}\n</company_charter>`;
+  const existing = typeof promptTemplate === "string" ? promptTemplate.trim() : "";
+  return existing.length > 0 ? `${charterBlock}\n\n${existing}` : charterBlock;
+}
 
 type RuntimeConfigSecretResolver = Pick<
   ReturnType<typeof secretService>,
@@ -2793,9 +2824,13 @@ export function heartbeatService(db: Db) {
       secretsSvc,
     });
     const runtimeSkillEntries = await companySkills.listRuntimeSkillEntries(agent.companyId);
+    const companyCharter = await getCompanyCharter(db, agent.companyId);
     const runtimeConfig = {
       ...resolvedConfig,
       founderosRuntimeSkills: runtimeSkillEntries,
+      ...(companyCharter
+        ? { promptTemplate: injectCharterIntoPrompt(companyCharter, resolvedConfig.promptTemplate) }
+        : {}),
     };
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
       companyId: agent.companyId,

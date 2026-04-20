@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@/lib/router";
-import { AlertTriangle, ArrowRight, CheckCircle2, Flame, PenLine, Sparkles, Target } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Flame, PenLine, Sparkles, Target, ScrollText } from "lucide-react";
 import type { ActivityEvent, Agent, DashboardSummary, Issue } from "@founderos/shared";
 import { authApi } from "../api/auth";
 import { useDialog } from "../context/DialogContext";
@@ -110,6 +110,24 @@ export function FounderBriefing({
           </span>
         )}
       </div>
+
+      {!metrics?.charter && (
+        <div className="mt-4 flex items-center gap-2.5 text-[12px] text-muted-foreground">
+          <ScrollText className="h-3 w-3 shrink-0" />
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-medium uppercase tracking-[0.14em]">Charter</span>
+            <span>
+              Write a company charter in Settings. Your team reads it on every shift.
+            </span>
+            <Link
+              to="/company/settings"
+              className="inline-flex items-center gap-0.5 text-foreground/70 underline underline-offset-2 hover:text-foreground no-underline"
+            >
+              Set charter <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       <p className="mt-4 max-w-2xl text-[15px] text-foreground/80 leading-[1.65]">
         {buildNarrative({

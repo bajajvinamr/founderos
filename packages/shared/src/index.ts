@@ -163,6 +163,7 @@ export {
 
 export type {
   Company,
+  CompanyMetrics,
   FeedbackVote,
   FeedbackDataSharingPreference,
   FeedbackTargetType,

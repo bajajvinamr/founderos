@@ -1,5 +1,6 @@
 import type {
   Company,
+  CompanyMetrics,
   CompanyPortabilityExportRequest,
   CompanyPortabilityExportPreviewResult,
   CompanyPortabilityExportResult,
@@ -37,7 +38,7 @@ export const companiesApi = {
         | "brandColor"
         | "logoAssetId"
       >
-    >,
+    > & { metrics?: Partial<CompanyMetrics> },
   ) => api.patch<Company>(`/companies/${companyId}`, data),
   updateBranding: (companyId: string, data: UpdateCompanyBranding) =>
     api.patch<Company>(`/companies/${companyId}/branding`, data),
