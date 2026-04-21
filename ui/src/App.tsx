@@ -32,6 +32,7 @@ const Goals = lazy(() => import("./pages/Goals").then((m) => ({ default: m.Goals
 const GoalDetail = lazy(() => import("./pages/GoalDetail").then((m) => ({ default: m.GoalDetail })));
 const Approvals = lazy(() => import("./pages/Approvals").then((m) => ({ default: m.Approvals })));
 const ApprovalDetail = lazy(() => import("./pages/ApprovalDetail").then((m) => ({ default: m.ApprovalDetail })));
+const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => ({ default: m.DecisionsInbox })));
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
 const CompanySettings = lazy(() => import("./pages/CompanySettings").then((m) => ({ default: m.CompanySettings })));
@@ -201,6 +202,7 @@ function boardRoutes() {
       <Route path="approvals/pending" element={<Approvals />} />
       <Route path="approvals/all" element={<Approvals />} />
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
+      <Route path="decisions" element={<DecisionsInbox />} />
       <Route path="costs" element={<Costs />} />
       <Route path="activity" element={<Activity />} />
       <Route path="inbox" element={<InboxRootRedirect />} />

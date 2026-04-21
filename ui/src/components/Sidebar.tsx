@@ -12,6 +12,7 @@ import {
   Repeat,
   Settings,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { DEPARTMENTS } from "../lib/departments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
 import { authApi } from "../api/auth";
+import { approvalsApi } from "../api/approvals";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,15 @@ export function Sidebar() {
     refetchInterval: 10_000,
   });
   const liveRunCount = liveRuns?.length ?? 0;
+
+  const { data: pendingApprovals = [] } = useQuery({
+    queryKey: queryKeys.approvals.list(selectedCompanyId!, "pending"),
+    queryFn: () => approvalsApi.list(selectedCompanyId!, "pending"),
+    enabled: !!selectedCompanyId,
+  });
+  const pendingApprovalCount = pendingApprovals.filter(
+    (a) => a.status === "pending" || a.status === "revision_requested",
+  ).length;
 
   function openSearch() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
@@ -105,6 +116,12 @@ export function Sidebar() {
             badge={inboxBadge.inbox}
             badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
             alert={inboxBadge.failedRuns > 0}
+          />
+          <SidebarNavItem
+            to="/decisions"
+            label="Decisions"
+            icon={ShieldCheck}
+            badge={pendingApprovalCount > 0 ? pendingApprovalCount : undefined}
           />
           <PluginSlotOutlet
             slotTypes={["sidebar"]}
