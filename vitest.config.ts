@@ -9,6 +9,7 @@ process.env.NODE_ENV = "test";
 export default defineConfig({
   test: {
     projects: [
+      "packages/shared",
       "packages/db",
       "packages/adapters/codex-local",
       "packages/adapters/opencode-local",

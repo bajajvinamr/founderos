@@ -311,3 +311,14 @@ export {
   type CreateIntegration,
   type UpdateIntegration,
 } from "./integration.js";
+
+export {
+  memoryKindSchema,
+  memorySourceSchema,
+  createCompanyMemorySchema,
+  updateCompanyMemorySchema,
+  generateWeeklySummarySchema,
+  type CreateCompanyMemory,
+  type UpdateCompanyMemory,
+  type GenerateWeeklySummary,
+} from "./company-memory.js";

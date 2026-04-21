@@ -232,3 +232,10 @@ export type {
   CreateIntegrationInput,
   UpdateIntegrationInput,
 } from "./integration.js";
+export type {
+  MemoryKind,
+  MemorySource,
+  CompanyMemoryEntry,
+  CreateCompanyMemoryInput,
+  UpdateCompanyMemoryInput,
+} from "./company-memory.js";

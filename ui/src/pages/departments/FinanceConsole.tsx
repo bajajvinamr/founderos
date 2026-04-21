@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useSearchParams } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
-import { Button } from "@/components/ui/button";
 import { useToast } from "../../context/ToastContext";
 import { cn } from "../../lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type { Agent } from "@founderos/shared";
+import { runScenario, type TierCurrent } from "@founderos/shared";
 
 // MOCK — Wave 5 replaces with real finance service (Stripe/QuickBooks/etc)
 
@@ -471,178 +471,349 @@ function ForecastTab() {
 
 // ─── Pricing tab ──────────────────────────────────────────────────────────────
 
-function PricingTab({
-  pushToast,
-}: {
-  pushToast: (input: { title: string; body: string }) => void;
-}) {
-  const [soloPrice, setSoloPrice] = useState(299);
-  const [leanPrice, setLeanPrice] = useState(2000);
-  const [churnIncrease, setChurnIncrease] = useState(5);
-  const [newCxDecrease, setNewCxDecrease] = useState(15);
+// MOCK — Wave 5 replaces with live Stripe/billing data.
+// Current tier state used as the baseline for scenario modeling.
+const CURRENT_TIERS: TierCurrent[] = [
+  { name: "Solo Founder",   priceCentsPerMonth: 29900,   customerCount: 12 },
+  { name: "Lean Team",      priceCentsPerMonth: 200000,  customerCount: 6  },
+  { name: "Venture Studio", priceCentsPerMonth: 1000000, customerCount: 1  },
+];
 
-  // Static estimated impact (mock calculation from defaults)
-  const newMrr = 28400;
-  const newChurn = 7.2;
-  const paybackDelta = -0.4;
+// Blended CAC in cents (~$500 blended). Wave 5: derive from real acquisition data.
+const MOCK_BLENDED_CAC_CENTS = 50000;
+
+function centsToDisplayDollars(cents: number): number {
+  return Math.round(cents) / 100;
+}
+
+function PricingTab() {
+  // Projected prices per tier (in dollars, matching UI step sizes)
+  const [soloPrice, setSoloPrice]       = useState(centsToDisplayDollars(CURRENT_TIERS[0].priceCentsPerMonth));   // 299
+  const [leanPrice, setLeanPrice]       = useState(centsToDisplayDollars(CURRENT_TIERS[1].priceCentsPerMonth));   // 2000
+  const [venturePrice, setVenturePrice] = useState(centsToDisplayDollars(CURRENT_TIERS[2].priceCentsPerMonth));   // 10000
+  const [churnUplift, setChurnUplift]   = useState(5);
+  const [newCxDrop, setNewCxDrop]       = useState(15);
+  const [monthlyNewCx, setMonthlyNewCx] = useState(8);
+
+  // Run the engine on every render (inputs are controlled state → live update)
+  const outputs = runScenario({
+    tiers: CURRENT_TIERS,
+    priceChanges: {
+      "Solo Founder":   Math.round(soloPrice * 100),
+      "Lean Team":      Math.round(leanPrice * 100),
+      "Venture Studio": Math.round(venturePrice * 100),
+    },
+    expectedChurnUpliftPct: churnUplift,
+    expectedNewCustomerDecreasePct: newCxDrop,
+    currentMonthlyNewCustomers: monthlyNewCx,
+    avgAcquisitionCostCents: MOCK_BLENDED_CAC_CENTS,
+    horizonMonths: 12,
+  });
+
+  const mrrDeltaPositive = outputs.mrrDeltaCents >= 0;
+  const mrrDeltaColor = mrrDeltaPositive
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-red-600 dark:text-red-400";
+
+  const cxDeltaPositive = outputs.customerCountDelta >= 0;
+  const cxDeltaColor = cxDeltaPositive
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-red-600 dark:text-red-400";
+
+  const paybackPositive = outputs.paybackDeltaMonths <= 0; // negative = faster = good
+  const paybackColor = paybackPositive
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-red-600 dark:text-red-400";
+
+  // 12-month chart data (months 1-12, skip month 0 baseline)
+  const chartData = outputs.twelveMonthMrrProjection.filter((p) => p.month > 0);
+  const maxChartMrr = Math.max(...chartData.map((p) => p.mrrCents), 1);
+  const labeledChartIdx = new Set([0, 5, 11]);
+
+  const inputCls =
+    "flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-[13px] tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand,theme(colors.teal.500))]/40";
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Left: Current tier table */}
-      <div className="flex flex-col gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Current pricing tiers
-        </p>
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20">
-                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                  Tier
-                </th>
-                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground tabular-nums">
-                  Price
-                </th>
-                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground tabular-nums">
-                  Cx
-                </th>
-                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground tabular-nums">
-                  MRR
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {[
-                { tier: "Solo Founder",    price: 299,   cx: 12, mrr: 3588 },
-                { tier: "Lean Team",       price: 2000,  cx: 6,  mrr: 12000 },
-                { tier: "Venture Studio",  price: 10000, cx: 1,  mrr: 10000 },
-              ].map((row) => (
-                <tr key={row.tier} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 text-[12px] font-medium text-foreground">
-                    {row.tier}
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Left: Current tier table */}
+        <div className="flex flex-col gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Current pricing tiers
+          </p>
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/20">
+                  <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    Tier
+                  </th>
+                  <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground tabular-nums">
+                    Price
+                  </th>
+                  <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground tabular-nums">
+                    Cx
+                  </th>
+                  <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground tabular-nums">
+                    MRR
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {CURRENT_TIERS.map((tier) => (
+                  <tr key={tier.name} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 text-[12px] font-medium text-foreground">
+                      {tier.name}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-[12px] text-muted-foreground font-mono">
+                      ${centsToDisplayDollars(tier.priceCentsPerMonth).toLocaleString()}/mo
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-[12px] text-foreground">
+                      {tier.customerCount}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-[12px] font-semibold text-foreground">
+                      {formatDollarsFull(
+                        centsToDisplayDollars(tier.priceCentsPerMonth * tier.customerCount),
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/20">
+                  <td className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    Total
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[12px] text-muted-foreground font-mono">
-                    ${row.price.toLocaleString()}/mo
+                  <td className="px-4 py-2.5" />
+                  <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-bold text-foreground">
+                    {CURRENT_TIERS.reduce((s, t) => s + t.customerCount, 0)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[12px] text-foreground">
-                    {row.cx}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[12px] font-semibold text-foreground">
-                    {formatDollarsFull(row.mrr)}
+                  <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-bold text-foreground">
+                    {formatDollarsFull(
+                      centsToDisplayDollars(outputs.baselineMrrCents),
+                    )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-border bg-muted/20">
-                <td className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                  Total
-                </td>
-                <td className="px-4 py-2.5" />
-                <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-bold text-foreground">
-                  19
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-bold text-foreground">
-                  $25,588
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            </table>
+          </div>
         </div>
-      </div>
 
-      {/* Right: Scenario inputs + impact */}
-      <div className="flex flex-col gap-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Pricing simulator
-        </p>
+        {/* Right: Inputs + live computed output */}
+        <div className="flex flex-col gap-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Pricing simulator
+          </p>
 
-        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-          {/* Inputs */}
-          {[
-            {
-              label: "Solo Founder price",
-              value: soloPrice,
-              step: 50,
-              unit: "$",
-              onChange: setSoloPrice,
-            },
-            {
-              label: "Lean Team price",
-              value: leanPrice,
-              step: 100,
-              unit: "$",
-              onChange: setLeanPrice,
-            },
-            {
-              label: "Expected churn from price hike",
-              value: churnIncrease,
-              step: 1,
-              unit: "%",
-              onChange: setChurnIncrease,
-            },
-            {
-              label: "Expected new-customer decrease",
-              value: newCxDecrease,
-              step: 5,
-              unit: "%",
-              onChange: setNewCxDecrease,
-            },
-          ].map(({ label, value, step, unit, onChange }) => (
-            <div key={label} className="flex flex-col gap-1.5">
-              <label className="text-[12px] font-medium text-foreground">{label}</label>
+          {/* Inputs — live update on change, no Simulate button */}
+          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+            {/* Tier price inputs */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-foreground">Solo Founder price</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  value={value}
-                  step={step}
-                  onChange={(e) => onChange(Number(e.target.value))}
-                  className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-[13px] tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--brand,theme(colors.teal.500))]/40"
+                  value={soloPrice}
+                  step={50}
+                  min={0}
+                  onChange={(e) => setSoloPrice(Number(e.target.value))}
+                  className={inputCls}
                 />
-                <span className="text-[12px] text-muted-foreground w-6">{unit}</span>
+                <span className="text-[12px] text-muted-foreground w-6">$</span>
               </div>
             </div>
-          ))}
-
-          <Button
-            className="w-full mt-1"
-            onClick={() =>
-              pushToast({
-                title: "Wave 5",
-                body: "Wave 5 wires this to the real pricing engine.",
-              })
-            }
-          >
-            Simulate
-          </Button>
-        </div>
-
-        {/* Estimated impact */}
-        <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Estimated impact (defaults)
-          </p>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[13px]">
-              <span className="text-muted-foreground">New MRR</span>
-              <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                {formatDollarsFull(newMrr)}{" "}
-                <span className="text-[11px] font-normal">(+11%)</span>
-              </span>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-foreground">Lean Team price</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={leanPrice}
+                  step={100}
+                  min={0}
+                  onChange={(e) => setLeanPrice(Number(e.target.value))}
+                  className={inputCls}
+                />
+                <span className="text-[12px] text-muted-foreground w-6">$</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between text-[13px]">
-              <span className="text-muted-foreground">New churn rate</span>
-              <span className="tabular-nums font-semibold text-red-600 dark:text-red-400">
-                {newChurn}%
-              </span>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-foreground">Venture Studio price</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={venturePrice}
+                  step={500}
+                  min={0}
+                  onChange={(e) => setVenturePrice(Number(e.target.value))}
+                  className={inputCls}
+                />
+                <span className="text-[12px] text-muted-foreground w-6">$</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between text-[13px]">
-              <span className="text-muted-foreground">Payback delta</span>
-              <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                {paybackDelta} months
-              </span>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-foreground">
+                Expected churn uplift from hike
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={churnUplift}
+                  step={1}
+                  min={0}
+                  max={100}
+                  onChange={(e) => setChurnUplift(Number(e.target.value))}
+                  className={inputCls}
+                />
+                <span className="text-[12px] text-muted-foreground w-6">%</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-foreground">
+                Expected new-customer decrease
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={newCxDrop}
+                  step={5}
+                  min={0}
+                  max={100}
+                  onChange={(e) => setNewCxDrop(Number(e.target.value))}
+                  className={inputCls}
+                />
+                <span className="text-[12px] text-muted-foreground w-6">%</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-foreground">
+                Baseline monthly new customers
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={monthlyNewCx}
+                  step={1}
+                  min={0}
+                  onChange={(e) => setMonthlyNewCx(Number(e.target.value))}
+                  className={inputCls}
+                />
+                <span className="text-[12px] text-muted-foreground w-6" />
+              </div>
             </div>
           </div>
+
+          {/* Live computed output */}
+          <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Projected impact · live
+            </p>
+
+            {/* Primary MRR row */}
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-mono text-muted-foreground">New MRR</span>
+              <span className={cn("tabular-nums font-display text-[22px] leading-none", mrrDeltaColor)}>
+                {formatDollarsFull(centsToDisplayDollars(outputs.projectedMrrCents))}{" "}
+                <span className="font-mono text-[12px] font-normal">
+                  ({mrrDeltaPositive ? "+" : ""}
+                  {formatDollarsFull(centsToDisplayDollars(outputs.mrrDeltaCents))} /{" "}
+                  {mrrDeltaPositive ? "+" : ""}
+                  {outputs.mrrDeltaPct.toFixed(1)}%)
+                </span>
+              </span>
+            </div>
+
+            <div className="border-t border-border/40" />
+
+            {/* Secondary rows */}
+            {[
+              {
+                label: "Projected churn rate",
+                value: `${outputs.projectedChurnRatePct.toFixed(1)}%`,
+                positive: outputs.projectedChurnRatePct < 5,
+              },
+              {
+                label: "Proj. monthly new customers",
+                value: String(Math.round(outputs.projectedMonthlyNewCustomers)),
+                positive: true,
+              },
+              {
+                label: "Payback delta",
+                value: `${outputs.paybackDeltaMonths >= 0 ? "+" : ""}${outputs.paybackDeltaMonths.toFixed(1)} mo`,
+                positive: paybackPositive,
+                colorOverride: paybackColor,
+              },
+              {
+                label: "NRR",
+                value: `${outputs.nrrPct.toFixed(0)}%`,
+                positive: outputs.nrrPct >= 100,
+              },
+              {
+                label: "Customer count delta (mo 1)",
+                value: `${cxDeltaPositive ? "+" : ""}${outputs.customerCountDelta}`,
+                positive: cxDeltaPositive,
+                colorOverride: cxDeltaColor,
+              },
+            ].map(({ label, value, positive, colorOverride }) => (
+              <div key={label} className="flex items-center justify-between text-[13px]">
+                <span className="font-mono text-muted-foreground">{label}</span>
+                <span
+                  className={cn(
+                    "tabular-nums font-semibold",
+                    colorOverride ??
+                      (positive
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400"),
+                  )}
+                >
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Warnings block */}
+          {outputs.warnings.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-1">
+              {outputs.warnings.map((w) => (
+                <p key={w} className="text-[12px] text-amber-700 dark:text-amber-400 leading-snug">
+                  ⚠ {w}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 12-month MRR projection chart — CSS-only bars, same pattern as Forecast tab */}
+      <div className="rounded-lg border border-border bg-card p-5 flex flex-col gap-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          12-month MRR projection · scenario
+        </p>
+        <div className="flex items-end gap-1 h-32 mt-1">
+          {chartData.map((pt, i) => {
+            const pct = Math.round((pt.mrrCents / maxChartMrr) * 100);
+            const showLabel = labeledChartIdx.has(i);
+            return (
+              <div key={pt.month} className="flex flex-col items-center gap-1 flex-1">
+                {showLabel && (
+                  <span className="tabular-nums text-[9px] text-muted-foreground/70 font-mono leading-none">
+                    {formatDollars(centsToDisplayDollars(pt.mrrCents))}
+                  </span>
+                )}
+                {!showLabel && <span className="h-[13px]" />}
+                <div
+                  className="w-full rounded-sm bg-[var(--brand,theme(colors.teal.500))]/40 hover:bg-[var(--brand,theme(colors.teal.500))]/70 transition-colors"
+                  style={{ height: `${pct}%` }}
+                  title={`Month ${pt.month}: ${formatDollarsFull(centsToDisplayDollars(pt.mrrCents))} MRR`}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between text-[9px] text-muted-foreground/50 tabular-nums font-mono -mt-1">
+          <span>Mo 1</span>
+          <span>Mo 6</span>
+          <span>Mo 12</span>
         </div>
       </div>
     </div>
@@ -844,7 +1015,7 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
       <div>
         {activeTab === "revenue"  && <RevenueTab />}
         {activeTab === "forecast" && <ForecastTab />}
-        {activeTab === "pricing"  && <PricingTab pushToast={pushToast} />}
+        {activeTab === "pricing"  && <PricingTab />}
         {activeTab === "burn"     && <BurnTab />}
       </div>
     </div>

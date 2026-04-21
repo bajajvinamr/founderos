@@ -150,4 +150,7 @@ export const queryKeys = {
   adapters: {
     all: ["adapters"] as const,
   },
+  companyMemory: {
+    list: (companyId: string) => ["company-memory", companyId] as const,
+  },
 };

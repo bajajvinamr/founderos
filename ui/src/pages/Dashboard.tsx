@@ -15,6 +15,7 @@ import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/EmptyState";
 import { OnboardingWizardNew } from "../components/OnboardingWizardNew";
 import { CompanyPulseWidget } from "../components/CompanyPulseWidget";
+import { CompanyMemoryCard } from "../components/CompanyMemoryCard";
 import { CompanyProvidersWidget } from "../components/CompanyProvidersWidget";
 import { FounderBriefing } from "../components/FounderBriefing";
 import { StatusIcon } from "../components/StatusIcon";
@@ -204,6 +205,7 @@ export function Dashboard() {
       />
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
+      <CompanyMemoryCard companyId={selectedCompanyId} />
       <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
 
       {hasNoAgents && (

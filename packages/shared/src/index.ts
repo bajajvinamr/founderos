@@ -388,6 +388,11 @@ export type {
   Integration,
   CreateIntegrationInput,
   UpdateIntegrationInput,
+  MemoryKind,
+  MemorySource,
+  CompanyMemoryEntry,
+  CreateCompanyMemoryInput,
+  UpdateCompanyMemoryInput,
 } from "./types/index.js";
 
 export {
@@ -655,6 +660,12 @@ export {
   type ListPluginState,
   appendFounderNoteSchema,
   type AppendFounderNote,
+  createCompanyMemorySchema,
+  updateCompanyMemorySchema,
+  generateWeeklySummarySchema,
+  type CreateCompanyMemory,
+  type UpdateCompanyMemory,
+  type GenerateWeeklySummary,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
@@ -719,6 +730,13 @@ export {
   type SecretsLocalEncryptedConfig,
   type ConfigMeta,
 } from "./config-schema.js";
+
+export {
+  runScenario,
+  type TierCurrent,
+  type ScenarioInputs,
+  type ScenarioOutputs,
+} from "./lib/scenario-modeling.js";
 
 export { summarizeTemplate } from "./types/template.js";
 export type {
