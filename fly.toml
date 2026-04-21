@@ -14,7 +14,7 @@
 # See: docs/deploy/fly-envs.md for environment variable reference
 
 app = "founderos"
-primary_region = "bom"   # Mumbai — closest to Supabase primary if you're using Mumbai region
+primary_region = "lhr"   # London — co-located with Fly Managed Postgres cluster
 kill_signal = "SIGINT"
 kill_timeout = "5s"
 
@@ -33,7 +33,8 @@ kill_timeout = "5s"
   FOUNDEROS_HOME = "/founderos"
   FOUNDEROS_INSTANCE_ID = "default"
   FOUNDEROS_DEPLOYMENT_MODE = "authenticated"
-  FOUNDEROS_DEPLOYMENT_EXPOSURE = "private"
+  FOUNDEROS_DEPLOYMENT_EXPOSURE = "public"
+  FOUNDEROS_AUTH_PROVIDER = "supabase"
 
 # Persistent volume for /founderos — holds instance config, secrets key,
 # workspace files, agent session state. Survives deploys + restarts.

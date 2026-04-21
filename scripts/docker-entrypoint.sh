@@ -26,4 +26,10 @@ if [ "$changed" = "1" ]; then
     chown -R node:node /founderos
 fi
 
+# Ensure volume is owned by node even on first boot (Fly mounts as root).
+# Cheap no-op when already correct.
+if [ "$(stat -c '%U' /founderos 2>/dev/null)" != "node" ]; then
+    chown -R node:node /founderos
+fi
+
 exec gosu node "$@"

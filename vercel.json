@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://bradley-whereas-artist-searching.trycloudflare.com/api/:path*"
+      "destination": "https://founderos.fly.dev/api/:path*"
     },
     {
       "source": "/((?!assets|static|favicon|icons|.well-known|manifest|sw).*)",
