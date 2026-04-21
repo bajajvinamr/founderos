@@ -202,6 +202,7 @@ export function Dashboard() {
         agents={agents}
         issues={issues}
         metrics={companyMetrics}
+        companyId={selectedCompanyId}
       />
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />

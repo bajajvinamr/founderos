@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "@/lib/router";
 import { AlertTriangle, ArrowRight, CheckCircle2, Flame, PenLine, Sparkles, Target, ScrollText } from "lucide-react";
 import type { ActivityEvent, Agent, DashboardSummary, Issue } from "@founderos/shared";
 import { authApi } from "../api/auth";
-import { useDialog } from "../context/DialogContext";
 import { Button } from "@/components/ui/button";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, formatCents } from "../lib/utils";
 import type { CompanyMetrics } from "./CompanyPulseWidget";
+import { BriefTheTeamDialog } from "./BriefTheTeamDialog";
 
 interface FounderBriefingProps {
   companyName: string | undefined;
@@ -17,6 +18,7 @@ interface FounderBriefingProps {
   issues: Issue[] | undefined;
   /** Stored company metrics — source of stage, runway, burn, MRR/ARR. */
   metrics: CompanyMetrics | undefined | null;
+  companyId: string | null;
 }
 
 /**
@@ -37,30 +39,16 @@ export function FounderBriefing({
   agents,
   issues,
   metrics,
+  companyId,
 }: FounderBriefingProps) {
+  const [briefDialogOpen, setBriefDialogOpen] = useState(false);
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
     retry: false,
   });
-  const { openNewIssue } = useDialog();
   const firstName = deriveFirstName(session?.user?.name, session?.user?.email);
   const greeting = timeOfDayGreeting();
-
-  /**
-   * Brief the team — one-message founder-to-team channel. Creates a
-   * high-priority issue with the founder's direction, which flows down
-   * through the CEO's heartbeat and fans out to reports. We pre-fill
-   * only the priority + a stem title and let the founder write the
-   * actual brief in the dialog.
-   */
-  const briefTheTeam = () => {
-    const today = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    openNewIssue({
-      title: `Founder brief · ${today}: `,
-      priority: "urgent",
-    });
-  };
 
   // Reference points for "overnight" framing — the last 12h captures what
   // happened while a typical founder was away from the keyboard.
@@ -189,7 +177,7 @@ export function FounderBriefing({
           <Button
             variant="outline"
             size="sm"
-            onClick={briefTheTeam}
+            onClick={() => setBriefDialogOpen(true)}
             className="gap-1.5"
           >
             <PenLine className="h-3.5 w-3.5" />
@@ -197,6 +185,13 @@ export function FounderBriefing({
           </Button>
         </div>
       </div>
+
+      <BriefTheTeamDialog
+        open={briefDialogOpen}
+        onClose={() => setBriefDialogOpen(false)}
+        agents={agents ?? []}
+        companyId={companyId}
+      />
     </section>
   );
 }

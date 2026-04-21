@@ -94,6 +94,7 @@ import {
 } from "@founderos/shared";
 import { redactHomePathUserSegments, redactHomePathUserSegmentsInValue } from "@founderos/adapter-utils";
 import { agentRouteRef } from "../lib/utils";
+import { MonthlyReviewCard } from "../components/MonthlyReviewCard";
 import {
   applyAgentSkillSnapshot,
   arraysEqual,
@@ -1299,6 +1300,9 @@ function AgentOverview({
 }) {
   return (
     <div className="space-y-8">
+      {/* Monthly Performance Review */}
+      <MonthlyReviewCard companyId={agent.companyId} agentId={agentId} />
+
       {/* Latest Run */}
       <LatestRunCard runs={runs} agentId={agentRouteId} />
 

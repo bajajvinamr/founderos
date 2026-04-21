@@ -765,6 +765,8 @@ export type IntegrationCatalogEntry = {
   keyLabel: string;
   keyHint: string;
   department: string;
+  /** How this integration is connected — OAuth 3-legged flow or pasting an API key. */
+  authMethod: "oauth" | "api_key";
 };
 
 export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntry> = {
@@ -775,6 +777,7 @@ export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntr
     keyLabel: "Personal API key",
     keyHint: "Settings → Personal API keys",
     department: "growth",
+    authMethod: "api_key",
   },
   hubspot: {
     label: "HubSpot",
@@ -783,6 +786,7 @@ export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntr
     keyLabel: "Private app token",
     keyHint: "Settings → Integrations → Private apps",
     department: "crm",
+    authMethod: "oauth",
   },
   slack: {
     label: "Slack",
@@ -791,6 +795,7 @@ export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntr
     keyLabel: "Bot user OAuth token",
     keyHint: "api.slack.com → Create an app",
     department: "chief-of-staff",
+    authMethod: "oauth",
   },
   notion: {
     label: "Notion",
@@ -799,6 +804,7 @@ export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntr
     keyLabel: "Internal integration secret",
     keyHint: "notion.so/my-integrations",
     department: "chief-of-staff",
+    authMethod: "api_key",
   },
   linkedin: {
     label: "LinkedIn",
@@ -807,5 +813,6 @@ export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntr
     keyLabel: "Access token",
     keyHint: "Via LinkedIn Developer app",
     department: "growth",
+    authMethod: "oauth",
   },
 };

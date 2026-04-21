@@ -28,9 +28,12 @@ import { inboxDismissalRoutes } from "./routes/inbox-dismissals.js";
 import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
 import { integrationDataRoutes } from "./routes/integration-data.js";
+import { agentReviewRoutes } from "./routes/agent-reviews.js";
 import { companyProviderRoutes } from "./routes/company-providers.js";
+import { hireProposalRoutes } from "./routes/hire-proposal.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
@@ -205,6 +208,7 @@ export async function createApp(
     }),
   );
   api.use("/companies", companyRoutes(db, opts.storageService));
+  api.use("/companies", hireProposalRoutes(db));
   api.use(companySkillRoutes(db));
   api.use(agentRoutes(db));
   api.use(assetRoutes(db, opts.storageService));
@@ -225,8 +229,10 @@ export async function createApp(
   api.use(instanceSettingsRoutes(db));
   api.use(templateRoutes(db));
   api.use(integrationRoutes(db));
+  api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
   api.use(integrationDataRoutes(db));
+  api.use(agentReviewRoutes(db));
   api.use(companyProviderRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();

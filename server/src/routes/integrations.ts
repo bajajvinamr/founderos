@@ -2,7 +2,11 @@ import { Router } from "express";
 import type { Db } from "@founderos/db";
 import { createIntegrationSchema } from "@founderos/shared";
 import { validate } from "../middleware/validate.js";
-import { integrationService, logActivity } from "../services/index.js";
+import {
+  integrationService,
+  logActivity,
+  deliverMorningBriefToSlack,
+} from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
 export function integrationRoutes(db: Db) {
@@ -96,6 +100,53 @@ export function integrationRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     res.json({ ok: true, lastChecked: new Date().toISOString() });
   });
+
+  /**
+   * POST /api/companies/:companyId/integrations/:id/slack/deliver-brief
+   * Manually trigger Morning Brief delivery to Slack (test endpoint).
+   */
+  router.post(
+    "/companies/:companyId/integrations/:id/slack/deliver-brief",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      const integrationId = req.params.id as string;
+      assertCompanyAccess(req, companyId);
+
+      // Fetch integration and decrypt bot token
+      const integration = await integrations.getByKind(companyId, "slack");
+      if (!integration || integration.id !== integrationId) {
+        res.status(404).json({ error: "Slack integration not found" });
+        return;
+      }
+
+      const botToken = await integrations.getDecryptedApiKey(companyId, integrationId);
+      if (!botToken) {
+        res.status(400).json({ error: "Failed to decrypt Slack bot token" });
+        return;
+      }
+
+      const result = await deliverMorningBriefToSlack({
+        db,
+        companyId,
+        integrationId,
+        decryptedBotToken: botToken,
+      });
+
+      if (result.ok) {
+        res.json({
+          ok: true,
+          channel: result.channel,
+          ts: result.ts,
+          message: "Morning brief delivered successfully",
+        });
+      } else {
+        res.status(400).json({
+          ok: false,
+          error: result.error,
+        });
+      }
+    },
+  );
 
   return router;
 }

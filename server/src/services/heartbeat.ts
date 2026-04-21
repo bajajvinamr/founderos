@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import type { AgentPermissionLevel, BillingType, ExecutionWorkspace, ExecutionWorkspaceConfig } from "@founderos/shared";
+import { evaluateToolCall, buildPermissionDeniedPayload } from "@founderos/shared";
 import {
   agents,
   agentRuntimeState,
@@ -3316,6 +3317,129 @@ export function heartbeatService(db: Db) {
         });
       };
 
+      // -----------------------------------------------------------------------
+      // Permission tool gate (Option B integration)
+      //
+      // All adapters are CLI subprocess wrappers — tool calls execute inside
+      // the child process, so we cannot intercept them before they run
+      // (Option A, which would require a streaming SDK hook, is not available
+      // here).
+      //
+      // Instead, we parse JSONL lines flowing through onLog in real-time.
+      // For "draft" agents, when a tool_use event is detected in the stdout
+      // stream, we log a `tool_call_blocked` activity to create an audit trail.
+      // The tool has already run by the time we see the log line — this is a
+      // best-effort detection layer.
+      //
+      // TODO(future-wave): Replace with Option A interception once adapters
+      // expose a streaming tool-call hook (e.g. when claude-code-sdk session
+      // mode is added). At that point we can short-circuit BEFORE the side
+      // effect and inject the permission_denied tool_result in-band.
+      // -----------------------------------------------------------------------
+
+      /**
+       * Try to parse a JSONL line from an adapter stdout chunk as a tool-use
+       * event. Returns the tool name if found, null otherwise.
+       * Claude-local emits stream-json lines like:
+       *   {"type":"assistant","message":{"content":[{"type":"tool_use","name":"git_commit",...}]}}
+       */
+      function extractToolNamesFromChunk(chunk: string): string[] {
+        const names: string[] = [];
+        for (const rawLine of chunk.split(/\r?\n/)) {
+          const line = rawLine.trim();
+          if (!line || !line.startsWith("{")) continue;
+          let event: Record<string, unknown> | null = null;
+          try {
+            event = JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+          if (!event || typeof event !== "object") continue;
+
+          // Claude stream-json format: {"type":"assistant","message":{"content":[...]}}
+          if (event.type === "assistant") {
+            const message = event.message as Record<string, unknown> | null;
+            const content = Array.isArray(message?.content) ? message.content : [];
+            for (const block of content) {
+              if (typeof block === "object" && block !== null) {
+                const b = block as Record<string, unknown>;
+                if (b.type === "tool_use" && typeof b.name === "string" && b.name) {
+                  names.push(b.name);
+                }
+              }
+            }
+          }
+
+          // Generic tool_use event: {"type":"tool_use","name":"..."}
+          if (event.type === "tool_use" && typeof event.name === "string" && event.name) {
+            names.push(event.name);
+          }
+        }
+        return names;
+      }
+
+      // Wrap onLog to intercept tool calls for permission gating.
+      const gatedOnLog = async (stream: "stdout" | "stderr", chunk: string) => {
+        // Only scan stdout chunks — tool-use events appear in stdout JSONL.
+        if (stream === "stdout") {
+          const toolNames = extractToolNamesFromChunk(chunk);
+          for (const toolName of toolNames) {
+            const gateResult = evaluateToolCall({
+              permissionLevel: agentPermissionLevel,
+              toolName,
+            });
+            if (gateResult.decision === "block") {
+              // Log the blocked tool call as an activity entry for audit.
+              const deniedPayload = buildPermissionDeniedPayload(agentPermissionLevel, toolName);
+              await logActivity(db, {
+                companyId: agent.companyId,
+                actorType: "agent",
+                actorId: agent.id,
+                action: "tool_call_blocked",
+                entityType: "heartbeat_run",
+                entityId: run.id,
+                agentId: agent.id,
+                runId: run.id,
+                details: {
+                  toolName,
+                  permissionLevel: agentPermissionLevel,
+                  reason: gateResult.reason,
+                  deniedPayload,
+                },
+              }).catch((err: unknown) => {
+                logger.warn(
+                  { runId: run.id, toolName, err: err instanceof Error ? err.message : String(err) },
+                  "permission-tool-gate: failed to log tool_call_blocked activity",
+                );
+              });
+            } else if (gateResult.reason === "approve_log") {
+              // Approve-level: allow but log for audit.
+              await logActivity(db, {
+                companyId: agent.companyId,
+                actorType: "agent",
+                actorId: agent.id,
+                action: "tool_call_needs_approval",
+                entityType: "heartbeat_run",
+                entityId: run.id,
+                agentId: agent.id,
+                runId: run.id,
+                details: {
+                  toolName,
+                  permissionLevel: agentPermissionLevel,
+                  reason: gateResult.reason,
+                },
+              }).catch((err: unknown) => {
+                logger.warn(
+                  { runId: run.id, toolName, err: err instanceof Error ? err.message : String(err) },
+                  "permission-tool-gate: failed to log tool_call_needs_approval activity",
+                );
+              });
+            }
+          }
+        }
+        return onLog(stream, chunk);
+      };
+
       const adapter = getServerAdapter(agent.adapterType);
       const authToken = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
@@ -3337,7 +3461,7 @@ export function heartbeatService(db: Db) {
         runtime: runtimeForAdapter,
         config: runtimeConfig,
         context,
-        onLog,
+        onLog: gatedOnLog,
         onMeta: onAdapterMeta,
         onSpawn: async (meta) => {
           await persistRunProcessMetadata(run.id, {

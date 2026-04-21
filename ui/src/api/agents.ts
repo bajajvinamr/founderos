@@ -16,6 +16,24 @@ import type {
 import { isUuidLike, normalizeAgentUrlKey } from "@founderos/shared";
 import { ApiError, api } from "./client";
 
+export type AgentRole =
+  | "ceo" | "cto" | "cmo" | "cfo" | "engineer" | "designer"
+  | "pm" | "qa" | "devops" | "researcher" | "general";
+
+export type DepartmentId =
+  | "chief-of-staff" | "growth" | "content" | "crm" | "finance" | "engineering" | "ops";
+
+export interface HireProposal {
+  name: string;
+  role: AgentRole;
+  title: string;
+  reportsTo: string | null;
+  briefMarkdown: string;
+  monthlyCompCents: number;
+  department: DepartmentId;
+  rationale: string;
+}
+
 export interface AgentKey {
   id: string;
   name: string;
@@ -115,6 +133,10 @@ export const agentsApi = {
     api.post<Agent>(`/companies/${companyId}/agents`, data),
   hire: (companyId: string, data: Record<string, unknown>) =>
     api.post<AgentHireResponse>(`/companies/${companyId}/agent-hires`, data),
+  draftHireProposal: (
+    companyId: string,
+    body: { intent: string; previousDraft?: HireProposal },
+  ) => api.post<HireProposal>(`/companies/${companyId}/hire-proposal`, body),
   update: (id: string, data: Record<string, unknown>, companyId?: string) =>
     api.patch<Agent>(agentPath(id, companyId), data),
   updatePermissions: (id: string, data: AgentPermissionUpdate, companyId?: string) =>

@@ -1,4 +1,5 @@
-import { useSearchParams, useNavigate } from "@/lib/router";
+import { useSearchParams, useNavigate, Link } from "@/lib/router";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,11 @@ import { cn } from "../../lib/utils";
 import { Plus, AlertTriangle, Users } from "lucide-react";
 import type { Agent } from "@founderos/shared";
 import { agentsInDepartment } from "../../lib/departments";
+import {
+  integrationDataApi,
+  type HubspotPipelinePayload,
+  type HubspotDealCard,
+} from "../../api/integration-data";
 
 // MOCK — Wave 5 replaces with real CRM service.
 
@@ -406,22 +412,172 @@ function KanbanColumn({
   );
 }
 
+// ─── HubSpot real-data Pipeline components ────────────────────────────────────
+
+function HubspotDealCardView({ deal }: { deal: HubspotDealCard }) {
+  const lastTouchLabel = (() => {
+    if (!deal.lastTouchAt) return null;
+    const d = new Date(deal.lastTouchAt);
+    if (isNaN(d.getTime())) return null;
+    const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays === 0 ? "Today" : `${diffDays}d ago`;
+  })();
+
+  return (
+    <div className="rounded-md border border-border bg-card px-3 py-2.5 flex flex-col gap-2 hover:border-foreground/20 transition-colors">
+      <p className="text-[12px] font-semibold text-foreground leading-snug">{deal.name}</p>
+      <p className="tabular-nums text-[11px] text-[var(--brand,theme(colors.teal.500))] font-medium">
+        {formatK(deal.amount)} ARR
+      </p>
+      <div className="flex items-center gap-1.5">
+        <AvatarInitial name={deal.ownerName !== "—" ? deal.ownerName : "?"} />
+        {lastTouchLabel && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">{lastTouchLabel}</span>
+        )}
+      </div>
+      <span className="self-start inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none whitespace-nowrap bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
+        {deal.stageLabel}
+      </span>
+    </div>
+  );
+}
+
+function HubspotKanbanColumn({
+  stage,
+}: {
+  stage: { id: string; label: string; count: number; totalCents: number; deals: HubspotDealCard[] };
+}) {
+  const totalDollars = Math.round(stage.totalCents / 100);
+
+  return (
+    <div className="flex flex-col gap-2 min-w-[180px] flex-1">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          {stage.label}
+        </span>
+        <span className="tabular-nums text-[10px] text-muted-foreground/70">
+          {stage.count} · {formatK(totalDollars)}
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        {stage.deals.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border/50 h-16 flex items-center justify-center">
+            <span className="text-[10px] text-muted-foreground/40">Empty</span>
+          </div>
+        ) : (
+          stage.deals.map((deal) => <HubspotDealCardView key={deal.id} deal={deal} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Pipeline tab ─────────────────────────────────────────────────────────────
 
 function PipelineTab({
   deals,
   crmName,
   pushToast,
+  hubspotPipeline,
+  fetchedAt,
 }: {
   deals: Deal[];
   crmName: string;
   pushToast: (input: { title: string; body: string }) => void;
+  hubspotPipeline?: HubspotPipelinePayload | null;
+  fetchedAt?: string | null;
 }) {
+  // ── Real HubSpot data path ────────────────────────────────────────────────
+  if (hubspotPipeline?.stages && hubspotPipeline.stages.length > 0) {
+    const totalWeightedDollars = Math.round(
+      hubspotPipeline.stages.reduce((sum, s) => sum + s.weightedCents, 0) / 100,
+    );
+    const avgAcv =
+      hubspotPipeline.totalDeals > 0
+        ? Math.round(
+            (hubspotPipeline.stages.reduce((sum, s) => sum + s.totalCents, 0) /
+              100) /
+              hubspotPipeline.totalDeals,
+          )
+        : 0;
+
+    const syncedLabel = (() => {
+      if (!fetchedAt) return null;
+      const d = new Date(fetchedAt);
+      if (isNaN(d.getTime())) return null;
+      const mins = Math.floor((Date.now() - d.getTime()) / 60_000);
+      return mins < 2 ? "just now" : `${mins}m ago`;
+    })();
+
+    const colCount = hubspotPipeline.stages.length;
+
+    return (
+      <div className="space-y-4">
+        {/* Weighted pipeline banner */}
+        <div className="rounded-md border border-border bg-card px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-[12px] text-muted-foreground tabular-nums">
+            Pipeline:{" "}
+            <span className="text-foreground font-semibold">{formatK(totalWeightedDollars)} weighted</span>
+            <span className="mx-2 text-muted-foreground/40">·</span>
+            <span className="text-foreground font-semibold">{hubspotPipeline.totalDeals} deals</span>
+            <span className="mx-2 text-muted-foreground/40">·</span>
+            avg ACV <span className="text-foreground font-semibold">{formatK(avgAcv)}</span>
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-[11px] gap-1"
+              onClick={() =>
+                pushToast({ title: "Coming soon", body: "Deal creation ships in Wave 5." })
+              }
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add deal
+            </Button>
+          </div>
+        </div>
+
+        {/* Kanban board */}
+        <div className="overflow-x-auto snap-x pb-4">
+          <div
+            className="flex gap-3 min-w-max sm:min-w-0"
+            style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+          >
+            {hubspotPipeline.stages.map((stage) => (
+              <HubspotKanbanColumn key={stage.id} stage={stage} />
+            ))}
+          </div>
+        </div>
+
+        {/* Data source footer */}
+        <p className="text-[10px] font-mono text-muted-foreground/50 text-right">
+          data source: HubSpot · {hubspotPipeline.pipelineName}
+          {syncedLabel ? ` · synced ${syncedLabel}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Mock data path (no HubSpot connected) ────────────────────────────────
   const totalWeighted = columnSum(deals);
   const avgAcv = deals.length > 0 ? Math.round(totalWeighted / deals.length) : 0;
 
   return (
     <div className="space-y-4">
+      {/* Connect HubSpot nudge */}
+      <div className="rounded-md border border-border/60 bg-muted/20 px-4 py-2.5 flex items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          Showing sample data.
+        </p>
+        <Link
+          to="/integrations"
+          className="text-[11px] text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium whitespace-nowrap"
+        >
+          Connect HubSpot for real pipeline →
+        </Link>
+      </div>
+
       {/* Weighted pipeline banner */}
       <div className="rounded-md border border-border bg-card px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-[12px] text-muted-foreground tabular-nums">
@@ -433,9 +589,6 @@ function PipelineTab({
           avg ACV <span className="text-foreground font-semibold">{formatK(avgAcv)}</span>
         </p>
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-mono text-muted-foreground/60">
-            Last sync: 12 min ago · HubSpot
-          </span>
           <Button
             variant="outline"
             size="sm"
@@ -831,6 +984,14 @@ export function CrmConsole({ companyId: _companyId, agents }: {
   const rawTab = searchParams.get("tab");
   const activeTab: CrmTab = isValidTab(rawTab) ? rawTab : "pipeline";
 
+  // Real HubSpot pipeline data (null when not connected or not yet synced)
+  const { data: hubspotPipelineResp } = useQuery({
+    queryKey: ["integration-data", _companyId, "hubspot.pipeline"],
+    queryFn: () => integrationDataApi.getHubspotPipeline(_companyId!),
+    enabled: !!_companyId,
+    retry: false,
+  });
+
   function setTab(tab: CrmTab) {
     setSearchParams({ tab });
   }
@@ -917,7 +1078,13 @@ export function CrmConsole({ companyId: _companyId, agents }: {
         ) : (
           <>
             {activeTab === "pipeline" && (
-              <PipelineTab deals={resolvedDeals} crmName={crmName} pushToast={pushToast} />
+              <PipelineTab
+                deals={resolvedDeals}
+                crmName={crmName}
+                pushToast={pushToast}
+                hubspotPipeline={hubspotPipelineResp?.payload ?? null}
+                fetchedAt={hubspotPipelineResp?.fetchedAt ?? null}
+              />
             )}
             {activeTab === "campaigns" && (
               <CampaignsTab crmName={crmName} pushToast={pushToast} />

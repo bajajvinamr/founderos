@@ -2,8 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router";
 import { useDialog } from "../context/DialogContext";
-import { useCompany } from "../context/CompanyContext";
-import { agentsApi } from "../api/agents";
 import { adaptersApi } from "../api/adapters";
 import { queryKeys } from "@/lib/queryKeys";
 import {
@@ -31,8 +29,7 @@ function isAgentAdapterType(type: string): boolean {
 }
 
 export function NewAgentDialog() {
-  const { newAgentOpen, closeNewAgent, openNewIssue } = useDialog();
-  const { selectedCompanyId } = useCompany();
+  const { newAgentOpen, closeNewAgent } = useDialog();
   const navigate = useNavigate();
   const [showAdvancedCards, setShowAdvancedCards] = useState(false);
   const disabledTypes = useDisabledAdaptersSync();
@@ -43,15 +40,6 @@ export function NewAgentDialog() {
     queryFn: () => adaptersApi.list(),
     staleTime: 5 * 60 * 1000,
   });
-
-  // Fetch existing agents for the "Ask CEO" flow
-  const { data: agents } = useQuery({
-    queryKey: queryKeys.agents.list(selectedCompanyId!),
-    queryFn: () => agentsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId && newAgentOpen,
-  });
-
-  const ceoAgent = (agents ?? []).find((a) => a.role === "ceo");
 
   // Build the adapter grid from the UI registry merged with display metadata.
   // This automatically includes external/plugin adapters.
@@ -82,11 +70,7 @@ export function NewAgentDialog() {
 
   function handleAskCeo() {
     closeNewAgent();
-    openNewIssue({
-      assigneeAgentId: ceoAgent?.id,
-      title: "Hire a new teammate",
-      description: "(type in what kind of agent you want here)",
-    });
+    navigate("/hire");
   }
 
   function handleAdvancedConfig() {

@@ -156,6 +156,16 @@ export {
 } from "./constants.js";
 
 export {
+  SIDE_EFFECT_TOOL_PATTERNS,
+  isSideEffectTool,
+  evaluateToolCall,
+  buildPermissionDeniedPayload,
+  type EvaluateToolCallArgs,
+  type EvaluateToolCallResult,
+  type PermissionDeniedPayload,
+} from "./lib/permission-tool-gate.js";
+
+export {
   ALL_INTERFACES_BIND_HOST,
   LOOPBACK_BIND_HOST,
   inferBindModeFromHost,
@@ -393,6 +403,9 @@ export type {
   CompanyMemoryEntry,
   CreateCompanyMemoryInput,
   UpdateCompanyMemoryInput,
+  AgentReview,
+  AgentReviewRecommendation,
+  AgentReviewSource,
 } from "./types/index.js";
 
 export {
@@ -666,6 +679,11 @@ export {
   type CreateCompanyMemory,
   type UpdateCompanyMemory,
   type GenerateWeeklySummary,
+  agentReviewRecommendationSchema,
+  generateAgentReviewSchema,
+  createManualAgentReviewSchema,
+  type GenerateAgentReview,
+  type CreateManualAgentReview,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";

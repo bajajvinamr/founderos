@@ -22,6 +22,8 @@ import {
 } from "../secrets/local-encrypted-provider.js";
 import type { Integration } from "@founderos/shared";
 import { syncPostHog } from "./posthog-sync.js";
+import { syncHubspot } from "./hubspot-sync.js";
+import { createSlackClient } from "./slack-client.js";
 import { logger } from "../middleware/logger.js";
 
 export type CreateIntegrationInput = {
@@ -114,7 +116,7 @@ export function integrationService(db: Db) {
       })
       .returning();
 
-    // Fire-and-forget PostHog initial sync
+    // Fire-and-forget initial sync based on integration kind
     if (input.kind === "posthog") {
       const apiKey = input.apiKey.trim();
       const host = typeof input.config?.host === "string" ? input.config.host : undefined;
@@ -127,6 +129,48 @@ export function integrationService(db: Db) {
       }).catch((err: unknown) => {
         logger.error({ err, integrationId: row.id }, "posthog-sync fire-and-forget failed");
       });
+    }
+
+    if (input.kind === "hubspot") {
+      void syncHubspot({
+        db,
+        integrationId: row.id,
+        companyId,
+        decryptedApiKey: input.apiKey.trim(),
+      }).catch((err: unknown) => {
+        logger.error({ err, integrationId: row.id }, "hubspot-sync fire-and-forget failed");
+      });
+    }
+
+    if (input.kind === "slack") {
+      // Fire-and-forget channel list caching
+      void (async () => {
+        try {
+          const client = createSlackClient({ botToken: input.apiKey.trim() });
+          const channels = await client.listChannels();
+          const accessible = channels.filter((ch) => ch.isMember);
+          const channelsList = accessible.slice(0, 20).map((ch) => ({
+            id: ch.id,
+            name: ch.name,
+            isPrivate: ch.isPrivate,
+          }));
+          const updatedConfig = { ...input.config, channels: channelsList };
+          await db
+            .update(integrations)
+            .set({ config: updatedConfig, updatedAt: new Date() })
+            .where(
+              and(
+                eq(integrations.id, row.id),
+                eq(integrations.companyId, companyId),
+              ),
+            );
+        } catch (err: unknown) {
+          logger.error(
+            { err, integrationId: row.id },
+            "slack: channel list cache failed",
+          );
+        }
+      })();
     }
 
     return toIntegration(row);

@@ -153,4 +153,7 @@ export const queryKeys = {
   companyMemory: {
     list: (companyId: string) => ["company-memory", companyId] as const,
   },
+  agentReviews: {
+    latest: (agentId: string) => ["agent-reviews", "latest", agentId] as const,
+  },
 };

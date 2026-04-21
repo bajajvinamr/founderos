@@ -322,3 +322,11 @@ export {
   type UpdateCompanyMemory,
   type GenerateWeeklySummary,
 } from "./company-memory.js";
+
+export {
+  agentReviewRecommendationSchema,
+  generateAgentReviewSchema,
+  createManualAgentReviewSchema,
+  type GenerateAgentReview,
+  type CreateManualAgentReview,
+} from "./agent-review.js";

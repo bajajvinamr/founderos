@@ -14,6 +14,7 @@ import type { Db } from "@founderos/db";
 import { integrationData, integrations } from "@founderos/db";
 import { assertCompanyAccess } from "./authz.js";
 import { syncPostHog } from "../services/posthog-sync.js";
+import { syncHubspot } from "../services/hubspot-sync.js";
 import {
   decryptWithMasterKey,
 } from "../secrets/local-encrypted-provider.js";
@@ -80,8 +81,8 @@ export function integrationDataRoutes(db: Db) {
       return;
     }
 
-    if (row.kind !== "posthog") {
-      res.status(400).json({ error: "Sync only supported for PostHog integrations" });
+    if (row.kind !== "posthog" && row.kind !== "hubspot") {
+      res.status(400).json({ error: "Sync only supported for PostHog and HubSpot integrations" });
       return;
     }
 
@@ -103,13 +104,23 @@ export function integrationDataRoutes(db: Db) {
         ? ((row.config as Record<string, unknown>).host as string)
         : undefined;
 
-    const result = await syncPostHog({
-      db,
-      integrationId: id,
-      companyId,
-      decryptedApiKey,
-      host,
-    });
+    let result;
+    if (row.kind === "hubspot") {
+      result = await syncHubspot({
+        db,
+        integrationId: id,
+        companyId,
+        decryptedApiKey,
+      });
+    } else {
+      result = await syncPostHog({
+        db,
+        integrationId: id,
+        companyId,
+        decryptedApiKey,
+        host,
+      });
+    }
 
     if (result.ok) {
       res.json(result);

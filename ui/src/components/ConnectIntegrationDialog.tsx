@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "../context/ToastContext";
 import { integrationsApi } from "../api/integrations";
+import { OAuthConnectButton } from "./OAuthConnectButton";
 
 type Props = {
   open: boolean;
@@ -64,36 +65,47 @@ export function ConnectIntegrationDialog({
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          <div className="space-y-1.5">
-            <label
-              htmlFor="api-key-input"
-              className="text-sm font-medium text-foreground"
-            >
-              {catalog.keyLabel}
-            </label>
-            <Input
-              id="api-key-input"
-              type="password"
-              placeholder="Paste your key here"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">{catalog.keyHint}</p>
+        {catalog.authMethod === "oauth" ? (
+          /* OAuth flow — single button, no form input */
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              You'll be redirected to {catalog.label} to authorize access, then
+              brought back here automatically.
+            </p>
+            <OAuthConnectButton kind={kind} companyId={companyId} />
           </div>
+        ) : (
+          /* API key paste flow */
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="api-key-input"
+                className="text-sm font-medium text-foreground"
+              >
+                {catalog.keyLabel}
+              </label>
+              <Input
+                id="api-key-input"
+                type="password"
+                placeholder="Paste your key here"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">{catalog.keyHint}</p>
+            </div>
 
-          <a
-            href={catalog.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Where to find this
-          </a>
-        </form>
+            <a
+              href={catalog.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Where to find this
+            </a>
+          </form>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
@@ -108,16 +120,18 @@ export function ConnectIntegrationDialog({
           >
             Cancel
           </Button>
-          <Button
-            size="sm"
-            disabled={!apiKey.trim() || connectMutation.isPending}
-            onClick={() => connectMutation.mutate()}
-          >
-            {connectMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-            ) : null}
-            Connect
-          </Button>
+          {catalog.authMethod === "api_key" && (
+            <Button
+              size="sm"
+              disabled={!apiKey.trim() || connectMutation.isPending}
+              onClick={() => connectMutation.mutate()}
+            >
+              {connectMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : null}
+              Connect
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

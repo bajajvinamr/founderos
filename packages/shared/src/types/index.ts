@@ -239,3 +239,8 @@ export type {
   CreateCompanyMemoryInput,
   UpdateCompanyMemoryInput,
 } from "./company-memory.js";
+export type {
+  AgentReview,
+  AgentReviewRecommendation,
+  AgentReviewSource,
+} from "./agent-review.js";

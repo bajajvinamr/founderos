@@ -28,6 +28,7 @@ export { executionWorkspaceService } from "./execution-workspaces.js";
 export { workspaceOperationService } from "./workspace-operations.js";
 export { workProductService } from "./work-products.js";
 export { logActivity, type LogActivityInput } from "./activity-log.js";
+export { agentReviewsService } from "./agent-reviews.js";
 export { createEmailSender, type EmailSender, type EmailSendParams, type EmailSendResult } from "./email-sender.js";
 export {
   templateSpawnService,
@@ -63,6 +64,30 @@ export {
   type PostHogConfig,
   type PostHogClient,
 } from "./posthog-client.js";
+export { syncHubspot } from "./hubspot-sync.js";
+export type {
+  HubspotPipelinePayload,
+  HubspotPipelineStageData,
+  HubspotDealCard,
+} from "./hubspot-sync.js";
+export {
+  createHubspotClient,
+  HubspotAuthError,
+  type HubspotConfig,
+  type HubspotClient,
+} from "./hubspot-client.js";
+export {
+  createSlackClient,
+  SlackAuthError,
+  type SlackConfig,
+  type SlackClient,
+  type SlackChannel,
+  type SlackPostMessageResponse,
+} from "./slack-client.js";
+export {
+  deliverMorningBriefToSlack,
+  type DigestResult,
+} from "./slack-digest.js";
 export { templateExportService } from "./template-export.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";

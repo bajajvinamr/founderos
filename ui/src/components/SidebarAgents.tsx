@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
-import { NavLink, useLocation } from "@/lib/router";
+import { NavLink, useLocation, useNavigate } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Plus } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
-import { useDialog } from "../context/DialogContext";
 import { useSidebar } from "../context/SidebarContext";
 import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
@@ -23,7 +22,7 @@ import type { Agent } from "@founderos/shared";
 export function SidebarAgents() {
   const [open, setOpen] = useState(true);
   const { selectedCompanyId } = useCompany();
-  const { openNewAgent } = useDialog();
+  const navigate = useNavigate();
   const { isMobile, setSidebarOpen } = useSidebar();
   const location = useLocation();
 
@@ -88,7 +87,7 @@ export function SidebarAgents() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              openNewAgent();
+              navigate("/hire");
             }}
             className="flex items-center justify-center h-4 w-4 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent/50 transition-colors"
             aria-label="Hire teammate"

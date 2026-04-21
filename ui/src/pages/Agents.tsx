@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { agentsApi, type OrgNode } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
-import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useSidebar } from "../context/SidebarContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -104,7 +103,6 @@ function filterOrgByProvider(
 
 export function Agents() {
   const { selectedCompanyId } = useCompany();
-  const { openNewAgent } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
   const navigate = useNavigate();
   const location = useLocation();
@@ -330,7 +328,7 @@ export function Agents() {
               </button>
             </div>
           )}
-          <Button size="sm" variant="outline" onClick={openNewAgent}>
+          <Button size="sm" variant="outline" onClick={() => navigate("/hire")}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Hire teammate
           </Button>
@@ -377,7 +375,7 @@ export function Agents() {
           icon={UserPlus}
           message="Hire your first teammate to get started."
           action="Hire teammate"
-          onAction={openNewAgent}
+          onAction={() => navigate("/hire")}
         />
       )}
 

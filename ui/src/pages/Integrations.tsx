@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -275,10 +275,51 @@ export function Integrations() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const { selectedCompanyId } = useCompany();
   const [connectKind, setConnectKind] = useState<IntegrationKind | null>(null);
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+  const oauthHandled = useRef(false);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Integrations" }]);
   }, [setBreadcrumbs]);
+
+  // Handle OAuth redirect-back query params (?oauth_success=1&kind=slack or ?oauth_error=...)
+  useEffect(() => {
+    if (oauthHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const oauthSuccess = params.get("oauth_success");
+    const oauthError = params.get("oauth_error");
+    const kind = params.get("kind");
+
+    if (oauthSuccess === "1" && kind) {
+      oauthHandled.current = true;
+      const label = INTEGRATION_CATALOG[kind as IntegrationKind]?.label ?? kind;
+      pushToast({ title: `${label} connected`, tone: "success" });
+      if (selectedCompanyId) {
+        void queryClient.invalidateQueries({ queryKey: ["integrations", selectedCompanyId] });
+      }
+      // Strip query params from URL without reload
+      const clean = window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    } else if (oauthError) {
+      oauthHandled.current = true;
+      const messages: Record<string, string> = {
+        invalid_signature: "OAuth state was tampered with. Please try again.",
+        expired: "OAuth session expired. Please try again.",
+        malformed: "OAuth callback was malformed. Please try again.",
+        token_exchange_failed: "Failed to exchange code for token. Please try again.",
+        upsert_failed: "Failed to save integration. Please try again.",
+        missing_code: "No authorization code received from provider.",
+      };
+      pushToast({
+        title: messages[oauthError] ?? `OAuth error: ${oauthError}`,
+        tone: "error",
+      });
+      const clean = window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["integrations", selectedCompanyId],

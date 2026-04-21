@@ -21,6 +21,7 @@ import { NotFoundPage } from "./pages/NotFound";
 // Grouped by workflow so hover-prefetch can preload a related cluster later.
 const AgentDetail = lazy(() => import("./pages/AgentDetail").then((m) => ({ default: m.AgentDetail })));
 const NewAgent = lazy(() => import("./pages/NewAgent").then((m) => ({ default: m.NewAgent })));
+const HireTeammate = lazy(() => import("./pages/HireTeammate").then((m) => ({ default: m.HireTeammate })));
 const Projects = lazy(() => import("./pages/Projects").then((m) => ({ default: m.Projects })));
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail").then((m) => ({ default: m.ProjectDetail })));
 const ProjectWorkspaceDetail = lazy(() => import("./pages/ProjectWorkspaceDetail").then((m) => ({ default: m.ProjectWorkspaceDetail })));
@@ -175,6 +176,7 @@ function boardRoutes() {
       <Route path="agents/paused" element={<Agents />} />
       <Route path="agents/error" element={<Agents />} />
       <Route path="agents/new" element={<NewAgent />} />
+      <Route path="hire" element={<HireTeammate />} />
       <Route path="agents/:agentId" element={<AgentDetail />} />
       <Route path="agents/:agentId/:tab" element={<AgentDetail />} />
       <Route path="agents/:agentId/runs/:runId" element={<AgentDetail />} />
