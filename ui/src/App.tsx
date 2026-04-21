@@ -55,6 +55,7 @@ const IssueChatUxLab = lazy(() => import("./pages/IssueChatUxLab").then((m) => (
 const RunTranscriptUxLab = lazy(() => import("./pages/RunTranscriptUxLab").then((m) => ({ default: m.RunTranscriptUxLab })));
 const OrgChart = lazy(() => import("./pages/OrgChart").then((m) => ({ default: m.OrgChart })));
 const DepartmentConsole = lazy(() => import("./pages/DepartmentConsole").then((m) => ({ default: m.DepartmentConsole })));
+const Integrations = lazy(() => import("./pages/Integrations").then((m) => ({ default: m.Integrations })));
 const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ default: m.BoardClaimPage })));
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
@@ -205,6 +206,7 @@ function boardRoutes() {
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
       <Route path="decisions" element={<DecisionsInbox />} />
       <Route path="costs" element={<Costs />} />
+      <Route path="integrations" element={<Integrations />} />
       <Route path="activity" element={<Activity />} />
       <Route path="audit" element={<AuditLog />} />
       <Route path="inbox" element={<InboxRootRedirect />} />

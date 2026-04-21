@@ -741,3 +741,71 @@ export const PLUGIN_BRIDGE_ERROR_CODES = [
   "UNKNOWN",
 ] as const;
 export type PluginBridgeErrorCode = (typeof PLUGIN_BRIDGE_ERROR_CODES)[number];
+
+// ---------------------------------------------------------------------------
+// Integrations — external tool connections (PostHog, HubSpot, Slack, etc.)
+// ---------------------------------------------------------------------------
+
+export const INTEGRATION_KINDS = [
+  "posthog",
+  "hubspot",
+  "slack",
+  "notion",
+  "linkedin",
+] as const;
+export type IntegrationKind = (typeof INTEGRATION_KINDS)[number];
+
+export const INTEGRATION_STATUSES = ["connected", "error", "disconnected"] as const;
+export type IntegrationStatus = (typeof INTEGRATION_STATUSES)[number];
+
+export type IntegrationCatalogEntry = {
+  label: string;
+  description: string;
+  website: string;
+  keyLabel: string;
+  keyHint: string;
+  department: string;
+};
+
+export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntry> = {
+  posthog: {
+    label: "PostHog",
+    description: "Signups, activation, funnels. Your Growth dept reads this.",
+    website: "https://posthog.com",
+    keyLabel: "Personal API key",
+    keyHint: "Settings → Personal API keys",
+    department: "growth",
+  },
+  hubspot: {
+    label: "HubSpot",
+    description: "Pipeline, contacts, deals. Your CRM & Lifecycle dept reads this.",
+    website: "https://hubspot.com",
+    keyLabel: "Private app token",
+    keyHint: "Settings → Integrations → Private apps",
+    department: "crm",
+  },
+  slack: {
+    label: "Slack",
+    description: "Morning brief delivery + chat-based commands.",
+    website: "https://slack.com",
+    keyLabel: "Bot user OAuth token",
+    keyHint: "api.slack.com → Create an app",
+    department: "chief-of-staff",
+  },
+  notion: {
+    label: "Notion",
+    description: "Shared context docs every teammate reads.",
+    website: "https://notion.so",
+    keyLabel: "Internal integration secret",
+    keyHint: "notion.so/my-integrations",
+    department: "chief-of-staff",
+  },
+  linkedin: {
+    label: "LinkedIn",
+    description: "Growth teammate's outbound channel.",
+    website: "https://linkedin.com",
+    keyLabel: "Access token",
+    keyHint: "Via LinkedIn Developer app",
+    department: "growth",
+  },
+};

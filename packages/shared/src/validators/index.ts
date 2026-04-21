@@ -302,3 +302,10 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  createIntegrationSchema,
+  updateIntegrationSchema,
+  type CreateIntegration,
+  type UpdateIntegration,
+} from "./integration.js";

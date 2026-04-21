@@ -165,6 +165,14 @@ export {
   validateConfiguredBindMode,
 } from "./network-bind.js";
 
+export {
+  INTEGRATION_KINDS,
+  INTEGRATION_STATUSES,
+  INTEGRATION_CATALOG,
+  type IntegrationKind,
+  type IntegrationStatus,
+  type IntegrationCatalogEntry,
+} from "./constants.js";
 export type {
   Company,
   CompanyMetrics,
@@ -377,6 +385,9 @@ export type {
   PluginWebhookDeliveryRecord,
   QuotaWindow,
   ProviderQuotaResult,
+  Integration,
+  CreateIntegrationInput,
+  UpdateIntegrationInput,
 } from "./types/index.js";
 
 export {
@@ -407,6 +418,10 @@ export {
   instanceExperimentalSettingsSchema,
   patchInstanceExperimentalSettingsSchema,
   type PatchInstanceExperimentalSettings,
+  createIntegrationSchema,
+  updateIntegrationSchema,
+  type CreateIntegration,
+  type UpdateIntegration,
 } from "./validators/index.js";
 
 export {

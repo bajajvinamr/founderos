@@ -53,6 +53,7 @@ export {
   type ExecutionMode,
   type StoredApiKey,
 } from "./instance-api-keys.js";
+export { integrationService } from "./integrations.js";
 export { templateExportService } from "./template-export.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";

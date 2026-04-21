@@ -227,3 +227,8 @@ export type {
   PluginJobRunRecord,
   PluginWebhookDeliveryRecord,
 } from "./plugin.js";
+export type {
+  Integration,
+  CreateIntegrationInput,
+  UpdateIntegrationInput,
+} from "./integration.js";
