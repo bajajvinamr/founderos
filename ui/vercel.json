@@ -1,0 +1,33 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd .. && pnpm install --frozen-lockfile && pnpm --filter @founderos/ui build",
+  "outputDirectory": "dist",
+  "framework": null,
+  "installCommand": "echo 'Install handled in buildCommand'",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "$FOUNDEROS_BACKEND_URL/api/:path*"
+    },
+    {
+      "source": "/((?!assets|static|favicon|icons|.well-known|manifest|sw).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    }
+  ]
+}
