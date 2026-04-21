@@ -99,7 +99,7 @@ export function FounderBriefing({
         {formatToday()} · Morning brief
       </div>
 
-      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+      <div className="flex items-baseline justify-between gap-x-4 gap-y-2 flex-wrap">
         <h2 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
           {greeting}
           {firstName ? `, ${firstName}` : ""}.
@@ -171,20 +171,31 @@ export function FounderBriefing({
 
       {/* Founder action bar — the one thing only a human can do: give the
           team direction for the day. Everything else is derived. */}
-      <div className="mt-7 pt-5 border-t border-border/70 flex items-center justify-between gap-3 flex-wrap">
+      <div className="mt-7 pt-5 border-t border-border/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="text-[12px] text-muted-foreground max-w-md">
           Set today&apos;s focus. Write one line and the team picks it up on
           their next shift.
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={briefTheTeam}
-          className="gap-1.5 shrink-0"
-        >
-          <PenLine className="h-3.5 w-3.5" />
-          Brief the team
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {isEndOfWeek() && (
+            <Link
+              to="/weekly"
+              className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground no-underline transition-colors"
+            >
+              Read this week&apos;s wrap
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={briefTheTeam}
+            className="gap-1.5"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            Brief the team
+          </Button>
+        </div>
       </div>
     </section>
   );
@@ -430,6 +441,12 @@ function formatToday(): string {
     month: "short",
     day: "numeric",
   });
+}
+
+/** Returns true on Thursday (4), Friday (5), Saturday (6), and Sunday (0) — day >= 4 or Sunday. */
+function isEndOfWeek(): boolean {
+  const day = new Date().getDay(); // 0=Sun, 1=Mon…6=Sat
+  return day === 0 || day >= 4;
 }
 
 function deriveFirstName(name?: string | null, email?: string | null): string | null {

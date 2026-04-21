@@ -59,6 +59,7 @@ const Integrations = lazy(() => import("./pages/Integrations").then((m) => ({ de
 const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ default: m.BoardClaimPage })));
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
+const WeeklyWrap = lazy(() => import("./pages/WeeklyWrap").then((m) => ({ default: m.WeeklyWrap })));
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -209,6 +210,7 @@ function boardRoutes() {
       <Route path="integrations" element={<Integrations />} />
       <Route path="activity" element={<Activity />} />
       <Route path="audit" element={<AuditLog />} />
+      <Route path="weekly" element={<WeeklyWrap />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
       <Route path="inbox/mine" element={<Inbox />} />
       <Route path="inbox/recent" element={<Inbox />} />

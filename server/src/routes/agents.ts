@@ -22,6 +22,7 @@ import {
   updateAgentInstructionsPathSchema,
   wakeAgentSchema,
   updateAgentSchema,
+  appendFounderNoteSchema,
 } from "@founderos/shared";
 import {
   readFounderOSSkillSyncPreference,
@@ -2428,6 +2429,45 @@ export function agentRoutes(db: Db) {
       .orderBy(desc(heartbeatRuns.createdAt));
 
     res.json(liveRuns);
+  });
+
+  router.post("/companies/:companyId/agents/:agentId/founder-notes", validate(appendFounderNoteSchema), async (req, res) => {
+    const { companyId, agentId } = req.params as { companyId: string; agentId: string };
+    assertCompanyAccess(req, companyId);
+
+    const agent = await svc.getById(agentId);
+    if (!agent || agent.companyId !== companyId) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    const { note } = req.body as { note: string };
+    const actor = getActorInfo(req);
+
+    const updated = await svc.appendInstructionNote(agentId, note);
+    if (!updated) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    const promptTemplate = typeof (updated.adapterConfig as Record<string, unknown>).promptTemplate === "string"
+      ? (updated.adapterConfig as Record<string, unknown>).promptTemplate as string
+      : "";
+    const notesCount = (promptTemplate.match(/<founder_note /g) ?? []).length;
+
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      action: "agent.founder_note_added",
+      entityType: "agent",
+      entityId: agentId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      details: { notesCount },
+    });
+
+    res.json({ ok: true, updatedAt: updated.updatedAt.toISOString(), notesCount });
   });
 
   router.get("/issues/:issueId/active-run", async (req, res) => {

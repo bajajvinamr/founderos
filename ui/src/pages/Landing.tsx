@@ -248,21 +248,21 @@ function TopBar() {
 function Hero() {
   return (
     <section className="relative min-h-[92svh] flex flex-col justify-between pt-28 md:pt-32 pb-12">
-      <div className="mx-auto max-w-6xl px-6 md:px-10 w-full flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+      <div className="mx-auto max-w-6xl px-4 md:px-10 w-full flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex flex-col gap-1.5">
           <span className="font-mono caps-wide text-[10px] text-pulse-accent">INDEX 001</span>
           <span className="font-mono caps text-[11px] text-pulse-muted">
             FounderOS · The AI Company OS for lean founders · Est 2026
           </span>
         </div>
-        <div className="font-mono caps text-[11px] text-pulse-muted md:max-w-[320px] md:text-right">
-          <span className="led mr-2 align-middle" />
+        <div className="font-mono caps text-[11px] text-pulse-muted flex items-center gap-2 flex-wrap md:max-w-[320px] md:text-right">
+          <span className="led mr-1 align-middle" />
           Live — 18 founders running companies this week
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-6 md:px-10 w-full mt-20 md:mt-0">
-        <h1 className="font-display" style={{ fontSize: "clamp(3.5rem, 1.8rem + 8vw, 10.5rem)" }}>
+      <div className="mx-auto max-w-6xl px-4 md:px-10 w-full mt-16 md:mt-0">
+        <h1 className="font-display" style={{ fontSize: "clamp(3rem, 1.8rem + 8vw, 10.5rem)" }}>
           <span>Build a $10M</span>
           <br />
           <span>company with</span>{" "}
@@ -300,7 +300,7 @@ function Hero() {
 
 function ThisWeekPulse() {
   return (
-    <div className="mx-auto max-w-6xl px-6 md:px-10 w-full mt-20 md:mt-0">
+    <div className="mx-auto max-w-6xl px-4 md:px-10 w-full mt-16 md:mt-0">
       <div className="grid grid-cols-12 gap-6 border-t border-pulse-line pt-6">
         <div className="col-span-12 md:col-span-3">
           <div className="flex items-center gap-2.5">
@@ -811,19 +811,21 @@ function ShiftSection() {
             </h2>
           </div>
         </div>
-        <div className="border border-pulse-line">
-          <div className="grid grid-cols-[1.2fr,1fr,1fr] font-mono caps-wide text-[10px] text-pulse-muted">
-            <div className="px-5 py-3 border-b border-r border-pulse-line">What</div>
-            <div className="px-5 py-3 border-b border-r border-pulse-line">Classic startup</div>
-            <div className="px-5 py-3 border-b border-pulse-line text-pulse-accent">With FounderOS</div>
-          </div>
-          {rows.map((r, i) => (
-            <div key={r.item} className={`grid grid-cols-[1.2fr,1fr,1fr] text-[13.5px] ${i < rows.length - 1 ? "border-b border-pulse-line" : ""}`}>
-              <div className="px-5 py-5 font-medium border-r border-pulse-line">{r.item}</div>
-              <div className="px-5 py-5 text-pulse-muted line-through decoration-pulse-muted/60 border-r border-pulse-line">{r.old}</div>
-              <div className="px-5 py-5 text-pulse-bone">{r.next}</div>
+        <div className="border border-pulse-line overflow-x-auto">
+          <div className="min-w-[480px]">
+            <div className="grid grid-cols-[1.2fr,1fr,1fr] font-mono caps-wide text-[10px] text-pulse-muted">
+              <div className="px-4 py-3 border-b border-r border-pulse-line">What</div>
+              <div className="px-4 py-3 border-b border-r border-pulse-line">Classic startup</div>
+              <div className="px-4 py-3 border-b border-pulse-line text-pulse-accent">With FounderOS</div>
             </div>
-          ))}
+            {rows.map((r, i) => (
+              <div key={r.item} className={`grid grid-cols-[1.2fr,1fr,1fr] text-[13px] ${i < rows.length - 1 ? "border-b border-pulse-line" : ""}`}>
+                <div className="px-4 py-4 font-medium border-r border-pulse-line">{r.item}</div>
+                <div className="px-4 py-4 text-pulse-muted line-through decoration-pulse-muted/60 border-r border-pulse-line">{r.old}</div>
+                <div className="px-4 py-4 text-pulse-bone">{r.next}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -985,7 +987,7 @@ function Pricing() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 border-t border-pulse-line">
           {/* Tier 1 — Solo Founder */}
-          <div className="p-8 md:p-10 border-b md:border-r md:border-b-0 border-pulse-line">
+          <div className="p-6 md:p-10 border-b md:border-r md:border-b-0 border-pulse-line">
             <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-4">Solo Founder</div>
             <div className="font-display mb-1" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
               $299
@@ -1004,14 +1006,14 @@ function Pricing() {
               <li>— BYO provider keys</li>
             </ul>
             <div className="mt-8">
-              <Link to="/auth" className="btn">
+              <Link to="/auth" className="btn w-full justify-center md:w-auto md:justify-start">
                 Design partner pricing · talk to us first <span aria-hidden>→</span>
               </Link>
             </div>
           </div>
 
           {/* Tier 2 — Lean Team */}
-          <div className="p-8 md:p-10 border-b md:border-r md:border-b-0 border-pulse-line bg-pulse-elev">
+          <div className="p-6 md:p-10 border-b md:border-r md:border-b-0 border-pulse-line bg-pulse-elev">
             <div className="font-mono caps-wide text-[10px] text-pulse-accent mb-4">Lean Team</div>
             <div className="font-display mb-1" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
               $2,000
@@ -1031,14 +1033,14 @@ function Pricing() {
               <li>— Shared company memory</li>
             </ul>
             <div className="mt-8">
-              <a href="mailto:hello@founderos.ai" className="btn">
+              <a href="mailto:hello@founderos.ai" className="btn w-full justify-center md:w-auto md:justify-start">
                 Design partner pricing · talk to us first <span aria-hidden>→</span>
               </a>
             </div>
           </div>
 
           {/* Tier 3 — Venture Studio */}
-          <div className="p-8 md:p-10">
+          <div className="p-6 md:p-10">
             <div className="font-mono caps-wide text-[10px] text-pulse-muted mb-4">Venture Studio</div>
             <div className="font-display mb-1" style={{ fontSize: "clamp(2.5rem, 1.8rem + 2vw, 3.5rem)" }}>
               $10,000
@@ -1058,7 +1060,7 @@ function Pricing() {
               <li>— Dedicated success + priority provider access</li>
             </ul>
             <div className="mt-8">
-              <a href="mailto:hello@founderos.ai" className="btn btn-ghost">
+              <a href="mailto:hello@founderos.ai" className="btn btn-ghost w-full justify-center md:w-auto md:justify-start">
                 Design partner pricing · talk to us first <span aria-hidden>→</span>
               </a>
             </div>

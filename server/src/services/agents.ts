@@ -682,6 +682,24 @@ export function agentService(db: Db) {
         .from(heartbeatRuns)
         .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, ["queued", "running"]))),
 
+    appendInstructionNote: async (agentId: string, note: string) => {
+      const existing = await getById(agentId);
+      if (!existing) return null;
+
+      const adapterConfig = (existing.adapterConfig ?? {}) as Record<string, unknown>;
+      const currentTemplate = typeof adapterConfig.promptTemplate === "string"
+        ? adapterConfig.promptTemplate
+        : "";
+      const timestamp = new Date().toISOString();
+      const block = `\n<founder_note added="${timestamp}">\n${note}\n</founder_note>`;
+      const updatedTemplate = currentTemplate + block;
+
+      const updated = await updateAgent(agentId, {
+        adapterConfig: { ...adapterConfig, promptTemplate: updatedTemplate },
+      });
+      return updated;
+    },
+
     resolveByReference: async (companyId: string, reference: string) => {
       const raw = reference.trim();
       if (raw.length === 0) {

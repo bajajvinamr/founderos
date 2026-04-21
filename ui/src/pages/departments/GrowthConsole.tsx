@@ -398,9 +398,9 @@ function FunnelView({ pushToast }: { pushToast: (input: { title: string; body: s
           const convPct = idx === 0 ? 100 : Math.round((stage.count / prevCount) * 100);
           const barWidth = Math.round((stage.count / maxCount) * 100);
           return (
-            <div key={stage.label} className="px-5 py-4 flex items-center gap-4">
-              <div className="w-20 shrink-0">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
+            <div key={stage.label} className="px-4 py-3 flex items-center gap-3">
+              <div className="w-16 shrink-0">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
                   {stage.label}
                 </p>
               </div>
@@ -412,20 +412,20 @@ function FunnelView({ pushToast }: { pushToast: (input: { title: string; body: s
                   />
                 </div>
               </div>
-              <div className="w-16 text-right tabular-nums text-sm font-semibold text-foreground">
+              <div className="w-12 text-right tabular-nums text-xs font-semibold text-foreground shrink-0">
                 {stage.count.toLocaleString()}
               </div>
               {idx > 0 && (
                 <div
                   className={cn(
-                    "w-14 text-right tabular-nums text-[11px] font-medium",
+                    "w-10 text-right tabular-nums text-[11px] font-medium shrink-0",
                     convPct < 20 ? "text-red-500" : convPct < 50 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400",
                   )}
                 >
                   {convPct}%
                 </div>
               )}
-              {idx === 0 && <div className="w-14" />}
+              {idx === 0 && <div className="w-10 shrink-0" />}
             </div>
           );
         })}
@@ -454,7 +454,7 @@ function PaidTab({ pushToast }: { pushToast: (input: { title: string; body: stri
   return (
     <div className="max-w-lg">
       <div className="rounded-md border border-border bg-card p-6 space-y-4">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
             { label: "Spend this month", value: "$180" },
             { label: "Active campaigns", value: "1" },

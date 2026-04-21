@@ -597,14 +597,14 @@ function OnboardingTab({
             <div
               key={stage.label}
               className={cn(
-                "px-5 py-4 flex items-center gap-4",
+                "px-4 py-3 flex items-center gap-3",
                 isDropOff && "bg-amber-500/5",
               )}
             >
-              <div className="w-32 shrink-0">
+              <div className="w-24 shrink-0">
                 <p
                   className={cn(
-                    "text-[11px] uppercase tracking-[0.12em] font-medium",
+                    "text-[10px] uppercase tracking-[0.12em] font-medium",
                     isDropOff ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
                   )}
                 >
@@ -624,20 +624,20 @@ function OnboardingTab({
                   />
                 </div>
               </div>
-              <div className="w-14 text-right tabular-nums text-sm font-semibold text-foreground">
+              <div className="w-12 text-right tabular-nums text-xs font-semibold text-foreground shrink-0">
                 {stage.count.toLocaleString()}
               </div>
               {idx > 0 && (
                 <div
                   className={cn(
-                    "w-14 text-right tabular-nums text-[11px] font-medium",
+                    "w-10 text-right tabular-nums text-[11px] font-medium shrink-0",
                     convPct < 30 ? "text-amber-500" : convPct < 60 ? "text-foreground/60" : "text-emerald-600 dark:text-emerald-400",
                   )}
                 >
                   {convPct}%
                 </div>
               )}
-              {idx === 0 && <div className="w-14" />}
+              {idx === 0 && <div className="w-10 shrink-0" />}
             </div>
           );
         })}

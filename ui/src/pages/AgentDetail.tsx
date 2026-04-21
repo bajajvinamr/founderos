@@ -71,7 +71,9 @@ import {
   ArrowLeft,
   HelpCircle,
   FolderOpen,
+  MessageCircle,
 } from "lucide-react";
+import { OneOnOneDrawer } from "../components/OneOnOneDrawer";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -627,6 +629,7 @@ export function AgentDetail() {
   const navigate = useNavigate();
   const [actionError, setActionError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [oneOnOneOpen, setOneOnOneOpen] = useState(false);
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
   const needsDashboardData = activeView === "dashboard";
   const needsRunData = activeView === "runs" || Boolean(urlRunId);
@@ -891,6 +894,17 @@ export function AgentDetail() {
     }, [configDirty]),
   );
 
+  // `?` opens the 1:1 drawer on this page
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "?" && !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName ?? "")) {
+        setOneOnOneOpen((prev) => !prev);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   if (isLoading) return <PageSkeleton variant="detail" />;
   if (error) return <p className="text-sm text-destructive">{error.message}</p>;
   if (!agent) return null;
@@ -922,6 +936,15 @@ export function AgentDetail() {
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOneOnOneOpen(true)}
+            title="1:1 direct note (shortcut: ?)"
+          >
+            <MessageCircle className="h-3.5 w-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">1:1</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1146,6 +1169,15 @@ export function AgentDetail() {
           />
         </div>
       ) : null}
+
+      {/* 1:1 drawer */}
+      <OneOnOneDrawer
+        open={oneOnOneOpen}
+        onOpenChange={setOneOnOneOpen}
+        agent={agent}
+        companyId={resolvedCompanyId ?? agent.companyId}
+        setupHref={`/agents/${canonicalAgentRef}/configuration`}
+      />
     </div>
   );
 }

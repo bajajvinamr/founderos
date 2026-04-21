@@ -135,3 +135,9 @@ export const updateAgentPermissionsSchema = z.object({
 });
 
 export type UpdateAgentPermissions = z.infer<typeof updateAgentPermissionsSchema>;
+
+export const appendFounderNoteSchema = z.object({
+  note: z.string().min(1).max(2000),
+});
+
+export type AppendFounderNote = z.infer<typeof appendFounderNoteSchema>;
