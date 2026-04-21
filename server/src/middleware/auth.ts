@@ -50,7 +50,7 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     if (!session?.user?.id) return false;
 
     const userId = session.user.id;
-    const [roleRow, memberships] = await Promise.all([
+    let [roleRow, memberships] = await Promise.all([
       db
         .select({ id: instanceUserRoles.id })
         .from(instanceUserRoles)
@@ -67,6 +67,29 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
           ),
         ),
     ]);
+
+    // Auto-bootstrap for Supabase/Clerk deployments where the webhook isn't
+    // wired yet: if this authenticated user has no role AND the instance has
+    // no real admin yet, run the post-signup hook inline. Idempotent — safe
+    // to call on every request; the hook checks existing admins.
+    if (!roleRow && session.user.email) {
+      try {
+        const { runPostSignupBootstrap } = await import("../auth/post-signup-hook.js");
+        const bootstrap = await runPostSignupBootstrap(db, {
+          userId,
+          email: session.user.email,
+        });
+        if (bootstrap.promotedToInstanceAdmin || bootstrap.consumedInvite) {
+          roleRow = await db
+            .select({ id: instanceUserRoles.id })
+            .from(instanceUserRoles)
+            .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
+            .then((rows) => rows[0] ?? null);
+        }
+      } catch (err) {
+        logger.warn({ err, userId }, "Inline post-signup bootstrap failed (non-fatal)");
+      }
+    }
     req.actor = {
       type: "board",
       userId,
