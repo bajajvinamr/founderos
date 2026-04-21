@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "$FOUNDEROS_BACKEND_URL/api/:path*"
+      "destination": "https://prediction-corpus-fan-approximately.trycloudflare.com/api/:path*"
     },
     {
       "source": "/((?!assets|static|favicon|icons|.well-known|manifest|sw).*)",

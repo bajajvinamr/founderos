@@ -55,3 +55,4 @@ tests/release-smoke/playwright-report/
 # FounderOS
 .founderos/
 .founderos-local/
+.vercel
