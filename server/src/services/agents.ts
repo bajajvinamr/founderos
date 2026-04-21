@@ -16,7 +16,7 @@ import {
   issues,
   issueComments,
 } from "@founderos/db";
-import { isUuidLike, normalizeAgentUrlKey } from "@founderos/shared";
+import { isUuidLike, normalizeAgentUrlKey, type AgentPermissionLevel, AGENT_PERMISSION_LEVELS } from "@founderos/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { normalizeAgentPermissions } from "./agent-permissions.js";
 import { REDACTED_EVENT_VALUE, sanitizeRecord } from "../redaction.js";
@@ -203,9 +203,17 @@ export function agentService(db: Db) {
     };
   }
 
+  function normalizePermissionLevel(value: unknown): AgentPermissionLevel {
+    if (typeof value === "string" && (AGENT_PERMISSION_LEVELS as readonly string[]).includes(value)) {
+      return value as AgentPermissionLevel;
+    }
+    return "approve";
+  }
+
   function normalizeAgentRow(row: typeof agents.$inferSelect) {
     return withUrlKey({
       ...row,
+      permissionLevel: normalizePermissionLevel(row.permissionLevel),
       permissions: normalizeAgentPermissions(row.permissions, row.role),
     });
   }

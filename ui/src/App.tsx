@@ -35,6 +35,7 @@ const ApprovalDetail = lazy(() => import("./pages/ApprovalDetail").then((m) => (
 const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => ({ default: m.DecisionsInbox })));
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
+const AuditLog = lazy(() => import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })));
 const CompanySettings = lazy(() => import("./pages/CompanySettings").then((m) => ({ default: m.CompanySettings })));
 const CompanySkills = lazy(() => import("./pages/CompanySkills").then((m) => ({ default: m.CompanySkills })));
 const CompanyExport = lazy(() => import("./pages/CompanyExport").then((m) => ({ default: m.CompanyExport })));
@@ -205,6 +206,7 @@ function boardRoutes() {
       <Route path="decisions" element={<DecisionsInbox />} />
       <Route path="costs" element={<Costs />} />
       <Route path="activity" element={<Activity />} />
+      <Route path="audit" element={<AuditLog />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
       <Route path="inbox/mine" element={<Inbox />} />
       <Route path="inbox/recent" element={<Inbox />} />

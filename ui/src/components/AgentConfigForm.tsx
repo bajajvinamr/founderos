@@ -3,8 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Agent,
   AdapterEnvironmentTestResult,
+  AgentPermissionLevel,
   CompanySecret,
   EnvBinding,
+} from "@founderos/shared";
+import {
+  AGENT_PERMISSION_LEVELS,
+  AGENT_PERMISSION_LEVEL_DESCRIPTIONS,
+  AGENT_PERMISSION_LEVEL_LABELS,
 } from "@founderos/shared";
 import type { AdapterModel } from "../api/agents";
 import { agentsApi } from "../api/agents";
@@ -532,6 +538,21 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           )}
         </div>
         <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+          <PermissionLevelField
+            value={
+              isCreate
+                ? ((props.values.permissionLevel as AgentPermissionLevel | undefined) ?? "approve")
+                : ((overlay.identity?.permissionLevel as AgentPermissionLevel | undefined) ?? props.agent.permissionLevel ?? "approve")
+            }
+            onChange={(level) => {
+              if (isCreate) {
+                set!({ permissionLevel: level });
+              } else {
+                mark("identity", "permissionLevel", level);
+              }
+            }}
+          />
+
           {showAdapterTypeField && (
             <Field label="AI provider" hint={help.adapterType}>
               <AdapterTypeDropdown
@@ -1372,6 +1393,50 @@ function ThinkingEffortDropdown({
           ))}
         </PopoverContent>
       </Popover>
+    </Field>
+  );
+}
+
+function PermissionLevelField({
+  value,
+  onChange,
+}: {
+  value: AgentPermissionLevel;
+  onChange: (level: AgentPermissionLevel) => void;
+}) {
+  return (
+    <Field label="Permission level">
+      <div className="space-y-2">
+        {AGENT_PERMISSION_LEVELS.map((level) => {
+          const isSelected = value === level;
+          return (
+            <label
+              key={level}
+              className="flex items-start gap-2.5 cursor-pointer group"
+            >
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border bg-background group-hover:border-foreground/40">
+                {isSelected && (
+                  <span className="h-2 w-2 rounded-full bg-foreground" />
+                )}
+              </span>
+              <input
+                type="radio"
+                name="permissionLevel"
+                value={level}
+                checked={isSelected}
+                onChange={() => onChange(level)}
+                className="sr-only"
+              />
+              <span className="text-sm leading-tight">
+                <span className="font-medium text-foreground">
+                  {AGENT_PERMISSION_LEVEL_LABELS[level]}
+                </span>
+                <span className="text-muted-foreground"> — {AGENT_PERMISSION_LEVEL_DESCRIPTIONS[level]}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
     </Field>
   );
 }

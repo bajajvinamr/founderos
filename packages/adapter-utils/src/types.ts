@@ -396,6 +396,8 @@ export interface CreateConfigValues {
   maxTurnsPerRun: number;
   heartbeatEnabled: boolean;
   intervalSec: number;
+  /** Permission level for the agent — controls how much the agent can act autonomously. */
+  permissionLevel?: string;
   /** Arbitrary key-value pairs populated by schema-driven config fields. */
   adapterSchemaValues?: Record<string, unknown>;
 }

@@ -38,6 +38,7 @@ function createAgent(
     updatedAt: now,
     pauseReason: null,
     pausedAt: null,
+    permissionLevel: "approve",
     permissions: { canCreateAgents: false },
   };
 }

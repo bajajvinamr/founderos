@@ -1,5 +1,6 @@
 import type {
   AgentAdapterType,
+  AgentPermissionLevel,
   PauseReason,
   AgentRole,
   AgentStatus,
@@ -77,6 +78,7 @@ export interface Agent {
   spentMonthlyCents: number;
   pauseReason: PauseReason | null;
   pausedAt: Date | null;
+  permissionLevel: AgentPermissionLevel;
   permissions: AgentPermissions;
   lastHeartbeatAt: Date | null;
   metadata: Record<string, unknown> | null;

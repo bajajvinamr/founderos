@@ -66,6 +66,23 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   general: "General",
 };
 
+export const AGENT_PERMISSION_LEVELS = ["observe", "draft", "approve", "autonomous"] as const;
+export type AgentPermissionLevel = (typeof AGENT_PERMISSION_LEVELS)[number];
+
+export const AGENT_PERMISSION_LEVEL_LABELS: Record<AgentPermissionLevel, string> = {
+  observe: "Observe",
+  draft: "Draft",
+  approve: "Approve",
+  autonomous: "Autonomous",
+};
+
+export const AGENT_PERMISSION_LEVEL_DESCRIPTIONS: Record<AgentPermissionLevel, string> = {
+  observe: "Reads context, makes nothing",
+  draft: "Creates artifacts, doesn't publish",
+  approve: "Runs low-stakes actions, escalates the rest",
+  autonomous: "Full trust, no approvals",
+};
+
 export const AGENT_ICON_NAMES = [
   "bot",
   "cpu",

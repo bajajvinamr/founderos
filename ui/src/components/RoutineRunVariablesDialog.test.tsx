@@ -108,6 +108,7 @@ function createAgent(): Agent {
     urlKey: "routine-agent",
     pauseReason: null,
     pausedAt: null,
+    permissionLevel: "approve",
     permissions: { canCreateAgents: false },
   };
 }

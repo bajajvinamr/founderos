@@ -4,7 +4,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
-import type { BillingType, ExecutionWorkspace, ExecutionWorkspaceConfig } from "@founderos/shared";
+import type { AgentPermissionLevel, BillingType, ExecutionWorkspace, ExecutionWorkspaceConfig } from "@founderos/shared";
 import {
   agents,
   agentRuntimeState,
@@ -62,6 +62,7 @@ import {
   resolveExecutionWorkspaceMode,
 } from "./execution-workspace-policy.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { logActivity } from "./activity-log.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
 import {
   hasSessionCompactionThresholds,
@@ -120,6 +121,31 @@ export function injectCharterIntoPrompt(
   const charterBlock = `<company_charter>\n${charter}\n</company_charter>`;
   const existing = typeof promptTemplate === "string" ? promptTemplate.trim() : "";
   return existing.length > 0 ? `${charterBlock}\n\n${existing}` : charterBlock;
+}
+
+const PERMISSION_ADDENDA: Record<Exclude<AgentPermissionLevel, "observe" | "autonomous">, string> = {
+  draft:
+    "Permission level: draft. Do NOT execute tools with side effects (publish, send, deploy, commit, spend). Prepare artifacts and stop.",
+  approve:
+    "Permission level: approve. Use create_approval before publishing content, sending external messages, committing code to main, changing pricing, spending money, hiring or offboarding teammates.",
+};
+
+/**
+ * Injects a permission-level addendum into an existing prompt string.
+ * Returns the prompt unchanged for observe/autonomous levels.
+ * The addendum is appended at the end of the prompt so the charter block
+ * remains the leading context.
+ */
+export function injectPermissionAddendum(
+  permissionLevel: AgentPermissionLevel,
+  promptTemplate: unknown,
+): string {
+  const existing = typeof promptTemplate === "string" ? promptTemplate.trim() : "";
+  if (permissionLevel === "observe" || permissionLevel === "autonomous") {
+    return existing;
+  }
+  const addendum = PERMISSION_ADDENDA[permissionLevel];
+  return existing.length > 0 ? `${existing}\n\n${addendum}` : addendum;
 }
 
 type RuntimeConfigSecretResolver = Pick<
@@ -2825,12 +2851,39 @@ export function heartbeatService(db: Db) {
     });
     const runtimeSkillEntries = await companySkills.listRuntimeSkillEntries(agent.companyId);
     const companyCharter = await getCompanyCharter(db, agent.companyId);
+    const agentPermissionLevel: AgentPermissionLevel =
+      (["observe", "draft", "approve", "autonomous"] as const).includes(agent.permissionLevel as AgentPermissionLevel)
+        ? (agent.permissionLevel as AgentPermissionLevel)
+        : "approve";
+
+    // Observe gate: skip adapter dispatch entirely.
+    if (agentPermissionLevel === "observe") {
+      await logActivity(db, {
+        companyId: agent.companyId,
+        actorType: "agent",
+        actorId: agent.id,
+        action: "agent.observe_skipped",
+        entityType: "heartbeat_run",
+        entityId: run.id,
+        agentId: agent.id,
+        runId: run.id,
+        details: { reason: "Permission level is observe; adapter dispatch skipped." },
+      });
+      await setRunStatus(runId, "succeeded", { finishedAt: new Date() });
+      await setWakeupStatus(run.wakeupRequestId, "completed", { finishedAt: new Date() });
+      const observeRun = await getRun(runId);
+      if (observeRun) await releaseIssueExecutionAndPromote(observeRun);
+      return;
+    }
+
+    const charterInjectedPrompt = companyCharter
+      ? injectCharterIntoPrompt(companyCharter, resolvedConfig.promptTemplate)
+      : (typeof resolvedConfig.promptTemplate === "string" ? resolvedConfig.promptTemplate : "");
+    const permissionInjectedPrompt = injectPermissionAddendum(agentPermissionLevel, charterInjectedPrompt);
     const runtimeConfig = {
       ...resolvedConfig,
       founderosRuntimeSkills: runtimeSkillEntries,
-      ...(companyCharter
-        ? { promptTemplate: injectCharterIntoPrompt(companyCharter, resolvedConfig.promptTemplate) }
-        : {}),
+      ...(permissionInjectedPrompt.length > 0 ? { promptTemplate: permissionInjectedPrompt } : {}),
     };
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
       companyId: agent.companyId,

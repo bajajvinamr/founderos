@@ -18,7 +18,7 @@ import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Bot, Plus, List, GitBranch, SlidersHorizontal, LayoutGrid, DollarSign, CornerDownRight, Users, UserPlus, CheckCircle2 } from "lucide-react";
-import { AGENT_ROLE_LABELS, type Agent } from "@founderos/shared";
+import { AGENT_ROLE_LABELS, type Agent, type AgentPermissionLevel } from "@founderos/shared";
 import { issuesApi } from "../api/issues";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
@@ -693,6 +693,9 @@ function TeammateCard({
       <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
         <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
         <span className="font-medium text-foreground/80">{statusLabel}</span>
+        <span className="ml-auto">
+          <PermissionChip level={(agent.permissionLevel as AgentPermissionLevel | undefined) ?? "approve"} />
+        </span>
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 pt-3 border-t border-border/60">
@@ -748,5 +751,43 @@ function BudgetBar({ spentCents, budgetCents }: { spentCents: number; budgetCent
         />
       </div>
     </div>
+  );
+}
+
+const PERMISSION_CHIP_CONFIG: Record<AgentPermissionLevel, { label: string; className: string; tooltip: string }> = {
+  observe: {
+    label: "OBS",
+    className: "bg-muted text-muted-foreground",
+    tooltip: "Observe — reads context, makes nothing",
+  },
+  draft: {
+    label: "DRF",
+    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    tooltip: "Draft — creates artifacts, doesn't publish",
+  },
+  approve: {
+    label: "APR",
+    className: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+    tooltip: "Approve — runs low-stakes actions, escalates the rest",
+  },
+  autonomous: {
+    label: "AUT",
+    className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    tooltip: "Autonomous — full trust, no approvals",
+  },
+};
+
+function PermissionChip({ level }: { level: AgentPermissionLevel }) {
+  const config = PERMISSION_CHIP_CONFIG[level] ?? PERMISSION_CHIP_CONFIG.approve;
+  return (
+    <span
+      title={config.tooltip}
+      className={cn(
+        "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide",
+        config.className,
+      )}
+    >
+      {config.label}
+    </span>
   );
 }
