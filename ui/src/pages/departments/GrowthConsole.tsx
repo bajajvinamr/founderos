@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "@/lib/router";
+import { useSearchParams, useNavigate } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import type {
   PostHogFunnelPayload,
   PostHogChannelsPayload,
 } from "../../api/integration-data";
+import { agentsInDepartment } from "../../lib/departments";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -698,6 +699,7 @@ interface GrowthConsoleProps {
 
 export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { pushToast } = useToast();
 
   const rawTab = searchParams.get("tab");
@@ -721,6 +723,12 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
     enabled: !!companyId,
     retry: false,
   });
+
+  // ── Empty-state gate ──────────────────────────────────────────────────────
+  const deptAgents = agentsInDepartment("growth", agents);
+  const hasTeammates = deptAgents.length > 0;
+  const hasPostHogData =
+    !!(posthogFunnelData?.payload) || !!(posthogChannelsData?.payload);
 
   // ── Derive display values ─────────────────────────────────────────────────
   const growthTeammates = agents.filter((a) => a.role === "cmo" || a.role === "pm");
@@ -781,47 +789,58 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
 
       {/* Tab content */}
       <div>
-        {activeTab === "experiments" && (
-          <ExperimentsTab experiments={experiments} pushToast={pushToast} />
-        )}
-        {activeTab === "channels" && (
-          <div className="space-y-3">
-            {!hasRealChannels && (
-              <p className="text-[11px] text-muted-foreground">
-                Showing sample data.{" "}
-                <a
-                  href="/integrations"
-                  className="text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium"
-                >
-                  Connect PostHog for real data →
-                </a>
-              </p>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {hasRealChannels
-                ? posthogChannelsData!.payload.channels.map((ch) => (
-                    <RealChannelCard
-                      key={ch.source}
-                      source={ch.source}
-                      count={ch.count}
-                    />
-                  ))
-                : MOCK_CHANNELS.map((ch) => (
-                    <ChannelCard key={ch.id} channel={ch} />
-                  ))}
-            </div>
-            {hasRealChannels && (
-              <DataSourceCaption fetchedAt={posthogChannelsData!.fetchedAt} />
-            )}
-          </div>
-        )}
-        {activeTab === "funnel" && (
-          <FunnelView
-            pushToast={pushToast}
-            posthogFunnel={posthogFunnelData ?? null}
+        {!hasTeammates && !hasPostHogData ? (
+          <EmptyState
+            icon={TrendingUp}
+            message="No one's running growth yet. Hire a Head of Growth and the experiments, channels, and funnel will fill in on their first shift."
+            action="Hire a Head of Growth"
+            onAction={() => navigate("/agents/new")}
           />
+        ) : (
+          <>
+            {activeTab === "experiments" && (
+              <ExperimentsTab experiments={experiments} pushToast={pushToast} />
+            )}
+            {activeTab === "channels" && (
+              <div className="space-y-3">
+                {!hasRealChannels && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Showing sample data.{" "}
+                    <a
+                      href="/integrations"
+                      className="text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium"
+                    >
+                      Connect PostHog for real data →
+                    </a>
+                  </p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {hasRealChannels
+                    ? posthogChannelsData!.payload.channels.map((ch) => (
+                        <RealChannelCard
+                          key={ch.source}
+                          source={ch.source}
+                          count={ch.count}
+                        />
+                      ))
+                    : MOCK_CHANNELS.map((ch) => (
+                        <ChannelCard key={ch.id} channel={ch} />
+                      ))}
+                </div>
+                {hasRealChannels && (
+                  <DataSourceCaption fetchedAt={posthogChannelsData!.fetchedAt} />
+                )}
+              </div>
+            )}
+            {activeTab === "funnel" && (
+              <FunnelView
+                pushToast={pushToast}
+                posthogFunnel={posthogFunnelData ?? null}
+              />
+            )}
+            {activeTab === "paid" && <PaidTab pushToast={pushToast} />}
+          </>
         )}
-        {activeTab === "paid" && <PaidTab pushToast={pushToast} />}
       </div>
     </div>
   );

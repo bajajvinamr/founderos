@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useSearchParams } from "@/lib/router";
+import { useSearchParams, useNavigate } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
+import { EmptyState } from "@/components/EmptyState";
 import { useToast } from "../../context/ToastContext";
 import { cn } from "../../lib/utils";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, DollarSign } from "lucide-react";
 import type { Agent } from "@founderos/shared";
 import { runScenario, type TierCurrent } from "@founderos/shared";
+import { agentsInDepartment } from "../../lib/departments";
 
 // MOCK — Wave 5 replaces with real finance service (Stripe/QuickBooks/etc)
 
@@ -948,6 +950,7 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
   agents: Agent[];
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { pushToast } = useToast();
 
   const rawTab = searchParams.get("tab");
@@ -956,6 +959,10 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
   function setTab(tab: FinanceTab) {
     setSearchParams({ tab });
   }
+
+  // ── Empty-state gate ──────────────────────────────────────────────────────
+  const deptAgents = agentsInDepartment("finance", agents);
+  const hasTeammates = deptAgents.length > 0;
 
   // MOCK — Wave 5 replaces with real finance service (Stripe/etc).
   // Resolve CFO/finance teammate display name from agents prop.
@@ -1013,10 +1020,21 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
 
       {/* Tab content */}
       <div>
-        {activeTab === "revenue"  && <RevenueTab />}
-        {activeTab === "forecast" && <ForecastTab />}
-        {activeTab === "pricing"  && <PricingTab />}
-        {activeTab === "burn"     && <BurnTab />}
+        {!hasTeammates ? (
+          <EmptyState
+            icon={DollarSign}
+            message="No one's running finance yet. Hire a CFO and they'll track MRR, forecast runway, run pricing simulations, and flag burn issues."
+            action="Hire a CFO"
+            onAction={() => navigate("/agents/new")}
+          />
+        ) : (
+          <>
+            {activeTab === "revenue"  && <RevenueTab />}
+            {activeTab === "forecast" && <ForecastTab />}
+            {activeTab === "pricing"  && <PricingTab />}
+            {activeTab === "burn"     && <BurnTab />}
+          </>
+        )}
       </div>
     </div>
   );

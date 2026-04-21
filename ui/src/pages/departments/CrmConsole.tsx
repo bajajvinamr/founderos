@@ -1,11 +1,13 @@
-import { useSearchParams } from "@/lib/router";
+import { useSearchParams, useNavigate } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import { useToast } from "../../context/ToastContext";
 import { cn } from "../../lib/utils";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus, AlertTriangle, Users } from "lucide-react";
 import type { Agent } from "@founderos/shared";
+import { agentsInDepartment } from "../../lib/departments";
 
 // MOCK — Wave 5 replaces with real CRM service.
 
@@ -823,6 +825,7 @@ export function CrmConsole({ companyId: _companyId, agents }: {
   agents: Agent[];
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { pushToast } = useToast();
 
   const rawTab = searchParams.get("tab");
@@ -831,6 +834,11 @@ export function CrmConsole({ companyId: _companyId, agents }: {
   function setTab(tab: CrmTab) {
     setSearchParams({ tab });
   }
+
+  // ── Empty-state gate ──────────────────────────────────────────────────────
+  // CRM dept has no roles defined in departments.ts (roles: []), so we fall
+  // back to checking for pm agents as the closest CRM proxy.
+  const hasTeammates = agents.filter((a) => a.role === "pm").length > 0;
 
   // MOCK — Wave 5 replaces with real CRM service.
   // Resolve CRM teammate display name from agents prop.
@@ -899,14 +907,25 @@ export function CrmConsole({ companyId: _companyId, agents }: {
 
       {/* Tab content */}
       <div>
-        {activeTab === "pipeline" && (
-          <PipelineTab deals={resolvedDeals} crmName={crmName} pushToast={pushToast} />
+        {!hasTeammates ? (
+          <EmptyState
+            icon={Users}
+            message="No one's running CRM yet. Hire an Ops Lead or CRM Manager and they'll populate the pipeline, run campaigns, and surface churn signals."
+            action="Hire a CRM Lead"
+            onAction={() => navigate("/agents/new")}
+          />
+        ) : (
+          <>
+            {activeTab === "pipeline" && (
+              <PipelineTab deals={resolvedDeals} crmName={crmName} pushToast={pushToast} />
+            )}
+            {activeTab === "campaigns" && (
+              <CampaignsTab crmName={crmName} pushToast={pushToast} />
+            )}
+            {activeTab === "onboarding" && <OnboardingTab pushToast={pushToast} />}
+            {activeTab === "churn" && <ChurnTab crmName={crmName} pushToast={pushToast} />}
+          </>
         )}
-        {activeTab === "campaigns" && (
-          <CampaignsTab crmName={crmName} pushToast={pushToast} />
-        )}
-        {activeTab === "onboarding" && <OnboardingTab pushToast={pushToast} />}
-        {activeTab === "churn" && <ChurnTab crmName={crmName} pushToast={pushToast} />}
       </div>
     </div>
   );

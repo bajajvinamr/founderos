@@ -1,4 +1,4 @@
-import { useSearchParams } from "@/lib/router";
+import { useSearchParams, useNavigate } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpRight,
+  PenTool,
 } from "lucide-react";
 import type { Agent } from "@founderos/shared";
+import { agentsInDepartment } from "../../lib/departments";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -777,6 +779,7 @@ export function ContentConsole({ companyId: _companyId, agents }: {
   agents: Agent[];
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { pushToast } = useToast();
 
   const rawTab = searchParams.get("tab");
@@ -785,6 +788,10 @@ export function ContentConsole({ companyId: _companyId, agents }: {
   function setTab(tab: ContentTab) {
     setSearchParams({ tab });
   }
+
+  // ── Empty-state gate ──────────────────────────────────────────────────────
+  const deptAgents = agentsInDepartment("content", agents);
+  const hasTeammates = deptAgents.length > 0;
 
   // MOCK — Wave 5 replaces with real content service.
   // Prefer a CMO or Designer agent as the "content lead" display name.
@@ -849,16 +856,27 @@ export function ContentConsole({ companyId: _companyId, agents }: {
 
       {/* Tab content */}
       <div>
-        {activeTab === "calendar" && (
-          <CalendarTab pieces={resolvedCalendar} pushToast={pushToast} />
-        )}
-        {activeTab === "drafts" && (
-          <DraftsTab drafts={resolvedDrafts} pushToast={pushToast} />
-        )}
-        {activeTab === "distribution" && <DistributionTab pushToast={pushToast} />}
-        {activeTab === "attribution" && <AttributionTab pushToast={pushToast} />}
-        {activeTab === "calendar" && resolvedCalendar.length === 0 && (
-          <EmptyState icon={CalendarDays} message="No content scheduled this week. Schedule the first piece." />
+        {!hasTeammates ? (
+          <EmptyState
+            icon={PenTool}
+            message="No one's running the content studio yet. Hire a Content Lead and they'll start filling the calendar, drafting pieces, and tracking attribution."
+            action="Hire a Content Lead"
+            onAction={() => navigate("/agents/new")}
+          />
+        ) : (
+          <>
+            {activeTab === "calendar" && (
+              <CalendarTab pieces={resolvedCalendar} pushToast={pushToast} />
+            )}
+            {activeTab === "drafts" && (
+              <DraftsTab drafts={resolvedDrafts} pushToast={pushToast} />
+            )}
+            {activeTab === "distribution" && <DistributionTab pushToast={pushToast} />}
+            {activeTab === "attribution" && <AttributionTab pushToast={pushToast} />}
+            {activeTab === "calendar" && resolvedCalendar.length === 0 && (
+              <EmptyState icon={CalendarDays} message="No content scheduled this week. Schedule the first piece." />
+            )}
+          </>
         )}
       </div>
     </div>
