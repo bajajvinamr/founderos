@@ -42,6 +42,7 @@ import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { byoKeyRoutes } from "./routes/byo-key.js";
+import { onboardingRoutes } from "./routes/onboarding.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { authWebhookRoutes } from "./routes/auth-webhook.js";
@@ -322,6 +323,7 @@ export async function createApp(
   );
   api.use(adapterRoutes());
   api.use(byoKeyRoutes(db));
+  api.use(onboardingRoutes(db));
   api.use(
     accessRoutes(db, {
       deploymentMode: opts.deploymentMode,

@@ -4,7 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Layout } from "./components/Layout";
 import { OnboardingWizard } from "./components/OnboardingWizard";
+import { FounderOnboardingWizard } from "./components/onboarding/FounderOnboardingWizard";
 import { authApi } from "./api/auth";
+
+/**
+ * Feature flag for the opinionated 6-step founder onboarding (Wave 15A).
+ * Defaults to ON in dev so every local run exercises the new flow; ships
+ * OFF in prod until the new bootstrap API is vetted end-to-end.
+ * Set `VITE_FOUNDEROS_ONBOARDING_V2=false` in dev to fall back.
+ */
+const FOUNDEROS_ONBOARDING_V2: boolean = (() => {
+  const raw = import.meta.env.VITE_FOUNDEROS_ONBOARDING_V2;
+  if (raw === undefined || raw === null || raw === "") {
+    return import.meta.env.DEV === true;
+  }
+  return raw !== "false" && raw !== "0";
+})();
 import { healthApi } from "./api/health";
 
 // Hot-path pages are imported eagerly — first paint after login hits these.
@@ -437,7 +452,7 @@ export function App() {
           <Route path="*" element={<NotFoundPage scope="global" />} />
         </Route>
       </Routes>
-      <OnboardingWizard />
+      {FOUNDEROS_ONBOARDING_V2 ? <FounderOnboardingWizard /> : <OnboardingWizard />}
     </>
   );
 }

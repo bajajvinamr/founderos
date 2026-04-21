@@ -5,6 +5,37 @@ summary: Running a FounderOS instance — deploy modes, invites, backups, migrat
 
 For the person who hosts the instance. For day-to-day use, see the [User Guide](./user-guide.md). When things break, see [Incidents](./incidents.md).
 
+## Demo mode
+
+Spin up an interview-ready demo with three canonical portfolio companies (agnost.ai, Pred, Gravton Labs) plus an experimental 4th (Little Wins). Run against a local or staging Postgres — never prod.
+
+```sh
+# One-liner — seeds companies, 90 days of agent activity, decision inbox,
+# company memory, and connected integrations (Slack, HubSpot, PostHog).
+DATABASE_URL=postgres://founderos:founderos@127.0.0.1:54329/founderos \
+  pnpm seed:demo
+```
+
+The demo seed runs three layers in order:
+
+1. `packages/db/src/seed-demo.ts` — the 3 canonical portfolio companies, ~23 agents, goals, projects, live issues.
+2. `packages/db/src/seed-demo-depth.ts` — 90 days of heartbeat_runs, cost_events, approvals, budget_incidents, extended activity_log.
+3. `packages/db/src/seed-demo-narrative.ts` — company_memory (insider lessons), expanded Decision Inbox, connected integrations + cached sync data; also appends Little Wins as an experimental 4th company.
+
+To wipe and re-seed (requires explicit confirmation):
+
+```sh
+# Interactive prompt
+DATABASE_URL=… pnpm seed:demo:reset
+
+# Non-interactive (CI / scripts)
+DATABASE_URL=… SEED_DEMO_RESET_YES=1 pnpm seed:demo:reset
+```
+
+Reset matches companies by name (`agnost.ai`, `Pred`, `Gravton Labs`, `Little Wins`) and deletes all cascading rows. Anything outside those 4 names is untouched.
+
+Live demo UI typically runs at `http://localhost:3003`.
+
 ## Deployment modes
 
 Two orthogonal dimensions: auth model + network exposure. Pick per deploy.

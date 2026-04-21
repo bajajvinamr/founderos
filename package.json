@@ -17,6 +17,8 @@
     "test:run": "pnpm run preflight:workspace-links && vitest run",
     "db:generate": "pnpm --filter @founderos/db generate",
     "db:migrate": "pnpm --filter @founderos/db migrate",
+    "seed:demo": "pnpm --filter @founderos/db exec tsx src/seed-demo.ts && pnpm --filter @founderos/db exec tsx src/seed-demo-depth.ts && pnpm --filter @founderos/db exec tsx src/seed-demo-narrative.ts",
+    "seed:demo:reset": "pnpm --filter @founderos/db exec tsx src/seed-demo-reset.ts && pnpm run seed:demo",
     "secrets:migrate-inline-env": "tsx scripts/migrate-inline-env-secrets.ts",
     "db:backup": "./scripts/backup-db.sh",
     "founderos": "node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts",

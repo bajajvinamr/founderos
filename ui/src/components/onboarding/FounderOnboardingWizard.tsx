@@ -1,0 +1,327 @@
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight, Loader2, X } from "lucide-react";
+import { Dialog, DialogPortal } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useNavigate } from "@/lib/router";
+import { api } from "@/api/client";
+import { useDialog } from "@/context/DialogContext";
+import { useCompany } from "@/context/CompanyContext";
+import { queryKeys } from "@/lib/queryKeys";
+import { Step1Vision } from "./steps/Step1Vision.js";
+import { Step2Bottleneck } from "./steps/Step2Bottleneck.js";
+import { Step3Team } from "./steps/Step3Team.js";
+import { Step4Plugin, type ValidationState } from "./steps/Step4Plugin.js";
+import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
+import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
+import {
+  buildAutoCharters,
+  buildFirstDecisions,
+} from "./auto-charter.js";
+import {
+  DEFAULT_INTEGRATION_STATE,
+  type Bottleneck,
+  type IntegrationKey,
+  type OnboardingBootstrapResponse,
+  type OnboardingDraft,
+  type TeamShape,
+} from "./onboarding-types.js";
+
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
+const TOTAL_STEPS = 6;
+
+function buildInitialDraft(): OnboardingDraft {
+  return {
+    vision: "",
+    bottlenecks: [],
+    team: "solo",
+    cofounderName: "",
+    cofounderEmail: "",
+    anthropicKey: "",
+    integrations: { ...DEFAULT_INTEGRATION_STATE },
+    charters: buildAutoCharters({
+      vision: "",
+      bottlenecks: [],
+      team: "solo",
+    }),
+    firstDecisionId: null,
+  };
+}
+
+export function FounderOnboardingWizard() {
+  const { onboardingOpen, closeOnboarding } = useDialog();
+  const { setSelectedCompanyId } = useCompany();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState<Step>(1);
+  const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft());
+  const [validation, setValidation] = useState<ValidationState>({ status: "idle" });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const decisions = useMemo(
+    () => buildFirstDecisions(draft.bottlenecks),
+    [draft.bottlenecks],
+  );
+
+  // Keep charters in sync whenever inputs that feed them change, but only
+  // until the user has manually edited a charter (we detect that via a
+  // marker held in local component state). Simplest rule: regenerate when
+  // inputs change in steps 1-3; after that user can override freely.
+  useEffect(() => {
+    if (step > 4) return; // don't stomp edits after the user has seen them
+    setDraft((prev) => ({
+      ...prev,
+      charters: buildAutoCharters({
+        vision: prev.vision,
+        bottlenecks: prev.bottlenecks,
+        team: prev.team,
+      }),
+    }));
+  }, [step, draft.vision, draft.bottlenecks, draft.team]);
+
+  // Reset when the dialog is closed externally.
+  useEffect(() => {
+    if (!onboardingOpen) {
+      setStep(1);
+      setDraft(buildInitialDraft());
+      setValidation({ status: "idle" });
+      setSubmitError(null);
+      setSubmitting(false);
+    }
+  }, [onboardingOpen]);
+
+  function patchDraft(patch: Partial<OnboardingDraft>) {
+    setDraft((prev) => ({ ...prev, ...patch }));
+  }
+
+  function canAdvance(current: Step): boolean {
+    if (current === 1) return draft.vision.trim().length >= 10;
+    if (current === 2) return draft.bottlenecks.length >= 1;
+    if (current === 3) return true;
+    if (current === 4) return validation.status === "valid";
+    if (current === 5) return true;
+    if (current === 6) return true;
+    return false;
+  }
+
+  async function handleFinish() {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = {
+        vision: draft.vision.trim(),
+        bottlenecks: draft.bottlenecks,
+        team: draft.team,
+        cofounder:
+          draft.cofounderName.trim() || draft.cofounderEmail.trim()
+            ? {
+                name: draft.cofounderName.trim() || null,
+                email: draft.cofounderEmail.trim() || null,
+              }
+            : null,
+        anthropicKey: draft.anthropicKey,
+        integrations: draft.integrations,
+        charters: draft.charters,
+      };
+      const bootstrap = await api.post<OnboardingBootstrapResponse>(
+        "/onboarding/bootstrap",
+        payload,
+      );
+      if (draft.firstDecisionId) {
+        const decision = decisions.find((d) => d.id === draft.firstDecisionId);
+        if (decision) {
+          await api.post("/onboarding/accept-decision", {
+            companyId: bootstrap.companyId,
+            decision: {
+              id: decision.id,
+              slot: decision.slot,
+              title: decision.title,
+              rationale: decision.rationale,
+            },
+            agentIdsBySlot: bootstrap.agentIdsBySlot,
+            goalId: bootstrap.goalId,
+            projectId: bootstrap.projectId,
+          }).catch((err) => {
+            // Non-fatal — surface but don't block the redirect.
+            // eslint-disable-next-line no-console
+            console.warn("Failed to stage first decision", err);
+          });
+        }
+      }
+
+      setSelectedCompanyId(bootstrap.companyId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      closeOnboarding();
+      const prefix = bootstrap.companyPrefix;
+      navigate(
+        draft.firstDecisionId
+          ? `/${prefix}/decisions?first=${encodeURIComponent(draft.firstDecisionId)}`
+          : `/${prefix}/dashboard`,
+      );
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to bootstrap company",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!onboardingOpen) return null;
+
+  const progressPercent = ((step - 1) / (TOTAL_STEPS - 1)) * 100;
+
+  return (
+    <Dialog
+      open={onboardingOpen}
+      onOpenChange={(open) => {
+        if (!open) closeOnboarding();
+      }}
+    >
+      <DialogPortal>
+        <div className="fixed inset-0 z-50 bg-background" />
+        <div className="fixed inset-0 z-50 flex flex-col">
+          {/* Progress bar */}
+          <div className="shrink-0 border-b border-border/60 px-6 py-3">
+            <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {step > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setStep((s) => (s - 1) as Step)}
+                    disabled={submitting}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back
+                  </button>
+                ) : (
+                  <span className="w-12" />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Step {step} of {TOTAL_STEPS}
+                </p>
+              </div>
+              <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-muted/60">
+                <div
+                  className="absolute inset-y-0 left-0 bg-foreground transition-[width] duration-300 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => closeOnboarding()}
+                className="rounded-sm p-1 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Close onboarding"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-2xl px-6 py-10">
+              {step === 1 && (
+                <Step1Vision
+                  vision={draft.vision}
+                  onVisionChange={(v) => patchDraft({ vision: v })}
+                />
+              )}
+              {step === 2 && (
+                <Step2Bottleneck
+                  selected={draft.bottlenecks}
+                  onChange={(next: Bottleneck[]) =>
+                    patchDraft({ bottlenecks: next })
+                  }
+                />
+              )}
+              {step === 3 && (
+                <Step3Team
+                  team={draft.team}
+                  cofounderName={draft.cofounderName}
+                  cofounderEmail={draft.cofounderEmail}
+                  onTeamChange={(t: TeamShape) => patchDraft({ team: t })}
+                  onCofounderNameChange={(v) =>
+                    patchDraft({ cofounderName: v })
+                  }
+                  onCofounderEmailChange={(v) =>
+                    patchDraft({ cofounderEmail: v })
+                  }
+                />
+              )}
+              {step === 4 && (
+                <Step4Plugin
+                  anthropicKey={draft.anthropicKey}
+                  integrations={draft.integrations}
+                  validation={validation}
+                  onAnthropicKeyChange={(key) =>
+                    patchDraft({ anthropicKey: key })
+                  }
+                  onIntegrationsChange={(
+                    next: Record<IntegrationKey, boolean>,
+                  ) => patchDraft({ integrations: next })}
+                  onValidationChange={setValidation}
+                />
+              )}
+              {step === 5 && (
+                <Step5MeetTeam
+                  charters={draft.charters}
+                  onChartersChange={(c) => patchDraft({ charters: c })}
+                />
+              )}
+              {step === 6 && (
+                <Step6FirstDecision
+                  decisions={decisions}
+                  charters={draft.charters}
+                  selectedId={draft.firstDecisionId}
+                  onSelect={(id) => patchDraft({ firstDecisionId: id })}
+                />
+              )}
+              {submitError && (
+                <p className="mt-6 text-xs text-destructive">{submitError}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Footer — primary action */}
+          <div className="shrink-0 border-t border-border/60 px-6 py-4">
+            <div className="mx-auto flex max-w-2xl items-center justify-end">
+              {step < TOTAL_STEPS ? (
+                <Button
+                  size="sm"
+                  disabled={!canAdvance(step)}
+                  onClick={() => setStep((s) => (s + 1) as Step)}
+                  className={cn(!canAdvance(step) && "opacity-50")}
+                >
+                  Next
+                  <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={submitting}
+                  onClick={() => void handleFinish()}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      Launching...
+                    </>
+                  ) : draft.firstDecisionId ? (
+                    "Launch + start first decision"
+                  ) : (
+                    "Launch FounderOS"
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </DialogPortal>
+    </Dialog>
+  );
+}

@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request, Response, NextFunction } from "express";
 import { logger } from "./logger.js";
 
@@ -9,8 +9,8 @@ import { logger } from "./logger.js";
 export const authWebhookLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute
-  keyGenerator: (req: Request) => {
-    return req.ip || "unknown";
+  keyGenerator: (req: Request, res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
   },
   handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
     logger.warn(
@@ -38,9 +38,9 @@ export const authWebhookLimiter = rateLimit({
 export const inviteCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 20, // 20 invites per hour
-  keyGenerator: (req: Request) => {
+  keyGenerator: (req: Request, res: Response) => {
     // Use userId if available, fallback to IP
-    return req.actor?.userId || req.ip || "unknown";
+    return req.actor?.userId || ipKeyGenerator(req.ip || "unknown");
   },
   handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
     logger.warn(
@@ -66,8 +66,8 @@ export const inviteCreateLimiter = rateLimit({
 export const inviteConsumeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // 10 invites per hour
-  keyGenerator: (req: Request) => {
-    return req.ip || "unknown";
+  keyGenerator: (req: Request, res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
   },
   handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
     logger.warn(
@@ -91,8 +91,8 @@ export const inviteConsumeLimiter = rateLimit({
 export const billingWebhookLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute
-  keyGenerator: (req: Request) => {
-    return req.ip || "unknown";
+  keyGenerator: (req: Request, res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
   },
   handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
     logger.warn(
@@ -116,9 +116,9 @@ export const billingWebhookLimiter = rateLimit({
 export const byoKeyValidateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 30, // 30 validations per hour
-  keyGenerator: (req: Request) => {
+  keyGenerator: (req: Request, res: Response) => {
     // Use userId if available, fallback to IP
-    return req.actor?.userId || req.ip || "unknown";
+    return req.actor?.userId || ipKeyGenerator(req.ip || "unknown");
   },
   handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
     logger.warn(
