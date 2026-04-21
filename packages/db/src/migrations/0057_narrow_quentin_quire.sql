@@ -1,7 +1,3 @@
--- Migration: 0057_instance_api_keys
--- Adds the instance_api_keys table for storing encrypted API keys for sandboxed execution (Codex, OpenCode).
--- Per-family and per-execution-mode unique constraint. Encrypted value stored but never returned to client.
-
 CREATE TABLE "instance_api_keys" (
 	"id" text PRIMARY KEY NOT NULL,
 	"family" text NOT NULL,
