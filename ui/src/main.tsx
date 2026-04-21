@@ -14,7 +14,7 @@ import { DialogProvider } from "./context/DialogContext";
 import { EditorAutocompleteProvider } from "./context/EditorAutocompleteContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ThemeProvider } from "./context/ThemeContext";
-import { ClerkShell } from "./auth/ClerkShell";
+import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { initBrowserSentry } from "./observability/sentry";
 
 void initBrowserSentry();
@@ -44,7 +44,7 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ClerkShell>
+      <SupabaseAuthProvider>
       <ThemeProvider>
         <BrowserRouter>
           <CompanyProvider>
@@ -70,7 +70,7 @@ createRoot(document.getElementById("root")!).render(
           </CompanyProvider>
         </BrowserRouter>
       </ThemeProvider>
-      </ClerkShell>
+      </SupabaseAuthProvider>
     </QueryClientProvider>
   </StrictMode>
 );

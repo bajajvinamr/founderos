@@ -463,7 +463,11 @@ export async function startServer(): Promise<StartedServer> {
     if (config.authBaseUrlMode === "explicit" && !config.authPublicBaseUrl) {
       throw new Error("auth.baseUrlMode=explicit requires auth.publicBaseUrl");
     }
-    if (config.deploymentExposure === "public") {
+    // Supabase JWTs are stateless — there's no server-side callback URL that
+    // needs matching. The explicit-baseUrl gate is only required for the
+    // better-auth + Clerk paths where cookies + callback flows must pin a
+    // canonical origin. Skip the check when the Supabase path is active.
+    if (config.deploymentExposure === "public" && config.authProvider !== "supabase") {
       if (config.authBaseUrlMode !== "explicit") {
         throw new Error("authenticated public exposure requires auth.baseUrlMode=explicit");
       }
@@ -484,11 +488,43 @@ export async function startServer(): Promise<StartedServer> {
   if (config.deploymentMode === "local_trusted") {
     await ensureLocalTrustedBoardPrincipal(db as any);
   }
-  let authProvider: "clerk" | "better-auth" | "local_trusted" = "local_trusted";
+  let authProvider: "clerk" | "better-auth" | "local_trusted" | "supabase" = "local_trusted";
   let authPublishableKey: string | undefined;
+  let authSupabaseAnonKey: string | undefined;
+  let authSupabaseUrl: string | undefined;
+  let supabaseWebhookSecret: string | undefined;
   if (config.deploymentMode === "authenticated") {
     const { isClerkEnabled } = await import("./auth/clerk.js");
-    if (isClerkEnabled()) {
+    // Supabase has explicit opt-in via FOUNDEROS_AUTH_PROVIDER=supabase. It
+    // takes precedence over Clerk env detection so ops can switch providers
+    // without nuking CLERK_* keys from the environment.
+    if (config.authProvider === "supabase") {
+      const { createSupabaseAuth, isSupabaseConfigured, resolveSupabaseSession, resolveSupabaseSessionFromHeaders } =
+        await import("./auth/supabase.js");
+      if (!isSupabaseConfigured(config.supabase)) {
+        throw new Error(
+          "FOUNDEROS_AUTH_PROVIDER=supabase requires SUPABASE_URL to be set. " +
+          "JWKS is auto-fetched from <SUPABASE_URL>/auth/v1/.well-known/jwks.json.",
+        );
+      }
+      const supabaseAuth = createSupabaseAuth(config.supabase);
+      resolveSession = (req) => resolveSupabaseSession(supabaseAuth, req);
+      resolveSessionFromHeaders = (headers) => resolveSupabaseSessionFromHeaders(supabaseAuth, headers);
+      authProvider = "supabase";
+      authSupabaseAnonKey = config.supabase.anonKey;
+      authSupabaseUrl = config.supabase.url;
+      supabaseWebhookSecret = config.supabase.webhookSecret;
+      authReady = true;
+      logger.info(
+        {
+          authProvider,
+          hasUrl: Boolean(config.supabase.url),
+          hasAnonKey: Boolean(config.supabase.anonKey),
+          hasWebhookSecret: Boolean(config.supabase.webhookSecret),
+        },
+        "Authenticated mode: using Supabase",
+      );
+    } else if (isClerkEnabled()) {
       // Clerk path — production default when CLERK_* env vars are set.
       const { createClerkAuth, resolveClerkSession } = await import("./auth/clerk.js");
       const clerk = createClerkAuth();
@@ -591,6 +627,9 @@ export async function startServer(): Promise<StartedServer> {
     resolveSession,
     authProvider,
     authPublishableKey,
+    authSupabaseAnonKey,
+    authSupabaseUrl,
+    supabaseWebhookSecret,
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
 

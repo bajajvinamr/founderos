@@ -62,6 +62,8 @@ const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ de
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
 const WeeklyWrap = lazy(() => import("./pages/WeeklyWrap").then((m) => ({ default: m.WeeklyWrap })));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -356,6 +358,22 @@ export function App() {
       <Routes>
         <Route path="landing" element={<Landing />} />
         <Route path="auth" element={<AuthPage />} />
+        <Route
+          path="auth/forgot"
+          element={
+            <Suspense fallback={<LazyRouteFallback />}>
+              <ForgotPassword />
+            </Suspense>
+          }
+        />
+        <Route
+          path="auth/reset"
+          element={
+            <Suspense fallback={<LazyRouteFallback />}>
+              <ResetPassword />
+            </Suspense>
+          }
+        />
         <Route path="legal/terms" element={<LegalTerms />} />
         <Route path="legal/privacy" element={<LegalPrivacy />} />
         <Route path="board-claim/:token" element={<BoardClaimPage />} />

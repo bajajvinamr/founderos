@@ -56,3 +56,4 @@ tests/release-smoke/playwright-report/
 .founderos/
 .founderos-local/
 .vercel
+.env.local

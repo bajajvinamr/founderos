@@ -7,11 +7,13 @@ import { resolveFounderOSEnvPath } from "./paths.js";
 import { maybeRepairLegacyWorktreeConfigAndEnvFiles } from "./worktree-config.js";
 import {
   AUTH_BASE_URL_MODES,
+  AUTH_PROVIDERS,
   BIND_MODES,
   DEPLOYMENT_EXPOSURES,
   DEPLOYMENT_MODES,
   SECRET_PROVIDERS,
   STORAGE_PROVIDERS,
+  type AuthProvider,
   type BindMode,
   type AuthBaseUrlMode,
   type DeploymentExposure,
@@ -49,6 +51,19 @@ const TAILSCALE_DETECT_TIMEOUT_MS = 3000;
 
 type DatabaseMode = "embedded-postgres" | "postgres";
 
+export interface SupabaseRuntimeConfig {
+  /** e.g. `https://abcd.supabase.co` */
+  url: string | undefined;
+  /** Anon (public) key — safe in browser JS. */
+  anonKey: string | undefined;
+  /** Service role key — server-only. Never return via any HTTP response. */
+  serviceRoleKey: string | undefined;
+  /** Legacy HS256 project JWT secret used to verify access tokens. */
+  jwtSecret: string | undefined;
+  /** HMAC secret for the inbound `/api/auth/webhook` endpoint. */
+  webhookSecret: string | undefined;
+}
+
 export interface Config {
   deploymentMode: DeploymentMode;
   deploymentExposure: DeploymentExposure;
@@ -57,9 +72,18 @@ export interface Config {
   host: string;
   port: number;
   allowedHostnames: string[];
+  /**
+   * Selected auth provider. Defaults to `better-auth` for backward
+   * compatibility. Set `FOUNDEROS_AUTH_PROVIDER=supabase` to activate the
+   * Supabase path (JWT-based, stateless, webhook-driven bootstrap). The
+   * `local_trusted` + `clerk` values are inferred at runtime — callers don't
+   * set them here.
+   */
+  authProvider: AuthProvider;
   authBaseUrlMode: AuthBaseUrlMode;
   authPublicBaseUrl: string | undefined;
   authDisableSignUp: boolean;
+  supabase: SupabaseRuntimeConfig;
   databaseMode: DatabaseMode;
   databaseUrl: string | undefined;
   embeddedPostgresDataDir: string;
@@ -212,6 +236,24 @@ export function loadConfig(): Config {
     disableSignUpFromEnv !== undefined
       ? disableSignUpFromEnv === "true"
       : (fileConfig?.auth?.disableSignUp ?? false);
+
+  const authProviderRaw = process.env.FOUNDEROS_AUTH_PROVIDER?.trim();
+  const authProviderFromEnv: AuthProvider | null =
+    authProviderRaw && AUTH_PROVIDERS.includes(authProviderRaw as AuthProvider)
+      ? (authProviderRaw as AuthProvider)
+      : null;
+  // Default to `better-auth` so existing deployments keep working — the
+  // Supabase path activates only when FOUNDEROS_AUTH_PROVIDER=supabase is
+  // explicitly set (feature flag style cutover).
+  const authProvider: AuthProvider = authProviderFromEnv ?? "better-auth";
+
+  const supabase: SupabaseRuntimeConfig = {
+    url: process.env.SUPABASE_URL?.trim() || undefined,
+    anonKey: process.env.SUPABASE_ANON_KEY?.trim() || undefined,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || undefined,
+    jwtSecret: process.env.SUPABASE_JWT_SECRET?.trim() || undefined,
+    webhookSecret: process.env.SUPABASE_WEBHOOK_SECRET?.trim() || undefined,
+  };
   const allowedHostnamesFromEnvRaw = process.env.FOUNDEROS_ALLOWED_HOSTNAMES;
   const allowedHostnamesFromEnv = allowedHostnamesFromEnvRaw
     ? allowedHostnamesFromEnvRaw
@@ -292,9 +334,11 @@ export function loadConfig(): Config {
     host: resolvedBind.host,
     port: Number(process.env.PORT) || fileConfig?.server.port || 3100,
     allowedHostnames,
+    authProvider,
     authBaseUrlMode,
     authPublicBaseUrl,
     authDisableSignUp,
+    supabase,
     databaseMode: fileDatabaseMode,
     databaseUrl: process.env.DATABASE_URL ?? fileDbUrl,
     embeddedPostgresDataDir: resolveHomeAwarePath(

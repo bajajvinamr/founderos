@@ -43,6 +43,7 @@ import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
+import { authWebhookRoutes } from "./routes/auth-webhook.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -96,9 +97,19 @@ export async function createApp(
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
     /** Auth provider in use — surfaced to the UI via /api/auth/config. */
-    authProvider?: "clerk" | "better-auth" | "local_trusted";
+    authProvider?: "clerk" | "better-auth" | "local_trusted" | "supabase";
     /** Clerk publishable key — safe to send to the browser. */
     authPublishableKey?: string;
+    /** Supabase anon (public) key — safe to send to the browser. */
+    authSupabaseAnonKey?: string;
+    /** Supabase project URL — safe to send to the browser. */
+    authSupabaseUrl?: string;
+    /**
+     * Optional Supabase webhook shared secret. When set, mounts
+     * `POST /api/auth/webhook` which receives Supabase Auth user.created
+     * events and runs the post-signup bootstrap.
+     */
+    supabaseWebhookSecret?: string;
   },
 ) {
   const app = express();
@@ -157,8 +168,15 @@ export async function createApp(
     res.json({
       provider: opts.authProvider ?? "local_trusted",
       publishableKey: opts.authPublishableKey ?? null,
+      supabaseUrl: opts.authSupabaseUrl ?? null,
+      supabaseAnonKey: opts.authSupabaseAnonKey ?? null,
     });
   });
+  // Supabase webhook route — must be mounted BEFORE the better-auth wildcard
+  // so /api/auth/webhook reaches our handler instead of being swallowed.
+  if (opts.authProvider === "supabase" && opts.supabaseWebhookSecret) {
+    app.use(authWebhookRoutes(db, { webhookSecret: opts.supabaseWebhookSecret }));
+  }
   if (opts.betterAuthHandler) {
     app.all("/api/auth/{*authPath}", opts.betterAuthHandler);
   }

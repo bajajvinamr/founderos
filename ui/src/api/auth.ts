@@ -1,91 +1,45 @@
+import { supabase } from "@/lib/supabase";
+
 export type AuthSession = {
   session: { id: string; userId: string };
   user: { id: string; email: string | null; name: string | null };
 };
 
-function toSession(value: unknown): AuthSession | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const sessionValue = record.session;
-  const userValue = record.user;
-  if (!sessionValue || typeof sessionValue !== "object") return null;
-  if (!userValue || typeof userValue !== "object") return null;
-  const session = sessionValue as Record<string, unknown>;
-  const user = userValue as Record<string, unknown>;
-  if (typeof session.id !== "string" || typeof session.userId !== "string") return null;
-  if (typeof user.id !== "string") return null;
-  return {
-    session: { id: session.id, userId: session.userId },
-    user: {
-      id: user.id,
-      email: typeof user.email === "string" ? user.email : null,
-      name: typeof user.name === "string" ? user.name : null,
-    },
-  };
-}
-
-async function authPost(path: string, body: Record<string, unknown>) {
-  const res = await fetch(`/api/auth${path}`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const payload = await res.json().catch(() => null);
-  if (!res.ok) {
-    const message =
-      (payload as { error?: { message?: string } | string } | null)?.error &&
-      typeof (payload as { error?: { message?: string } | string }).error === "object"
-        ? ((payload as { error?: { message?: string } }).error?.message ?? `Request failed: ${res.status}`)
-        : (payload as { error?: string } | null)?.error ?? `Request failed: ${res.status}`;
-    throw new Error(message);
-  }
-  return payload;
-}
-
+/**
+ * Auth API — Supabase backed.
+ *
+ * The session shape is kept compatible with the legacy better-auth
+ * response so that the rest of the app (CloudAccessGate, etc.) does
+ * not need to change. The `session.id` field maps to Supabase's
+ * `access_token` (there's no first-class "session id" concept) and
+ * `userId` maps to `user.id`.
+ */
 export const authApi = {
   getSession: async (): Promise<AuthSession | null> => {
-    const res = await fetch("/api/auth/get-session", {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-    if (res.status === 401) return null;
-    const payload = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(`Failed to load session (${res.status})`);
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      throw new Error(error.message);
     }
-    const direct = toSession(payload);
-    if (direct) return direct;
-    const nested = payload && typeof payload === "object" ? toSession((payload as Record<string, unknown>).data) : null;
-    return nested;
-  },
-
-  signInEmail: async (input: { email: string; password: string }) => {
-    await authPost("/sign-in/email", input);
-  },
-
-  signUpEmail: async (input: { name: string; email: string; password: string }) => {
-    await authPost("/sign-up/email", input);
+    const session = data.session;
+    if (!session) return null;
+    const metadataName =
+      (session.user.user_metadata as { full_name?: string; name?: string } | null)?.full_name ??
+      (session.user.user_metadata as { full_name?: string; name?: string } | null)?.name ??
+      null;
+    return {
+      session: {
+        id: session.access_token,
+        userId: session.user.id,
+      },
+      user: {
+        id: session.user.id,
+        email: session.user.email ?? null,
+        name: metadataName,
+      },
+    };
   },
 
   signOut: async () => {
-    await authPost("/sign-out", {});
-  },
-
-  /**
-   * Read the auth provider config from the server. Used on boot to decide
-   * whether to wrap the app in <ClerkProvider> and render Clerk's <SignIn />
-   * or the legacy email/password form.
-   */
-  getConfig: async (): Promise<{
-    provider: "clerk" | "better-auth" | "local_trusted";
-    publishableKey: string | null;
-  }> => {
-    const res = await fetch("/api/auth/config", {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`Failed to load auth config (${res.status})`);
-    return res.json();
+    await supabase.auth.signOut();
   },
 };

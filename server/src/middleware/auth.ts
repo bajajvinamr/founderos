@@ -20,6 +20,65 @@ interface ActorMiddlewareOptions {
 
 export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHandler {
   const boardAuth = boardAuthService(db);
+
+  /**
+   * Called when a Bearer token failed to match any agent/API key. The token
+   * may still be a provider session token (Supabase access token) — delegate
+   * to the configured session resolver and, if it returns a user, populate
+   * `req.actor` using the same path the cookie flow uses.
+   *
+   * Returns `true` when the fallback produced a session (caller should
+   * `return` without calling next() again — we've already populated
+   * `req.actor` and invoked next()).
+   */
+  async function trySessionFallbackAndNext(
+    req: Parameters<RequestHandler>[0],
+    next: Parameters<RequestHandler>[2],
+    runIdHeader: string | undefined,
+  ): Promise<boolean> {
+    if (opts.deploymentMode !== "authenticated" || !opts.resolveSession) return false;
+    let session: BetterAuthSessionResult | null = null;
+    try {
+      session = await opts.resolveSession(req);
+    } catch (err) {
+      logger.warn(
+        { err, method: req.method, url: req.originalUrl },
+        "Failed to resolve auth session from Bearer token",
+      );
+      return false;
+    }
+    if (!session?.user?.id) return false;
+
+    const userId = session.user.id;
+    const [roleRow, memberships] = await Promise.all([
+      db
+        .select({ id: instanceUserRoles.id })
+        .from(instanceUserRoles)
+        .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({ companyId: companyMemberships.companyId })
+        .from(companyMemberships)
+        .where(
+          and(
+            eq(companyMemberships.principalType, "user"),
+            eq(companyMemberships.principalId, userId),
+            eq(companyMemberships.status, "active"),
+          ),
+        ),
+    ]);
+    req.actor = {
+      type: "board",
+      userId,
+      companyIds: memberships.map((row) => row.companyId),
+      isInstanceAdmin: Boolean(roleRow),
+      runId: runIdHeader ?? undefined,
+      source: "session",
+    };
+    next();
+    return true;
+  }
+
   return async (req, _res, next) => {
     req.actor =
       opts.deploymentMode === "local_trusted"
@@ -82,6 +141,13 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
       return;
     }
 
+    // Session-bearing Bearer tokens (e.g. Supabase access tokens) are also
+    // valid. The session resolver is the authority for "is this a logged-in
+    // human?" — we try it as a final fallback after all agent/key lookups
+    // miss below. We defer actually calling it until those have run so
+    // existing short-circuits (board keys, agent keys, agent JWTs) keep
+    // their priority.
+
     const boardKey = await boardAuth.findBoardApiKeyByToken(token);
     if (boardKey) {
       const access = await boardAuth.resolveBoardAccess(boardKey.userId);
@@ -111,6 +177,10 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     if (!key) {
       const claims = verifyLocalAgentJwt(token);
       if (!claims) {
+        // Final fallback: the token may be a session token (Supabase access
+        // token, etc.). If the provider resolver recognizes it, this call
+        // populates req.actor and calls next() itself.
+        if (await trySessionFallbackAndNext(req, next, runIdHeader ?? undefined)) return;
         next();
         return;
       }

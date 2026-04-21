@@ -13,6 +13,16 @@ export type BindMode = (typeof BIND_MODES)[number];
 export const AUTH_BASE_URL_MODES = ["auto", "explicit"] as const;
 export type AuthBaseUrlMode = (typeof AUTH_BASE_URL_MODES)[number];
 
+/**
+ * Auth providers supported by the FounderOS server. `local_trusted` is the
+ * implicit principal used in `deploymentMode=local_trusted`. `better-auth` is
+ * the legacy email+password flow. `clerk` was the first hosted-auth adapter.
+ * `supabase` is the new default for hosted deployments — validates Supabase
+ * JWTs locally and receives user.created webhooks for post-signup bootstrap.
+ */
+export const AUTH_PROVIDERS = ["local_trusted", "better-auth", "clerk", "supabase"] as const;
+export type AuthProvider = (typeof AUTH_PROVIDERS)[number];
+
 export const AGENT_STATUSES = [
   "active",
   "paused",

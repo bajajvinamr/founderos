@@ -1,3 +1,5 @@
+import { getAccessToken } from "@/lib/supabase";
+
 const BASE = "/api";
 
 export class ApiError extends Error {
@@ -17,6 +19,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = init?.body;
   if (!(body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  // Attach Supabase access token as Bearer header for every API call.
+  // Cookie-based sessions still work, but an explicit header is cleaner
+  // for a SPA and avoids cross-origin cookie edge cases.
+  if (!headers.has("Authorization")) {
+    const token = await getAccessToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
   }
 
   const res = await fetch(`${BASE}${path}`, {
