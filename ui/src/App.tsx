@@ -125,8 +125,17 @@ function CloudAccessGate() {
     );
   }
 
+  // Supabase/Clerk first-user-wins: send unauthenticated visitors to /auth
+  // even when the instance is "bootstrap_pending". The first authenticated
+  // request from the new user auto-promotes them to instance admin via
+  // actorMiddleware → runPostSignupBootstrap, flipping status to ready.
+  // Only show the legacy CLI-invite page to already-signed-in users who
+  // somehow hit this state (better-auth deployments without post-signup hook).
   if (isAuthenticatedMode && healthQuery.data?.bootstrapStatus === "bootstrap_pending") {
-    return <BootstrapPendingPage hasActiveInvite={healthQuery.data.bootstrapInviteActive} />;
+    if (sessionQuery.data) {
+      return <BootstrapPendingPage hasActiveInvite={healthQuery.data.bootstrapInviteActive} />;
+    }
+    // Fall through to the unauthenticated routing block below.
   }
 
   if (isAuthenticatedMode && !sessionQuery.data) {
