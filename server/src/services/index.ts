@@ -55,6 +55,10 @@ export {
   type ExecutionMode,
   type StoredApiKey,
 } from "./instance-api-keys.js";
+export {
+  validateAnthropicKey,
+  type ValidateAnthropicKeyResult,
+} from "./anthropic-key-validator.js";
 export { integrationService } from "./integrations.js";
 export { companyMemoryService } from "./company-memory.js";
 export { syncPostHog, type SyncResult } from "./posthog-sync.js";

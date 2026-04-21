@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler } from "./middleware/index.js";
+import { httpLogger, errorHandler, sentryErrorHandler } from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -41,6 +41,7 @@ import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
+import { byoKeyRoutes } from "./routes/byo-key.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { authWebhookRoutes } from "./routes/auth-webhook.js";
@@ -320,6 +321,7 @@ export async function createApp(
     ),
   );
   api.use(adapterRoutes());
+  api.use(byoKeyRoutes(db));
   api.use(
     accessRoutes(db, {
       deploymentMode: opts.deploymentMode,
@@ -389,6 +391,7 @@ export async function createApp(
     });
   }
 
+  app.use(sentryErrorHandler);
   app.use(errorHandler);
 
   jobCoordinator.start();

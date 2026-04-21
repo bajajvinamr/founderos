@@ -3,6 +3,7 @@ import type { Db } from "@founderos/db";
 import { subscriptionService } from "../services/subscription.js";
 import { createStripeClient } from "../services/stripe-client.js";
 import { logger } from "../middleware/logger.js";
+import { billingWebhookLimiter } from "../middleware/rate-limit.js";
 
 export function billingRoutes(db: Db) {
   const router = Router();
@@ -45,7 +46,7 @@ export function billingRoutes(db: Db) {
   });
 
   // POST /api/billing/webhook
-  router.post("/webhook", async (req: Request, res: Response) => {
+  router.post("/webhook", billingWebhookLimiter, async (req: Request, res: Response) => {
     try {
       const signature = req.headers["stripe-signature"] as string;
       if (!signature) {

@@ -22,6 +22,7 @@ import {
 } from "../auth/supabase.js";
 import { runPostSignupBootstrap } from "../auth/post-signup-hook.js";
 import { logger } from "../middleware/logger.js";
+import { authWebhookLimiter } from "../middleware/rate-limit.js";
 
 /** Header Supabase sends with the HMAC signature. */
 const SIGNATURE_HEADER = "x-supabase-signature";
@@ -34,7 +35,7 @@ export function authWebhookRoutes(
 ): Router {
   const router = Router();
 
-  router.post("/api/auth/webhook", async (req: Request, res: Response) => {
+  router.post("/api/auth/webhook", authWebhookLimiter, async (req: Request, res: Response) => {
     if (!opts.webhookSecret) {
       // Fail closed — without a shared secret we can't distinguish a real
       // Supabase call from a forged one.

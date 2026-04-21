@@ -167,20 +167,38 @@ fly secrets set BETTER_AUTH_SECRET="<new-base64>" --app founderos-<slug>
 
 ## Backups
 
-### Postgres dump
+### Fly Managed Postgres (automated)
+
+MPG takes continuous backups out of the box: full snapshots, incremental WAL, and differentials. Verify they're running:
 
 ```sh
-# Fly Managed Postgres
-fly postgres connect --app <your-pg-app>
-# or from outside:
+fly mpg backup list <cluster-id>
+```
+
+You should see recent `full`, `incr`, and `diff` entries with status `completed`.
+
+### Restore to a point in time
+
+```sh
+# List available backups
+fly mpg backup list <cluster-id>
+
+# Create a new cluster restored from a specific backup
+fly mpg restore <cluster-id> --backup-id <backup-id> --name founderos-restore-test
+
+# Attach the restored cluster to a test app and verify schema + data
+fly mpg connect <restored-cluster-id>
+```
+
+**Always test restore into a scratch cluster at least quarterly.** Untested backups aren't backups.
+
+### Manual pg_dump (defense in depth)
+
+```sh
 pg_dump "postgresql://user:pass@host:5432/founderos" \
   --no-owner --no-acl --format=custom \
   > founderos-$(date +%Y%m%d-%H%M).dump
-```
 
-### Restore
-
-```sh
 pg_restore --no-owner --no-acl --clean --if-exists \
   -d "postgresql://user:pass@host:5432/founderos" \
   founderos-20260421.dump
@@ -377,6 +395,48 @@ DELETE FROM "user" WHERE id='<uuid>';
 ```
 
 Full self-serve reset flow is on the roadmap.
+
+---
+
+## Monitoring (Sentry error tracking)
+
+Unhandled exceptions in the backend and frontend are automatically captured to **Sentry** when configured.
+
+### Configuration
+
+Set these secrets/env vars in your deployment:
+
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `SENTRY_DSN` | Secret | Sentry error tracking DSN for backend. Generate at [sentry.io](https://sentry.io). |
+| `VITE_SENTRY_DSN` | Env | Sentry error tracking DSN for frontend (browser). Can be same as backend or separate. |
+| `SENTRY_ENVIRONMENT` | Env | Sentry environment label (e.g. `staging`, `production`). Defaults to `NODE_ENV`. |
+
+**Example (Fly.io):**
+```bash
+fly secrets set SENTRY_DSN="https://key@sentry.io/project" --app founderos-acme
+fly config set VITE_SENTRY_DSN="https://key@sentry.io/project" --app founderos-acme
+fly config set SENTRY_ENVIRONMENT="production" --app founderos-acme
+fly deploy --app founderos-acme
+```
+
+### What gets captured
+
+- **Backend**: Unhandled exceptions during request processing, boot failures, service errors
+- **Frontend**: JavaScript errors, promise rejections, React component errors (if `@sentry/react` integration is active)
+
+Both are captured *before* being returned as HTTP 500 errors or logged.
+
+### Finding errors
+
+Once configured, errors appear in your Sentry dashboard:
+- **Recent Issues** — list of errors grouped by type/message
+- **Releases** — errors tied to specific app versions
+- **Search** — filter by URL, user, error type, environment
+
+### If not configured
+
+If `SENTRY_DSN` and `VITE_SENTRY_DSN` are not set, Sentry is disabled (no-op). Errors still log locally and return HTTP 500 to clients.
 
 ---
 

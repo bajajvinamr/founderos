@@ -9,6 +9,7 @@ import { instanceInviteService } from "../services/instance-invite.js";
 import { createEmailSender, type EmailSender } from "../services/email-sender.js";
 import { buildInviteEmailHtml, buildInviteEmailText } from "../services/email-templates.js";
 import { logger } from "../middleware/logger.js";
+import { inviteCreateLimiter, inviteConsumeLimiter } from "../middleware/rate-limit.js";
 
 function assertCanManageInvites(req: Request) {
   if (req.actor.type !== "board") {
@@ -68,7 +69,11 @@ export function instanceInvitesRoutes(
    * Create an email invite + (best-effort) send the signup link.
    * Body: { email, role? }
    */
-  router.post("/instance/invites", validate(createInviteSchema), async (req, res) => {
+  router.post(
+    "/instance/invites",
+    inviteCreateLimiter,
+    validate(createInviteSchema),
+    async (req, res) => {
     assertCanManageInvites(req);
     const email: string = req.body.email;
     const role: "instance_admin" | "instance_member" = req.body.role;
@@ -141,7 +146,8 @@ export function instanceInvitesRoutes(
       expiresAt: created.expiresAt,
       signupUrl,
     });
-  });
+    },
+  );
 
   /**
    * DELETE /api/instance/invites/:id

@@ -161,7 +161,10 @@ These are set in `fly.toml` `[env]` section or via `fly config set`. They appear
 
 | Variable | Type | Default | Notes |
 |----------|------|---------|-------|
-| `SENTRY_DSN` | Secret | None | Sentry error tracking DSN. If set, exceptions and errors are reported. |
+| `SENTRY_DSN` | Secret | None | Sentry error tracking DSN for the backend. If set, server exceptions are reported. |
+| `VITE_SENTRY_DSN` | Env | None | Sentry error tracking DSN for the frontend. If set, browser errors are reported. Same or separate DSN from backend. |
+| `SENTRY_ENVIRONMENT` | Env | `NODE_ENV` | Sentry environment label (e.g., `staging`, `production`). Defaults to NODE_ENV. |
+| `VITE_SENTRY_TRACES_SAMPLE_RATE` | Env | `0.1` | Frontend transaction sample rate (0-1). Default 10% for development, increase for production monitoring. |
 | `FOUNDEROS_TELEMETRY_ENABLED` | Env | `true` | Enable FounderOS telemetry (usage, errors). Set to `false` to disable. |
 
 ### Storage & Attachments

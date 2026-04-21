@@ -517,9 +517,6 @@ importers:
       '@founderos/templates':
         specifier: workspace:*
         version: link:../packages/templates
-      '@sentry/node':
-        specifier: ^8.45.0
-        version: 8.55.1
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
@@ -550,6 +547,9 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.2.1
+      express-rate-limit:
+        specifier: ^8.3.2
+        version: 8.3.2(express@5.2.1)
       hermes-paperclip-adapter:
         specifier: ^0.2.0
         version: 0.2.1
@@ -584,6 +584,9 @@ importers:
         specifier: ^3.24.2
         version: 3.25.76
     devDependencies:
+      '@sentry/node':
+        specifier: ^8.55.1
+        version: 8.55.1
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6
@@ -683,9 +686,6 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.2.4
         version: 1.2.4(@types/react@19.2.14)(react@19.2.5)
-      '@sentry/react':
-        specifier: ^8.45.0
-        version: 8.55.1(react@19.2.5)
       '@supabase/supabase-js':
         specifier: ^2.104.0
         version: 2.104.0
@@ -738,6 +738,9 @@ importers:
         specifier: ^3.4.1
         version: 3.5.0
     devDependencies:
+      '@sentry/react':
+        specifier: ^8.55.1
+        version: 8.55.1(react@19.2.5)
       '@tailwindcss/vite':
         specifier: ^4.0.7
         version: 4.2.2(vite@6.4.2(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0))
