@@ -1,62 +1,98 @@
 ---
 title: Quickstart
-summary: Get FounderOS running in minutes
+summary: Get a working AI company in under 5 minutes
 ---
 
-Get FounderOS running locally in under 5 minutes.
+Get a working AI company running in under 5 minutes. This is the fastest path — no cloning, no config files, just one command.
 
-## Quick Start (Recommended)
+## Prerequisites
 
-```sh
+- **Node.js 20+** — `node --version` should show `v20` or higher
+- **pnpm 9+** — `npm install -g pnpm` if missing
+- One of:
+  - A Claude Code CLI subscription (`claude --version` works)
+  - An Anthropic, OpenAI, or Google API key
+
+## Install & run
+
+```bash
 npx founderos onboard --yes
 ```
 
-This walks you through setup, configures your environment, and gets FounderOS running.
+This installs FounderOS, detects your available providers, writes a config, and starts the server at [http://localhost:3100](http://localhost:3100).
 
-If you already have a FounderOS install, rerunning `onboard` keeps your current config and data paths intact. Use `founderos configure` if you want to edit settings.
+Once the server is running (or to restart it later):
 
-To start FounderOS again later:
-
-```sh
+```bash
 npx founderos run
 ```
 
-> **Note:** If you used `npx` for setup, always use `npx founderos` to run commands. The `pnpm founderos` form only works inside a cloned copy of the FounderOS repository (see Local Development below).
+<Tip>
+If you used `npx` for setup, always use `npx founderos` for subsequent commands. The `pnpm founderos` form only works inside a cloned copy of the repo.
+</Tip>
 
-## Local Development
+## Onboarding walkthrough
 
-For contributors working on FounderOS itself. Prerequisites: Node.js 20+ and pnpm 9+.
+The onboarder asks four questions. Here's what to pick:
 
-Clone the repository, then:
+**1. Pick a template**
 
-```sh
-pnpm install
-pnpm dev
+| Template | Agents | Best for |
+|---|---|---|
+| `solo-indie-saas-founder` | 3–5 agents | One person running a focused product |
+| `pre-seed-ai-lab` | ~7 agents | Small team-like setup with more roles |
+
+Start with **Solo Indie SaaS Founder** unless you want a fuller org chart out of the box.
+
+**2. Connect a provider**
+
+FounderOS detects installed CLIs (Claude, Codex, Gemini) automatically. If it finds one logged in, it'll use it. Otherwise, paste an API key. You can always change this later in Settings → Providers.
+
+**3. Review the roster**
+
+You'll see the agents that will be created — CEO, CTO, lead engineer, etc. Review and confirm.
+
+**4. Launch**
+
+Onboarder runs `founderos run` automatically. The company is live.
+
+## What you see after launch
+
+Open [http://localhost:3100](http://localhost:3100):
+
+- **Dashboard** — Morning Brief with today's agent activity and goals
+- **Team** — every agent, their role, current status, and token budget
+- **Departments** — org chart view grouped by function
+
+Agents start their heartbeats immediately. Within a minute, you'll see the first runs appear in the activity log.
+
+## Common issues
+
+**Port 3100 in use**
+
+```bash
+FOUNDEROS_PORT=3200 npx founderos run
 ```
 
-This starts the API server and UI at [http://localhost:3100](http://localhost:3100).
+**Claude CLI not logged in**
 
-No external database required — FounderOS uses an embedded PostgreSQL instance by default.
+The provider check will fail silently if `claude` isn't authenticated. Run `claude /login` to open the browser flow, then re-run `npx founderos run`. See [Provider Setup](/adapters/providers) for all providers.
 
-When working from the cloned repo, you can also use:
+**No providers configured**
 
-```sh
-pnpm founderos run
-```
+FounderOS runs fine without a provider — you just can't fire heartbeats. Go to Settings → Providers in the UI, or pass an API key during onboarding. See [Provider Setup](/adapters/providers).
 
-This auto-onboards if config is missing, runs health checks with auto-repair, and starts the server.
+**Onboarding fails mid-way**
 
-## What's Next
+Re-run `npx founderos onboard` — it's idempotent and won't wipe existing config.
 
-Once FounderOS is running:
+## Next steps
 
-1. Create your first company in the web UI
-2. Define a company goal
-3. Create a CEO agent and configure its adapter
-4. Build out the org chart with more agents
-5. Set budgets and assign initial tasks
-6. Hit go — agents start their heartbeats and the company runs
-
-<Card title="Core Concepts" href="/start/core-concepts">
-  Learn the key concepts behind FounderOS
-</Card>
+<CardGroup cols={2}>
+  <Card title="Provider Setup" href="/adapters/providers">
+    Connect Claude, Codex, or Gemini — CLI subscription or API key
+  </Card>
+  <Card title="Self-host on Fly.io" href="/deploy/self-host-fly">
+    Run FounderOS in the cloud, one app per customer
+  </Card>
+</CardGroup>

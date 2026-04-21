@@ -64,3 +64,4 @@ export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
 export { integrations } from "./integrations.js";
 export { companyMemory } from "./company_memory.js";
+export { integrationData } from "./integration-data.js";

@@ -19,3 +19,4 @@ export { instanceSettingsRoutes } from "./instance-settings.js";
 export { templateRoutes } from "./templates.js";
 export { integrationRoutes } from "./integrations.js";
 export { companyMemoryRoutes } from "./company-memory.js";
+export { integrationDataRoutes } from "./integration-data.js";

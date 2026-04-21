@@ -75,9 +75,10 @@
             "group": "Deployment",
             "pages": [
               "deploy/overview",
+              "deploy/self-host-fly",
+              "deploy/docker",
               "deploy/local-development",
               "deploy/tailscale-private-access",
-              "deploy/docker",
               "deploy/deployment-modes",
               "deploy/database",
               "deploy/secrets",
@@ -91,11 +92,18 @@
         "tab": "Adapters",
         "groups": [
           {
+            "group": "Providers",
+            "pages": [
+              "adapters/providers",
+              "adapters/claude-local",
+              "adapters/codex-local",
+              "adapters/gemini-local"
+            ]
+          },
+          {
             "group": "Agent Adapters",
             "pages": [
               "adapters/overview",
-              "adapters/claude-local",
-              "adapters/codex-local",
               "adapters/process",
               "adapters/http",
               "adapters/external-adapters",

@@ -21,6 +21,8 @@ import {
   decryptWithMasterKey,
 } from "../secrets/local-encrypted-provider.js";
 import type { Integration } from "@founderos/shared";
+import { syncPostHog } from "./posthog-sync.js";
+import { logger } from "../middleware/logger.js";
 
 export type CreateIntegrationInput = {
   kind: IntegrationKind;
@@ -111,6 +113,21 @@ export function integrationService(db: Db) {
         },
       })
       .returning();
+
+    // Fire-and-forget PostHog initial sync
+    if (input.kind === "posthog") {
+      const apiKey = input.apiKey.trim();
+      const host = typeof input.config?.host === "string" ? input.config.host : undefined;
+      void syncPostHog({
+        db,
+        integrationId: row.id,
+        companyId,
+        decryptedApiKey: apiKey,
+        host,
+      }).catch((err: unknown) => {
+        logger.error({ err, integrationId: row.id }, "posthog-sync fire-and-forget failed");
+      });
+    }
 
     return toIntegration(row);
   }

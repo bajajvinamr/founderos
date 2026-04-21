@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
@@ -19,6 +20,11 @@ import {
   FlaskConical,
 } from "lucide-react";
 import type { Agent } from "@founderos/shared";
+import { integrationDataApi } from "../../api/integration-data";
+import type {
+  PostHogFunnelPayload,
+  PostHogChannelsPayload,
+} from "../../api/integration-data";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -386,66 +392,155 @@ function ChannelCard({ channel }: { channel: Channel }) {
   );
 }
 
-function FunnelView({ pushToast }: { pushToast: (input: { title: string; body: string }) => void }) {
-  const stages = MOCK_FUNNEL;
-  const maxCount = stages[0].count;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function relativeTimeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function DataSourceCaption({ fetchedAt }: { fetchedAt: string }) {
+  return (
+    <p className="text-[10px] text-muted-foreground/60 tabular-nums mt-2">
+      data source: PostHog · synced {relativeTimeAgo(fetchedAt)}
+    </p>
+  );
+}
+
+function FunnelView({
+  pushToast,
+  posthogFunnel,
+}: {
+  pushToast: (input: { title: string; body: string }) => void;
+  posthogFunnel: { payload: PostHogFunnelPayload; fetchedAt: string } | null | undefined;
+}) {
+  // Build stages from real data or fall back to mock
+  const stages: FunnelStage[] = posthogFunnel
+    ? [
+        { label: "Traffic", count: posthogFunnel.payload.pageviews },
+        { label: "Signup", count: posthogFunnel.payload.signups },
+        { label: "Activation", count: posthogFunnel.payload.activations },
+        { label: "Trial", count: posthogFunnel.payload.trials },
+        { label: "Paid", count: posthogFunnel.payload.paid },
+      ]
+    : MOCK_FUNNEL;
+
+  const maxCount = Math.max(stages[0].count, 1);
+
+  // Find biggest drop-off for insight callout
+  let biggestDropIdx = 1;
+  let biggestDrop = 0;
+  for (let i = 1; i < stages.length; i++) {
+    const prev = stages[i - 1].count;
+    const cur = stages[i].count;
+    const drop = prev > 0 ? (prev - cur) / prev : 0;
+    if (drop > biggestDrop) {
+      biggestDrop = drop;
+      biggestDropIdx = i;
+    }
+  }
+  const dropLabel = `${stages[biggestDropIdx - 1].label} → ${stages[biggestDropIdx].label}`;
+  const dropPct = Math.round(biggestDrop * 100);
+
+  if (!posthogFunnel) {
+    return (
+      <div className="space-y-6">
+        {/* Empty state */}
+        <div className="rounded-md border border-dashed border-border bg-card p-8 flex flex-col items-center gap-3 text-center">
+          <p className="text-sm text-muted-foreground">
+            No funnel data yet. Connect PostHog to see real conversion numbers.
+          </p>
+          <a
+            href="/integrations"
+            className="text-[12px] font-medium text-[var(--brand,theme(colors.teal.500))] hover:underline"
+          >
+            Connect PostHog →
+          </a>
+        </div>
+
+        {/* Fallback mock funnel */}
+        <div className="opacity-40 pointer-events-none">
+          <FunnelBars stages={MOCK_FUNNEL} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-md border border-border bg-card divide-y divide-border overflow-hidden">
-        {stages.map((stage, idx) => {
-          const prevCount = idx > 0 ? stages[idx - 1].count : stage.count;
-          const convPct = idx === 0 ? 100 : Math.round((stage.count / prevCount) * 100);
-          const barWidth = Math.round((stage.count / maxCount) * 100);
-          return (
-            <div key={stage.label} className="px-4 py-3 flex items-center gap-3">
-              <div className="w-16 shrink-0">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
-                  {stage.label}
-                </p>
-              </div>
-              <div className="flex-1">
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-[var(--brand,theme(colors.teal.500))] transition-all"
-                    style={{ width: `${barWidth}%` }}
-                  />
-                </div>
-              </div>
-              <div className="w-12 text-right tabular-nums text-xs font-semibold text-foreground shrink-0">
-                {stage.count.toLocaleString()}
-              </div>
-              {idx > 0 && (
-                <div
-                  className={cn(
-                    "w-10 text-right tabular-nums text-[11px] font-medium shrink-0",
-                    convPct < 20 ? "text-red-500" : convPct < 50 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400",
-                  )}
-                >
-                  {convPct}%
-                </div>
-              )}
-              {idx === 0 && <div className="w-10 shrink-0" />}
-            </div>
-          );
-        })}
-      </div>
+      <FunnelBars stages={stages} />
 
       {/* Insight callout */}
       <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 flex items-start justify-between gap-4">
         <p className="text-sm text-foreground/80 leading-relaxed">
-          <span className="font-semibold text-foreground">Biggest drop-off: Signup → Activation (74% loss).</span>{" "}
-          Suggested experiment: rework step-2 of onboarding.
+          <span className="font-semibold text-foreground">
+            Biggest drop-off: {dropLabel} ({dropPct}% loss).
+          </span>{" "}
+          Suggested experiment: rework this stage of the funnel.
         </p>
         <button
           onClick={() =>
-            pushToast({ title: "Added to backlog", body: "Onboarding experiment added to idea queue." })
+            pushToast({ title: "Added to backlog", body: "Funnel experiment added to idea queue." })
           }
           className="shrink-0 text-[11px] text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium whitespace-nowrap"
         >
           + Add to experiment backlog
         </button>
       </div>
+
+      <DataSourceCaption fetchedAt={posthogFunnel.fetchedAt} />
+    </div>
+  );
+}
+
+function FunnelBars({ stages }: { stages: FunnelStage[] }) {
+  const maxCount = Math.max(stages[0].count, 1);
+  return (
+    <div className="rounded-md border border-border bg-card divide-y divide-border overflow-hidden">
+      {stages.map((stage, idx) => {
+        const prevCount = idx > 0 ? stages[idx - 1].count : stage.count;
+        const convPct = idx === 0 ? 100 : Math.round((stage.count / Math.max(prevCount, 1)) * 100);
+        const barWidth = Math.round((stage.count / maxCount) * 100);
+        return (
+          <div key={stage.label} className="px-4 py-3 flex items-center gap-3">
+            <div className="w-16 shrink-0">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
+                {stage.label}
+              </p>
+            </div>
+            <div className="flex-1">
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--brand,theme(colors.teal.500))] transition-all"
+                  style={{ width: `${barWidth}%` }}
+                />
+              </div>
+            </div>
+            <div className="w-12 text-right tabular-nums text-xs font-semibold text-foreground shrink-0">
+              {stage.count.toLocaleString()}
+            </div>
+            {idx > 0 && (
+              <div
+                className={cn(
+                  "w-10 text-right tabular-nums text-[11px] font-medium shrink-0",
+                  convPct < 20
+                    ? "text-red-500"
+                    : convPct < 50
+                      ? "text-amber-500"
+                      : "text-emerald-600 dark:text-emerald-400",
+                )}
+              >
+                {convPct}%
+              </div>
+            )}
+            {idx === 0 && <div className="w-10 shrink-0" />}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -541,6 +636,59 @@ function ExperimentsTab({
   );
 }
 
+// ─── UTM source label mapping ─────────────────────────────────────────────────
+
+const UTM_SOURCE_LABELS: Record<string, string> = {
+  google: "Google",
+  "google.com": "Google",
+  bing: "Bing",
+  "bing.com": "Bing",
+  "linkedin.com": "LinkedIn",
+  linkedin: "LinkedIn",
+  twitter: "Twitter / X",
+  "twitter.com": "Twitter / X",
+  "t.co": "Twitter / X",
+  facebook: "Facebook",
+  "facebook.com": "Facebook",
+  reddit: "Reddit",
+  "reddit.com": "Reddit",
+  github: "GitHub",
+  "github.com": "GitHub",
+  newsletter: "Newsletter",
+  email: "Email",
+  referral: "Referral",
+  "(direct)": "Direct",
+  direct: "Direct",
+  "(none)": "Direct",
+};
+
+function friendlyUtmLabel(source: string): string {
+  const lower = source.toLowerCase();
+  return UTM_SOURCE_LABELS[lower] ?? source;
+}
+
+// ─── Real channels tab ────────────────────────────────────────────────────────
+
+function RealChannelCard({
+  source,
+  count,
+}: {
+  source: string;
+  count: number;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-card p-4 flex flex-col gap-2 hover:border-foreground/20 transition-colors">
+      <p className="text-sm font-medium text-foreground">{friendlyUtmLabel(source)}</p>
+      <div className="flex items-baseline gap-1">
+        <span className="tabular-nums text-[28px] font-bold text-foreground leading-none">
+          {count.toLocaleString()}
+        </span>
+        <span className="text-xs text-muted-foreground">visitors</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface GrowthConsoleProps {
@@ -548,7 +696,7 @@ interface GrowthConsoleProps {
   agents: Agent[];
 }
 
-export function GrowthConsole({ agents }: GrowthConsoleProps) {
+export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { pushToast } = useToast();
 
@@ -559,13 +707,26 @@ export function GrowthConsole({ agents }: GrowthConsoleProps) {
     setSearchParams({ tab });
   }
 
-  // Derive owner names from the Growth-department agents (cmo / pm roles)
-  // MOCK — Wave 5 wires these to the real experiment ownership model.
+  // ── PostHog data queries ──────────────────────────────────────────────────
+  const { data: posthogFunnelData } = useQuery({
+    queryKey: ["integration-data", companyId, "posthog.funnel"],
+    queryFn: () => integrationDataApi.getFunnel(companyId!),
+    enabled: !!companyId,
+    retry: false,
+  });
+
+  const { data: posthogChannelsData } = useQuery({
+    queryKey: ["integration-data", companyId, "posthog.channels.utm_source"],
+    queryFn: () => integrationDataApi.getChannels(companyId!),
+    enabled: !!companyId,
+    retry: false,
+  });
+
+  // ── Derive display values ─────────────────────────────────────────────────
   const growthTeammates = agents.filter((a) => a.role === "cmo" || a.role === "pm");
   const channelsLive = MOCK_CHANNELS.filter((c) => c.signupsThisMonth > 0).length;
   const totalSpend = MOCK_CHANNELS.reduce((sum, c) => sum + c.spendDollars, 0);
 
-  // Resolve experiment mock data, substituting real teammate names where available
   const experiments: Experiment[] = MOCK_EXPERIMENTS.map((exp) => ({
     ...exp,
     ownerName:
@@ -582,6 +743,10 @@ export function GrowthConsole({ agents }: GrowthConsoleProps) {
     { value: "funnel", label: "Funnel" },
     { value: "paid", label: "Paid" },
   ];
+
+  const hasRealChannels =
+    posthogChannelsData?.payload?.channels &&
+    posthogChannelsData.payload.channels.length > 0;
 
   return (
     <div className="space-y-6">
@@ -620,13 +785,42 @@ export function GrowthConsole({ agents }: GrowthConsoleProps) {
           <ExperimentsTab experiments={experiments} pushToast={pushToast} />
         )}
         {activeTab === "channels" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MOCK_CHANNELS.map((ch) => (
-              <ChannelCard key={ch.id} channel={ch} />
-            ))}
+          <div className="space-y-3">
+            {!hasRealChannels && (
+              <p className="text-[11px] text-muted-foreground">
+                Showing sample data.{" "}
+                <a
+                  href="/integrations"
+                  className="text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium"
+                >
+                  Connect PostHog for real data →
+                </a>
+              </p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {hasRealChannels
+                ? posthogChannelsData!.payload.channels.map((ch) => (
+                    <RealChannelCard
+                      key={ch.source}
+                      source={ch.source}
+                      count={ch.count}
+                    />
+                  ))
+                : MOCK_CHANNELS.map((ch) => (
+                    <ChannelCard key={ch.id} channel={ch} />
+                  ))}
+            </div>
+            {hasRealChannels && (
+              <DataSourceCaption fetchedAt={posthogChannelsData!.fetchedAt} />
+            )}
           </div>
         )}
-        {activeTab === "funnel" && <FunnelView pushToast={pushToast} />}
+        {activeTab === "funnel" && (
+          <FunnelView
+            pushToast={pushToast}
+            posthogFunnel={posthogFunnelData ?? null}
+          />
+        )}
         {activeTab === "paid" && <PaidTab pushToast={pushToast} />}
       </div>
     </div>

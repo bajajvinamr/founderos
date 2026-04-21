@@ -537,7 +537,12 @@ export async function startServer(): Promise<StartedServer> {
         },
         "Authenticated mode auth origin configuration",
       );
-      const auth = createBetterAuthInstance(db as any, config, effectiveTrustedOrigins);
+      const { createEmailSender } = await import("./services/email-sender.js");
+      const emailSender = createEmailSender({
+        apiKey: process.env.RESEND_API_KEY,
+        fromAddress: process.env.EMAIL_FROM,
+      });
+      const auth = createBetterAuthInstance(db as any, config, effectiveTrustedOrigins, emailSender);
       betterAuthHandler = createBetterAuthHandler(auth);
       resolveSession = (req) => resolveBetterAuthSession(auth, req);
       resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);

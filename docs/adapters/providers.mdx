@@ -1,0 +1,190 @@
+---
+title: Provider Setup
+summary: Connect Claude, Codex, or Gemini to FounderOS — CLI subscription or API key
+---
+
+FounderOS supports three first-party AI providers. Each can run in two modes:
+
+- **CLI subscription mode** — you log in once with your personal subscription; no API key needed
+- **API key mode** — drop in an API key, works without a CLI install
+
+Mix and match. You can run Claude agents via subscription and Codex agents via API key in the same company.
+
+---
+
+## Claude Code CLI
+
+**Provider type:** `claude_local`
+
+### CLI subscription mode
+
+Install the Claude Code CLI:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+Log in (opens browser):
+
+```bash
+claude /login
+```
+
+Verify it works:
+
+```bash
+claude --version
+# claude 1.x.x
+```
+
+FounderOS detects `claude` in your `PATH` and confirms auth by running a lightweight probe (`claude --print -` with a hello prompt). If the probe returns output, the provider is marked as available.
+
+### API key mode
+
+If you don't have a Claude Code subscription, use an Anthropic API key instead:
+
+1. Get a key from [console.anthropic.com](https://console.anthropic.com)
+2. Go to **Settings → Providers** in the FounderOS UI, or add it to agent config:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+npx founderos run
+```
+
+Or set it as a secret in the UI and reference it in agent environment config.
+
+---
+
+## OpenAI Codex CLI
+
+**Provider type:** `codex_local`
+
+### CLI subscription mode
+
+Install the Codex CLI:
+
+```bash
+npm install -g @openai/codex
+```
+
+Log in:
+
+```bash
+codex login
+```
+
+Verify:
+
+```bash
+codex --version
+```
+
+FounderOS probes Codex by running `codex exec --json -` with a hello prompt. If it returns structured output, the provider is marked as available.
+
+### API key mode
+
+1. Get a key from [platform.openai.com](https://platform.openai.com/api-keys)
+2. Export it before starting:
+
+```bash
+export OPENAI_API_KEY=sk-...
+npx founderos run
+```
+
+Or paste it into **Settings → Providers → OpenAI** in the UI.
+
+---
+
+## Google Gemini CLI
+
+**Provider type:** `gemini_local`
+
+### CLI subscription mode
+
+Install the Gemini CLI:
+
+```bash
+npm install -g @google/gemini-cli
+```
+
+Log in:
+
+```bash
+gemini auth login
+```
+
+Verify:
+
+```bash
+gemini --version
+```
+
+FounderOS probes Gemini by running `gemini --output-format json` with a hello prompt.
+
+### API key mode
+
+Gemini accepts either `GEMINI_API_KEY` or `GOOGLE_API_KEY`:
+
+1. Get a key from [aistudio.google.com](https://aistudio.google.com/apikey)
+2. Export before starting:
+
+```bash
+export GEMINI_API_KEY=...
+npx founderos run
+```
+
+Or set in **Settings → Providers → Gemini** in the UI.
+
+---
+
+## API key via the UI
+
+All three providers can be configured through **Settings → Providers** without touching env vars:
+
+1. Open [http://localhost:3100/instance/settings/providers](http://localhost:3100/instance/settings/providers)
+2. Pick the provider
+3. Paste the key — FounderOS encrypts it at rest using your local master key
+4. Hit **Test** — the UI runs the same probe that the environment check uses
+
+Keys stored here are saved as encrypted secret references, not inline plain text.
+
+---
+
+## Troubleshooting: Why doesn't my provider show up?
+
+**1. CLI not in PATH**
+
+FounderOS looks for `claude`, `codex`, or `gemini` as executable commands. If you installed them globally but they're not found, your shell `PATH` may not include the npm global bin directory.
+
+```bash
+# Check where npm globals land
+npm root -g
+# Add to PATH if needed (add to ~/.zshrc or ~/.bashrc)
+export PATH="$(npm root -g)/../bin:$PATH"
+```
+
+**2. Not logged in**
+
+A CLI that's installed but not authenticated will fail the probe. The provider will appear as "not available" even though the binary exists. Run the login command for the relevant CLI and then click **Test Environment** in the UI.
+
+**3. Wrong version**
+
+Some CLI versions changed their output format. FounderOS parses structured JSON output — if the CLI predates JSON output support, the probe will fail. Update to the latest version:
+
+```bash
+npm update -g @anthropic-ai/claude-code
+npm update -g @openai/codex
+npm update -g @google/gemini-cli
+```
+
+---
+
+## Using multiple providers
+
+You can assign different providers to different agents in the same company. For example:
+
+- CEO agent → `claude_local` (subscription)
+- Engineering agents → `codex_local` (API key)
+- Research agent → `gemini_local` (API key)
+
+Configure the `adapterType` and `adapterConfig` per agent in **Team → [Agent] → Edit**.

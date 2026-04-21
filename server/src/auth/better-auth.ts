@@ -11,6 +11,8 @@ import {
   authVerifications,
 } from "@founderos/db";
 import type { Config } from "../config.js";
+import type { EmailSender } from "../services/email-sender.js";
+import { createPostSignupHook } from "./post-signup-hook.js";
 
 export type BetterAuthSessionUser = {
   id: string;
@@ -65,7 +67,12 @@ export function deriveAuthTrustedOrigins(config: Config): string[] {
   return Array.from(trustedOrigins);
 }
 
-export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?: string[]): BetterAuthInstance {
+export function createBetterAuthInstance(
+  db: Db,
+  config: Config,
+  trustedOrigins?: string[],
+  emailSender?: EmailSender,
+): BetterAuthInstance {
   const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
   const secret = process.env.BETTER_AUTH_SECRET ?? process.env.FOUNDEROS_AGENT_JWT_SECRET;
   if (!secret) {
@@ -78,6 +85,26 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
 
   const publicUrl = process.env.FOUNDEROS_PUBLIC_URL ?? baseUrl;
   const isHttpOnly = publicUrl ? publicUrl.startsWith("http://") : false;
+
+  // Build the post-signup hook — only wired when emailSender is provided.
+  let databaseHooks: Parameters<typeof betterAuth>[0]["databaseHooks"] | undefined;
+  if (emailSender) {
+    const hookFn = createPostSignupHook({
+      db,
+      emailSender,
+      publicUrl: publicUrl ?? "http://localhost:3000",
+    });
+    databaseHooks = {
+      user: {
+        create: {
+          after: async (user) => {
+            // Fire-and-forget; never let email errors bubble up to the auth layer.
+            hookFn({ id: user.id, email: user.email, name: user.name ?? null }).catch(() => {});
+          },
+        },
+      },
+    };
+  }
 
   const authConfig = {
     baseURL: baseUrl,
@@ -94,9 +121,14 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
     }),
     emailAndPassword: {
       enabled: true,
+      // requireEmailVerification is intentionally false. Better-auth's built-in
+      // sendVerificationEmail callback could be wired here in the future, but for
+      // now we send a welcome email via the post-create hook and leave verification
+      // off to keep sign-up frictionless.
       requireEmailVerification: false,
       disableSignUp: config.authDisableSignUp,
     },
+    ...(databaseHooks ? { databaseHooks } : {}),
     ...(isHttpOnly ? { advanced: { useSecureCookies: false } } : {}),
   };
 

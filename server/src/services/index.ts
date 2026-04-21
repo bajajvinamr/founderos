@@ -28,6 +28,7 @@ export { executionWorkspaceService } from "./execution-workspaces.js";
 export { workspaceOperationService } from "./workspace-operations.js";
 export { workProductService } from "./work-products.js";
 export { logActivity, type LogActivityInput } from "./activity-log.js";
+export { createEmailSender, type EmailSender, type EmailSendParams, type EmailSendResult } from "./email-sender.js";
 export {
   templateSpawnService,
   type SpawnFromTemplateInput,
@@ -55,6 +56,13 @@ export {
 } from "./instance-api-keys.js";
 export { integrationService } from "./integrations.js";
 export { companyMemoryService } from "./company-memory.js";
+export { syncPostHog, type SyncResult } from "./posthog-sync.js";
+export {
+  createPostHogClient,
+  PostHogAuthError,
+  type PostHogConfig,
+  type PostHogClient,
+} from "./posthog-client.js";
 export { templateExportService } from "./template-export.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
