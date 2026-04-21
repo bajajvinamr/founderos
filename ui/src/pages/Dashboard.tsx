@@ -22,6 +22,7 @@ import { StatusIcon } from "../components/StatusIcon";
 
 import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
+import { AgentRunStatus } from "../components/AgentRunStatus";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
 import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
@@ -321,6 +322,37 @@ export function Dashboard() {
             className="grid gap-4 md:grid-cols-2"
             itemClassName="rounded-lg border bg-card p-4 shadow-sm"
           />
+
+          {runs && runs.length > 0 && (
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Recent Runs
+              </h3>
+              <div className="border border-border divide-y divide-border overflow-hidden rounded">
+                {runs.slice(0, 8).map((run) => {
+                  const agent = agentMap.get(run.agentId);
+                  const agentRef = agent
+                    ? (agent.urlKey ?? agent.id)
+                    : run.agentId;
+                  return (
+                    <Link
+                      key={run.id}
+                      to={`/agents/${agentRef}/runs/${run.id}`}
+                      className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-accent/50 transition-colors no-underline text-inherit"
+                    >
+                      <AgentRunStatus run={run} compact />
+                      <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
+                        {agent?.name ?? "Unknown agent"}
+                      </span>
+                      <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                        {timeAgo(run.startedAt ?? run.createdAt)}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="grid md:grid-cols-2 gap-4">
             {/* Recent Activity */}

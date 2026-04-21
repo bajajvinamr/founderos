@@ -30,6 +30,7 @@ import { MarkdownEditor } from "../components/MarkdownEditor";
 import { assetsApi } from "../api/assets";
 import { getUIAdapter, buildTranscript, onAdapterChange } from "../adapters";
 import { StatusBadge } from "../components/StatusBadge";
+import { AgentRunStatus } from "../components/AgentRunStatus";
 import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
 import { MarkdownBody } from "../components/MarkdownBody";
 import { CopyText } from "../components/CopyText";
@@ -3152,44 +3153,27 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
         <div className="flex flex-col sm:flex-row">
           {/* Left column: status + timing */}
           <div className="flex-1 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <StatusBadge status={run.status} />
-              {(run.status === "running" || run.status === "queued") && (
+            <AgentRunStatus
+              run={run}
+              onCancel={() => cancelRun.mutate()}
+              isCancelling={cancelRun.isPending}
+              onRetry={canRetryRun && !canResumeLostRun ? () => retryRun.mutate() : undefined}
+              isRetrying={retryRun.isPending}
+            />
+            {canResumeLostRun && (
+              <div>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="text-destructive hover:text-destructive text-xs h-6 px-2"
-                  onClick={() => cancelRun.mutate()}
-                  disabled={cancelRun.isPending}
-                >
-                  {cancelRun.isPending ? "Cancelling…" : "Cancel"}
-                </Button>
-              )}
-              {canResumeLostRun && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs h-6 px-2"
+                  className="h-7 px-2 text-xs"
                   onClick={() => resumeRun.mutate()}
                   disabled={resumeRun.isPending}
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
                   {resumeRun.isPending ? "Resuming…" : "Resume"}
                 </Button>
-              )}
-              {canRetryRun && !canResumeLostRun && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs h-6 px-2"
-                  onClick={() => retryRun.mutate()}
-                  disabled={retryRun.isPending}
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                  {retryRun.isPending ? "Retrying…" : "Retry"}
-                </Button>
-              )}
-            </div>
+              </div>
+            )}
             {/* Adapter type · provider · model */}
             {(() => {
               const displayProvider = metrics.provider
@@ -3237,12 +3221,6 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
                     Duration: {displayDurationSec >= 60 ? `${Math.floor(displayDurationSec / 60)}m ${displayDurationSec % 60}s` : `${displayDurationSec}s`}
                   </div>
                 )}
-              </div>
-            )}
-            {run.error && (
-              <div className="text-xs">
-                <span className="text-red-600 dark:text-red-400">{run.error}</span>
-                {run.errorCode && <span className="text-muted-foreground ml-1">({run.errorCode})</span>}
               </div>
             )}
             {run.errorCode === "claude_auth_required" && adapterType === "claude_local" && (

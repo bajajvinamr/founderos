@@ -812,17 +812,17 @@ function ShiftSection() {
           </div>
         </div>
         <div className="border border-pulse-line overflow-x-auto">
-          <div className="min-w-[480px]">
-            <div className="grid grid-cols-[1.2fr,1fr,1fr] font-mono caps-wide text-[10px] text-pulse-muted">
-              <div className="px-4 py-3 border-b border-r border-pulse-line">What</div>
-              <div className="px-4 py-3 border-b border-r border-pulse-line">Classic startup</div>
-              <div className="px-4 py-3 border-b border-pulse-line text-pulse-accent">With FounderOS</div>
+          <div className="md:min-w-[480px] min-w-full">
+            <div className="grid md:grid-cols-[1.2fr,1fr,1fr] grid-cols-2 font-mono caps-wide text-[9px] md:text-[10px] text-pulse-muted">
+              <div className="px-2 md:px-4 py-2 md:py-3 border-b md:border-r border-pulse-line">What</div>
+              <div className="hidden md:block px-4 py-3 border-b border-r border-pulse-line">Classic startup</div>
+              <div className="px-2 md:px-4 py-2 md:py-3 border-b border-pulse-line text-pulse-accent">With FounderOS</div>
             </div>
             {rows.map((r, i) => (
-              <div key={r.item} className={`grid grid-cols-[1.2fr,1fr,1fr] text-[13px] ${i < rows.length - 1 ? "border-b border-pulse-line" : ""}`}>
-                <div className="px-4 py-4 font-medium border-r border-pulse-line">{r.item}</div>
-                <div className="px-4 py-4 text-pulse-muted line-through decoration-pulse-muted/60 border-r border-pulse-line">{r.old}</div>
-                <div className="px-4 py-4 text-pulse-bone">{r.next}</div>
+              <div key={r.item} className={`grid md:grid-cols-[1.2fr,1fr,1fr] grid-cols-2 text-[12px] md:text-[13px] ${i < rows.length - 1 ? "border-b border-pulse-line" : ""}`}>
+                <div className="px-2 md:px-4 py-3 md:py-4 font-medium md:border-r border-pulse-line">{r.item}</div>
+                <div className="hidden md:block px-4 py-4 text-pulse-muted line-through decoration-pulse-muted/60 border-r border-pulse-line">{r.old}</div>
+                <div className="px-2 md:px-4 py-3 md:py-4 text-pulse-bone">{r.next}</div>
               </div>
             ))}
           </div>

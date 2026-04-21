@@ -2,13 +2,26 @@ import { Router } from "express";
 import type { Db } from "@founderos/db";
 import { generateAgentReviewSchema, createManualAgentReviewSchema } from "@founderos/shared";
 import { validate } from "../middleware/validate.js";
-import { agentReviewsService, logActivity } from "../services/index.js";
+import { agentReviewsService, agentService, logActivity } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
-import { badRequest } from "../errors.js";
+import { badRequest, notFound } from "../errors.js";
 
 export function agentReviewRoutes(db: Db) {
   const router = Router();
   const reviews = agentReviewsService(db);
+  const agents = agentService(db);
+
+  /**
+   * Confirm the referenced agent actually belongs to the company scoped by
+   * the URL. Without this, a user authorized on company A could pass an
+   * agentId that belongs to company B and read/write B's review rows.
+   */
+  async function assertAgentInCompany(agentId: string, companyId: string) {
+    const agent = await agents.getById(agentId);
+    if (!agent || agent.companyId !== companyId) {
+      throw notFound("Agent not found");
+    }
+  }
 
   /**
    * GET /api/companies/:companyId/agent-reviews
@@ -37,6 +50,7 @@ export function agentReviewRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     const agentId = req.params.agentId as string;
     assertCompanyAccess(req, companyId);
+    await assertAgentInCompany(agentId, companyId);
 
     const review = await reviews.getLatest(agentId);
     if (!review) {
@@ -58,6 +72,7 @@ export function agentReviewRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       const agentId = req.params.agentId as string;
       assertCompanyAccess(req, companyId);
+      await assertAgentInCompany(agentId, companyId);
 
       const review = await reviews.generateMonthlyReview(agentId, req.body.monthOf);
 
@@ -89,6 +104,7 @@ export function agentReviewRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       const agentId = req.params.agentId as string;
       assertCompanyAccess(req, companyId);
+      await assertAgentInCompany(agentId, companyId);
 
       const review = await reviews.createManual(agentId, {
         summaryMarkdown: req.body.summaryMarkdown,

@@ -26,6 +26,7 @@ import { z } from "zod";
 import type { Db } from "@founderos/db";
 import { forbidden, unprocessable } from "../errors.js";
 import { validate } from "../middleware/validate.js";
+import { requireCompanyAccess } from "../middleware/require-company-access.js";
 import { assertBoard } from "./authz.js";
 import {
   accessService,
@@ -404,6 +405,7 @@ export function onboardingRoutes(db: Db) {
     async (req, res) => {
       assertBoard(req);
       const input = req.body as z.infer<typeof acceptDecisionSchema>;
+      requireCompanyAccess(req, input.companyId);
 
       const ownerAgentId = input.agentIdsBySlot[input.decision.slot];
       if (!ownerAgentId) {

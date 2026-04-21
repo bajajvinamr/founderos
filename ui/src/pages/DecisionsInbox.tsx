@@ -234,7 +234,7 @@ export function DecisionsInbox() {
                         }
                       />
                       {/* Redirect action — sits outside ApprovalCard to avoid layout conflict */}
-                      <div className="absolute bottom-4 right-[7.5rem]">
+                      <div className="hidden md:block absolute bottom-4 right-[7.5rem]">
                         <Button
                           variant="ghost"
                           size="sm"
