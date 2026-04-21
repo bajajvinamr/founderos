@@ -46,6 +46,7 @@ const InstanceGeneralSettings = lazy(() => import("./pages/InstanceGeneralSettin
 const InstanceSettings = lazy(() => import("./pages/InstanceSettings").then((m) => ({ default: m.InstanceSettings })));
 const InstanceExperimentalSettings = lazy(() => import("./pages/InstanceExperimentalSettings").then((m) => ({ default: m.InstanceExperimentalSettings })));
 const InstanceProvidersSettings = lazy(() => import("./pages/InstanceProvidersSettings").then((m) => ({ default: m.InstanceProvidersSettings })));
+const InstanceAdminMembers = lazy(() => import("./pages/InstanceAdminMembers").then((m) => ({ default: m.InstanceAdminMembers })));
 const LegalTerms = lazy(() => import("./pages/LegalTerms").then((m) => ({ default: m.LegalTerms })));
 const LegalPrivacy = lazy(() => import("./pages/LegalPrivacy").then((m) => ({ default: m.LegalPrivacy })));
 const PluginManager = lazy(() => import("./pages/PluginManager").then((m) => ({ default: m.PluginManager })));
@@ -365,9 +366,11 @@ export function App() {
           <Route index element={<CompanyRootRedirect />} />
           <Route path="onboarding" element={<OnboardingRoutePage />} />
           <Route path="instance" element={<Navigate to="/instance/settings/general" replace />} />
+          <Route path="instance/members" element={<Navigate to="/instance/settings/members" replace />} />
           <Route path="instance/settings" element={<Layout />}>
             <Route index element={<Navigate to="general" replace />} />
             <Route path="general" element={<InstanceGeneralSettings />} />
+            <Route path="members" element={<InstanceAdminMembers />} />
             <Route path="providers" element={<InstanceProvidersSettings />} />
             <Route path="heartbeats" element={<InstanceSettings />} />
             <Route path="experimental" element={<InstanceExperimentalSettings />} />

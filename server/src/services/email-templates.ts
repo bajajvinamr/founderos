@@ -49,3 +49,47 @@ function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+export interface InviteEmailParams {
+  inviterName: string | null;
+  role: "instance_admin" | "instance_member";
+  signupUrl: string;
+}
+
+function roleLabel(role: InviteEmailParams["role"]): string {
+  return role === "instance_admin" ? "instance admin" : "teammate";
+}
+
+export function buildInviteEmailText(params: InviteEmailParams): string {
+  const { inviterName, role, signupUrl } = params;
+  const who = inviterName?.trim() || "Someone on your team";
+  return [
+    `${who} invited you to FounderOS as an ${roleLabel(role)}.`,
+    "",
+    "FounderOS is the AI company OS for founders — a home for your AI teammates, shared context, and shipped work.",
+    "",
+    `Accept the invite → ${signupUrl}`,
+    "",
+    "This link will auto-grant you the right role as soon as you finish signing up.",
+    "",
+    "— The FounderOS team",
+  ].join("\n");
+}
+
+export function buildInviteEmailHtml(params: InviteEmailParams): string {
+  const { inviterName, role, signupUrl } = params;
+  const who = escapeHtml(inviterName?.trim() || "Someone on your team");
+  const url = escapeHtml(signupUrl);
+  const roleText = escapeHtml(roleLabel(role));
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:sans-serif;line-height:1.6;color:#111;max-width:560px;margin:0 auto;padding:24px">
+  <p>${who} invited you to FounderOS as an <strong>${roleText}</strong>.</p>
+  <p>FounderOS is the AI company OS for founders — a home for your AI teammates, shared context, and shipped work.</p>
+  <p><a href="${url}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:6px">Accept the invite →</a></p>
+  <p style="font-size:12px;color:#666">This link will auto-grant you the right role as soon as you finish signing up.</p>
+  <p>— The FounderOS team</p>
+</body>
+</html>`;
+}

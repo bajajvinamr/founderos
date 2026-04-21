@@ -5,8 +5,9 @@
 import { slackOAuthConfig } from "./slack.js";
 import { hubspotOAuthConfig } from "./hubspot.js";
 import { linkedinOAuthConfig } from "./linkedin.js";
+import { notionOAuthConfig } from "./notion.js";
 
-export type OAuthKind = "slack" | "hubspot" | "linkedin";
+export type OAuthKind = "slack" | "hubspot" | "linkedin" | "notion";
 
 export type OAuthProviderConfig = {
   kind: OAuthKind;
@@ -33,6 +34,7 @@ const OAUTH_PROVIDERS: Record<OAuthKind, OAuthProviderConfig> = {
   slack: slackOAuthConfig,
   hubspot: hubspotOAuthConfig,
   linkedin: linkedinOAuthConfig,
+  notion: notionOAuthConfig,
 };
 
 export function getOAuthProvider(kind: OAuthKind): OAuthProviderConfig {

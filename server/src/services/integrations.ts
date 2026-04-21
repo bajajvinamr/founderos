@@ -23,6 +23,7 @@ import {
 import type { Integration } from "@founderos/shared";
 import { syncPostHog } from "./posthog-sync.js";
 import { syncHubspot } from "./hubspot-sync.js";
+import { syncNotion } from "./notion-sync.js";
 import { createSlackClient } from "./slack-client.js";
 import { logger } from "../middleware/logger.js";
 
@@ -139,6 +140,17 @@ export function integrationService(db: Db) {
         decryptedApiKey: input.apiKey.trim(),
       }).catch((err: unknown) => {
         logger.error({ err, integrationId: row.id }, "hubspot-sync fire-and-forget failed");
+      });
+    }
+
+    if (input.kind === "notion") {
+      void syncNotion({
+        db,
+        integrationId: row.id,
+        companyId,
+        decryptedApiKey: input.apiKey.trim(),
+      }).catch((err: unknown) => {
+        logger.error({ err, integrationId: row.id }, "notion-sync fire-and-forget failed");
       });
     }
 

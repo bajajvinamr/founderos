@@ -12,7 +12,7 @@ const STATE_TTL_SECONDS = 600;
 
 export type OAuthStatePayload = {
   companyId: string;
-  kind: "slack" | "hubspot" | "linkedin";
+  kind: "slack" | "hubspot" | "linkedin" | "notion";
   returnUrl: string;
   nonce: string;
   issuedAt: number;

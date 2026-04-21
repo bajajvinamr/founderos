@@ -3,171 +3,299 @@ title: Self-host on Fly.io
 summary: Deploy a single-tenant FounderOS instance to Fly.io in minutes
 ---
 
-FounderOS uses a **one Fly app per customer** model. Each instance gets its own Fly app, its own persistent volume, and its own secrets. This page walks through a full provision and deploy.
+FounderOS uses a **one Fly app per customer** model. Each instance gets its own Fly app, persistent volume, and isolated secrets. This guide walks you through a complete provision and first deploy.
 
 ## Prerequisites
 
-- **flyctl** installed — `brew install flyctl` or see [fly.io/docs/flyctl/install](https://fly.io/docs/flyctl/install/)
-- A Fly.io account — `fly auth login`
-- A Postgres database URL — Fly Managed Postgres, [Supabase](https://supabase.com), or [Neon](https://neon.tech) all work
+- **flyctl CLI** — [Install](https://fly.io/docs/flyctl/install/) via `brew install flyctl` (macOS) or download
+- **Fly.io account** — Sign up at [fly.io](https://fly.io), then log in locally
+- **Postgres database** — Use Fly Managed Postgres, [Supabase](https://supabase.com), [Neon](https://neon.tech), or any Postgres host
+- **This repo** — Clone and cd to the repo root
 
-## 1. Provision the app
-
-Run the provisioning script from the root of the repo:
-
-```bash
-./scripts/fly-provision.sh <your-slug> --db-url <postgres-url>
-```
-
-**Example:**
+## Step 1: Set up Fly CLI
 
 ```bash
-./scripts/fly-provision.sh acme-corp \
-  --db-url "postgres://user:pass@db.supabase.co:5432/postgres"
+# Install flyctl (if not already installed)
+brew install flyctl   # macOS
+# or visit fly.io/docs/flyctl/install for other OSes
+
+# Log in to your Fly.io account
+fly auth login
+
+# Verify login
+fly auth whoami
 ```
 
-What the script does:
+## Step 2: Prepare your database
 
-1. Creates a Fly app named `founderos-<slug>`
-2. Attaches a 3 GB persistent volume (for instance config, secrets key, workspace state)
-3. Sets `DATABASE_URL` and generates a random `FOUNDEROS_SECRETS_MASTER_KEY`
-4. Runs an initial `fly deploy`
-5. Prints the public URL
+You need a Postgres database connection string in the format:
+```
+postgres://username:password@hostname:5432/database
+```
+
+**Option A: Fly Managed Postgres (recommended for simplicity)**
+
+Create a managed database in the same region as your app (e.g., Mumbai `bom`):
+
+```bash
+fly postgres create --name founderos-db --region bom --initial-cluster-machine-count 1
+```
+
+This outputs a connection string. Save it for the next step.
+
+**Option B: Supabase (if you already have a Supabase project)**
+
+Copy your connection string from Supabase dashboard: Project Settings → Database → Connection string → URI.
+
+**Option C: Self-hosted or other Postgres host**
+
+Have your connection string ready.
+
+## Step 3: Run the provisioning script
+
+From the repo root, run:
+
+```bash
+export DATABASE_URL="postgres://user:password@hostname:5432/database"
+./scripts/fly-provision.sh my-company
+```
+
+Replace `my-company` with your customer slug (kebab-case, will become `founderos-my-company`).
+
+**What the script does:**
+1. Creates a Fly app named `founderos-my-company`
+2. Attaches a 3 GB persistent volume at `/founderos`
+3. Sets the `DATABASE_URL` secret (auto-migrates DB on startup)
+4. Generates and sets `FOUNDEROS_SECRETS_MASTER_KEY` (encryption key)
+5. Deploys the app
+6. Prints the live URL
+
+**Example with Claude API enabled:**
+
+```bash
+export DATABASE_URL="postgres://user:pass@db.example.com/founderos"
+export ANTHROPIC_API_KEY="sk-ant-..."
+./scripts/fly-provision.sh acme-corp
+```
+
+The script will automatically pass `ANTHROPIC_API_KEY` to the deployed app.
 
 **Options:**
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--region` | `bom` (Mumbai) | Fly region — pick one close to your DB primary |
-| `--memory` | `1gb` | VM memory |
-| `--volume` | `3` (GB) | Persistent volume size |
-| `--no-deploy` | — | Stage secrets only; skip deploy |
+| Flag | Default | Example |
+|------|---------|---------|
+| `--region` | `bom` (Mumbai) | `--region sin` (Singapore) — pick close to your DB |
+| `--memory` | `1gb` | `--memory 2gb` — increase if needed |
+| `--volume` | `3` (GB) | `--volume 5` — adjust persistent volume size |
+| `--no-deploy` | Deploy immediately | `--no-deploy` — stage only, deploy later with `fly deploy` |
 
-If you want to set secrets before deploying, use `--no-deploy` and run `fly deploy` manually when ready.
-
-## 2. First deploy
-
-If you used `--no-deploy` or want to redeploy from source:
+**Example with custom options:**
 
 ```bash
-fly deploy --app founderos-<slug>
+./scripts/fly-provision.sh acme-corp \
+  --region sin \
+  --memory 2gb \
+  --volume 5 \
+  --no-deploy
 ```
 
-Migrations run automatically on boot — no manual migration step needed.
+Then deploy when ready:
+```bash
+fly deploy --app founderos-acme-corp
+```
 
-The app will be live at `https://founderos-<slug>.fly.dev`.
+## Step 4: Wait for the app to start
 
-## 3. Smoke test
-
-After deploy, validate the instance:
+Fly.io starts a machine automatically. This takes 30–60 seconds. Monitor:
 
 ```bash
-./scripts/fly-smoke.sh founderos-<slug>
+fly status --app founderos-my-company
+fly logs --app founderos-my-company --follow
 ```
 
-Or pass the full URL:
+Once you see "Server running on..." in the logs, the app is ready.
+
+## Step 5: Verify the deployment
+
+Check the three health endpoints:
 
 ```bash
-./scripts/fly-smoke.sh https://founderos-acme-corp.fly.dev
+# Liveness (should return 200)
+curl https://founderos-my-company.fly.dev/api/healthz
+
+# Readiness (confirms DB connection + auth is ready)
+curl https://founderos-my-company.fly.dev/api/readyz
+
+# Full status (JSON with provider info, versions, etc.)
+curl https://founderos-my-company.fly.dev/api/health | jq .
 ```
 
-The smoke script checks:
+If all three return 200, your deployment is live.
 
-- `/api/healthz` — liveness (should be 200)
-- `/api/readyz` — readiness + DB connectivity
-- `/api/auth/config` — auth provider detected
-- `/api/templates` — at least 3 templates returned
-- `/api/providers` — provider availability report
-- Template spawn round-trip (if any provider is configured)
+## Step 6: Access the app
 
-Exit code 0 means all checks passed.
+Open in your browser:
+```
+https://founderos-my-company.fly.dev
+```
 
-## 4. Ongoing deploys
+You'll see a login page (Better Auth is the default auth provider). Sign up to create the first account.
+
+## Adding more secrets and features
+
+### Enable Claude
+
+If you didn't set `ANTHROPIC_API_KEY` during provisioning, add it now:
 
 ```bash
-fly deploy --app founderos-<slug>
+fly secrets set ANTHROPIC_API_KEY="sk-ant-..." --app founderos-my-company
 ```
 
-Deploys are rolling (configured in `fly.toml`). The app auto-migrates on startup.
+Restart the app to pick up the secret:
+```bash
+fly deploy --app founderos-my-company
+```
 
-## 5. Secrets management
-
-Set secrets with `fly secrets set`. They're available as env vars at runtime.
-
-**Required:**
+### Enable email (Resend)
 
 ```bash
-fly secrets set DATABASE_URL="postgres://..." --app founderos-<slug>
-fly secrets set FOUNDEROS_SECRETS_MASTER_KEY="<base64-32-bytes>" --app founderos-<slug>
+fly secrets set RESEND_API_KEY="re_..." --app founderos-my-company
 ```
 
-**Optional (pass-through from environment):**
+Then set the sender email in `fly.toml` and redeploy, or use:
+```bash
+fly config set EMAIL_FROM="noreply@mycompany.com" --app founderos-my-company
+```
+
+### Enable OpenAI
 
 ```bash
-fly secrets set ANTHROPIC_API_KEY="sk-ant-..." --app founderos-<slug>
-fly secrets set OPENAI_API_KEY="sk-..." --app founderos-<slug>
-fly secrets set GEMINI_API_KEY="..." --app founderos-<slug>
-
-# If using Clerk for auth:
-fly secrets set CLERK_SECRET_KEY="sk_live_..." --app founderos-<slug>
-fly secrets set CLERK_PUBLISHABLE_KEY="pk_live_..." --app founderos-<slug>
+fly secrets set OPENAI_API_KEY="sk-..." --app founderos-my-company
 ```
 
-The provisioning script automatically picks up these from your local environment if they're set — so `export ANTHROPIC_API_KEY=...` before running `fly-provision.sh` and it'll be staged automatically.
-
-List current secrets (names only, not values):
+### Check what secrets are set
 
 ```bash
-fly secrets list --app founderos-<slug>
+fly secrets list --app founderos-my-company
 ```
 
-## 6. Persistent volume
+Shows secret names only (not values, for security).
 
-The 3 GB volume at `/founderos` persists across deploys and restarts. It holds:
+## Making the app public (internet-facing)
 
-- Instance config (`config.json`)
-- Encrypted secrets master key
-- Agent workspace data
-- Session state for Claude / Codex / Gemini adapters
+By default, the app is `private` — accessible only via the Fly URL with login required.
 
-The volume is created in the region you specify. Keep it in the same region as your DB to minimize latency.
+To enable public access (no login, anyone can use it):
 
-## 7. Deployment mode
-
-By default, the Fly deploy uses `authenticated` + `private` mode (see `fly.toml`). This means:
-
-- Login is required (Better Auth)
-- The app binds to all interfaces
-- You access it over the public Fly URL
-
-To make it fully public (internet-facing, with explicit URL), update `fly.toml`:
-
+Edit `fly.toml`:
 ```toml
 [env]
   FOUNDEROS_DEPLOYMENT_MODE = "authenticated"
   FOUNDEROS_DEPLOYMENT_EXPOSURE = "public"
-  FOUNDEROS_PUBLIC_URL = "https://founderos-<slug>.fly.dev"
+  FOUNDEROS_PUBLIC_URL = "https://founderos-my-company.fly.dev"
 ```
 
-Then redeploy.
+Then redeploy:
+```bash
+fly deploy --app founderos-my-company
+```
 
-## 8. Single-tenant model
+For more details, see [fly-envs.md](./fly-envs.md) — exhaustive reference of all environment variables.
 
-One Fly app per customer is the recommended pattern. Benefits:
+## Deploying updates
 
-- Complete data isolation — no shared DB, no shared volume
-- Independent deploys — upgrade one customer without touching others
-- Simple billing — each app maps to one Fly billing entity
-- Easy teardown — `fly apps destroy founderos-<slug>` removes everything
+Whenever you push new code, redeploy with:
 
-When to move to shared infra: once you have more than ~5 customers and operational overhead of N separate apps becomes a problem. At that point, switch to a single app with multi-tenant DB isolation and shared volumes.
+```bash
+fly deploy --app founderos-my-company
+```
 
-## Health endpoints
+The deployment is rolling — old machines shut down gracefully after new ones start. Database migrations run automatically on boot.
 
-| Endpoint | Purpose | Interval |
-|---|---|---|
-| `/api/healthz` | Liveness — process alive | 5s |
-| `/api/readyz` | Readiness — DB + auth ready | 30s |
-| `/api/health` | Rich status JSON | On demand |
+## Monitoring and logs
 
-Fly monitors both liveness and readiness automatically (configured in `fly.toml`). If readiness fails, Fly stops routing traffic to that machine until it recovers.
+View live logs:
+```bash
+fly logs --app founderos-my-company --follow
+```
+
+View app status:
+```bash
+fly status --app founderos-my-company
+```
+
+Check specific errors:
+```bash
+fly logs --app founderos-my-company --level err
+```
+
+## Persistent volume
+
+The 3 GB volume at `/founderos` survives deploys and machine restarts. It contains:
+- Instance config and settings
+- Encrypted secrets (including the master encryption key)
+- Agent workspace and session state
+- Database backups (if enabled)
+
+It's automatically backed up by Fly's Postgres backup system if you're using Fly Managed Postgres.
+
+## Single-tenant model: benefits & scaling
+
+**Benefits of one app per customer:**
+- Complete data isolation (separate DB, separate volume, separate secrets)
+- Independent deploys — upgrade one customer without affecting others
+- Transparent pricing — each app maps to one Fly billing entity
+- Simple teardown — `fly apps destroy founderos-my-company` removes everything
+
+**When to move to multi-tenant:**
+Once you have 5+ customers, running N Fly apps becomes operationally heavy. At that point, consider:
+- One Fly app with multi-tenant database schema (row-level isolation)
+- Shared persistent volume
+- Better per-customer resource allocation
+
+For now, single-tenant is the recommended pattern.
+
+## Health checks & monitoring
+
+Fly automatically monitors two health check endpoints (configured in `fly.toml`):
+
+| Endpoint | Check Type | Interval |
+|----------|-----------|----------|
+| `/api/healthz` | Liveness — is the process alive? | Every 5s |
+| `/api/readyz` | Readiness — is the DB accessible + auth ready? | Every 30s |
+
+If readiness fails, Fly temporarily stops routing traffic until it recovers.
+
+You can manually check the rich status JSON anytime:
+```bash
+curl https://founderos-my-company.fly.dev/api/health | jq .
+```
+
+## Troubleshooting
+
+**App won't start / readiness check fails:**
+```bash
+fly logs --app founderos-my-company --follow
+curl https://founderos-my-company.fly.dev/api/readyz -v
+```
+Check for `DATABASE_URL` or encryption key issues in the logs.
+
+**"DATABASE_URL not set" error:**
+```bash
+fly secrets list --app founderos-my-company
+fly secrets set DATABASE_URL="postgres://..." --app founderos-my-company
+fly deploy --app founderos-my-company
+```
+
+**Provider not available (Claude, OpenAI, etc.):**
+```bash
+fly secrets list --app founderos-my-company | grep ANTHROPIC_API_KEY
+curl https://founderos-my-company.fly.dev/api/health | jq '.providers'
+```
+
+**Need to view a secret value (e.g., to verify it was set correctly):**
+```bash
+fly secrets show DATABASE_URL --app founderos-my-company
+```
+
+For more help, see [fly-envs.md](./fly-envs.md) for complete environment variable reference.

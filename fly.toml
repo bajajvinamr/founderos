@@ -1,16 +1,17 @@
 # FounderOS — Fly.io deployment config
 #
-# One-time setup:
-#   fly launch --no-deploy --copy-config
-#   fly secrets set DATABASE_URL="postgresql://..."
-#   fly secrets set CLAUDE_CODE_OAUTH_TOKEN="..."   # if running in headless bot mode
-#   fly volumes create founderos_data --region bom --size 3
+# Provisioning a new customer (automated via scripts/fly-provision.sh):
+#   ./scripts/fly-provision.sh <slug> --db-url <postgres-url>
+#   - Creates a Fly app named founderos-<slug>
+#   - Attaches a 3gb persistent volume (founderos_data)
+#   - Sets DATABASE_URL and FOUNDEROS_SECRETS_MASTER_KEY secrets
+#   - Deploys the app
 #
-# Deploy:
-#   fly deploy
+# Manual deployment (after provisioning):
+#   fly deploy --app founderos-<slug>
 #
-# Single-tenant model: one fly app per customer. Upgrade to a shared-infra
-# deploy pattern once you have >5 customers.
+# See: docs/deploy/self-host-fly.mdx for full walkthrough
+# See: docs/deploy/fly-envs.md for environment variable reference
 
 app = "founderos"
 primary_region = "bom"   # Mumbai — closest to Supabase primary if you're using Mumbai region

@@ -95,4 +95,10 @@ Re-run `npx founderos onboard` — it's idempotent and won't wipe existing confi
   <Card title="Self-host on Fly.io" href="/deploy/self-host-fly">
     Run FounderOS in the cloud, one app per customer
   </Card>
+  <Card title="User Guide" href="/runbooks/user-guide">
+    Day-to-day: hiring agents, decision inbox, weekly wrap, integrations
+  </Card>
+  <Card title="Admin Guide" href="/runbooks/admin-guide">
+    For the instance operator: invites, backups, migrations, upgrades
+  </Card>
 </CardGroup>
