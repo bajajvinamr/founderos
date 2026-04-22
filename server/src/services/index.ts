@@ -113,6 +113,27 @@ export {
   type SlackPostMessageResult,
 } from "./skills/slack-post-message.js";
 export {
+  executeHubspotCreateContact,
+  HUBSPOT_CREATE_CONTACT_SKILL_NAME,
+  type HubspotCreateContactInput,
+  type HubspotCreateContactContext,
+  type HubspotCreateContactResult,
+} from "./skills/hubspot-create-contact.js";
+export {
+  executeHubspotLogNote,
+  HUBSPOT_LOG_NOTE_SKILL_NAME,
+  type HubspotLogNoteInput,
+  type HubspotLogNoteContext,
+  type HubspotLogNoteResult,
+} from "./skills/hubspot-log-note.js";
+export {
+  executeHubspotMoveDeal,
+  HUBSPOT_MOVE_DEAL_SKILL_NAME,
+  type HubspotMoveDealInput,
+  type HubspotMoveDealContext,
+  type HubspotMoveDealResult,
+} from "./skills/hubspot-move-deal.js";
+export {
   postWeeklyWrapToSlack,
   type WeeklyWrapPosterParams,
   type WeeklyWrapPosterResult,

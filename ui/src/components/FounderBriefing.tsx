@@ -168,6 +168,7 @@ export function FounderBriefing({
           {isEndOfWeek() && (
             <Link
               to="/weekly"
+              data-tour="weekly-wrap"
               className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground no-underline transition-colors"
             >
               Read this week&apos;s wrap
@@ -208,7 +209,7 @@ function DecisionColumn({
   budgetIncidents: number;
 }) {
   return (
-    <div>
+    <div data-tour="decisions">
       <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground mb-3">
         <Flame className="h-3 w-3" />
         Needs your call

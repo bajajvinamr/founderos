@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
 import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { approvalsApi } from "../api/approvals";
+import { weeklyWrapsApi, type WeeklyWrap as StoredWeeklyWrap } from "../api/weekly-wraps";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useDialog } from "../context/DialogContext";
@@ -34,8 +35,33 @@ export function WeeklyWrap() {
   const { selectedCompanyId, companies } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { openNewIssue } = useDialog();
+  const queryClient = useQueryClient();
   const [nextWeekBrief, setNextWeekBrief] = useState("Next week, let's focus on…");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Stored wraps (Wave 18B) — the auto-delivery cron writes here every Friday 5pm.
+  const { data: storedWraps } = useQuery({
+    queryKey: ["weekly-wraps", selectedCompanyId ?? "none"],
+    queryFn: () => weeklyWrapsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const generateNow = useMutation({
+    mutationFn: () => weeklyWrapsApi.generateNow(selectedCompanyId!),
+    onSuccess: () => {
+      if (selectedCompanyId) {
+        void queryClient.invalidateQueries({
+          queryKey: ["weekly-wraps", selectedCompanyId],
+        });
+      }
+    },
+  });
+
+  const currentStoredWrap: StoredWeeklyWrap | null = useMemo(() => {
+    if (!storedWraps || storedWraps.length === 0) return null;
+    // API returns newest first.
+    return storedWraps[0];
+  }, [storedWraps]);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Weekly wrap" }]);
@@ -231,6 +257,38 @@ export function WeeklyWrap() {
 
       <Divider />
 
+      {/* ── Section 0: CoS narrative (Wave 18B) ── */}
+      <Section title="Chief of Staff narrative">
+        {currentStoredWrap ? (
+          <StoredWrapView wrap={currentStoredWrap} />
+        ) : (
+          <div className="rounded-lg border border-dashed border-border bg-card p-5">
+            <p className="text-[14px] text-foreground/70 leading-[1.6]">
+              No wrap written yet for this week. The Chief of Staff auto-writes
+              one every Friday at 5pm and posts it to Slack + email. Want it
+              now?
+            </p>
+            <div className="mt-3 flex justify-end">
+              <button
+                disabled={!selectedCompanyId || generateNow.isPending}
+                onClick={() => generateNow.mutate()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-[13px] font-medium text-foreground hover:border-foreground/30 hover:bg-accent/40 transition-colors disabled:opacity-50"
+              >
+                {generateNow.isPending ? "Writing…" : "Generate now"}
+              </button>
+            </div>
+            {generateNow.isError ? (
+              <p className="mt-2 text-[12px] text-destructive">
+                Couldn't generate the wrap. Check your Anthropic API key in
+                Instance → Providers.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </Section>
+
+      <Divider />
+
       {/* ── Section 1: The numbers ── */}
       <Section title="The numbers">
         <WeekStatCards
@@ -339,6 +397,53 @@ function Section({
 
 function Divider() {
   return <hr className="border-t border-border/60" />;
+}
+
+function StoredWrapView({ wrap }: { wrap: StoredWeeklyWrap }) {
+  const paragraphs = wrap.narrative
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const weekEnding = new Date(wrap.weekEndingAt);
+  const dateLabel = weekEnding.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const deliveryBits: string[] = [];
+  if (wrap.deliveredToSlackAt) deliveryBits.push("Posted to Slack");
+  if (wrap.deliveredToEmailAt) deliveryBits.push("Emailed to the team");
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground mb-2">
+        Week ending {dateLabel}
+      </div>
+      <div className="space-y-3 text-[14px] text-foreground/90 leading-[1.7]">
+        {paragraphs.map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+      </div>
+      {wrap.highlights.length > 0 ? (
+        <div className="mt-4 border-t border-border pt-3">
+          <div className="text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground mb-2">
+            Highlights
+          </div>
+          <ul className="space-y-1 text-[13px] text-foreground/80">
+            {wrap.highlights.map((h, i) => (
+              <li key={i} className="leading-[1.5]">
+                · {h.title}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {deliveryBits.length > 0 ? (
+        <div className="mt-3 text-[11px] text-muted-foreground">
+          {deliveryBits.join(" · ")}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function buildSubLine(

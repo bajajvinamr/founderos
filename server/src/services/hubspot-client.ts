@@ -1,9 +1,15 @@
 /**
  * Thin HubSpot CRM API client — native fetch, no SDK dependency.
  *
- * Implements only the surface needed for the CRM Pipeline console:
+ * Read surface (CRM Pipeline console):
  *   - getDealPipelines()  — pipeline definitions including stage probabilities
  *   - getDeals()          — paginated deal objects (up to MAX_DEALS total)
+ *
+ * Write surface (Wave 18A — agent actions):
+ *   - createContact()         — POST /crm/v3/objects/contacts
+ *   - createNote()            — POST /crm/v3/objects/notes
+ *   - associateNoteToContact()— PUT  /crm/v3/objects/notes/{noteId}/associations/contacts/{contactId}/note_to_contact
+ *   - updateDealStage()       — PATCH /crm/v3/objects/deals/{dealId}
  *
  * All requests carry a 10-second timeout enforced via AbortController.
  * Pagination follows HubSpot's cursor pattern: paging.next.after.
@@ -54,9 +60,51 @@ export interface HubspotDeal {
   properties: HubspotDealProperties;
 }
 
+export interface HubspotContactProperties {
+  email?: string;
+  firstname?: string;
+  lastname?: string;
+  company?: string;
+  phone?: string;
+}
+
+export interface HubspotContact {
+  id: string;
+  properties: HubspotContactProperties & Record<string, string | null | undefined>;
+}
+
+export interface HubspotNote {
+  id: string;
+  properties: Record<string, string | null | undefined>;
+}
+
+export interface HubspotDealUpdateResponse {
+  id: string;
+  properties: Partial<HubspotDealProperties> & Record<string, string | null | undefined>;
+}
+
+export interface CreateContactInput {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  company?: string;
+  phone?: string;
+}
+
+export interface CreateNoteInput {
+  /** Note body (HubSpot expects `hs_note_body`). */
+  body: string;
+  /** Optional millis timestamp for `hs_timestamp`. Defaults to now. */
+  timestampMs?: number;
+}
+
 export interface HubspotClient {
   getDealPipelines(): Promise<HubspotPipeline[]>;
   getDeals(pipelineId?: string): Promise<HubspotDeal[]>;
+  createContact(input: CreateContactInput): Promise<HubspotContact>;
+  createNote(input: CreateNoteInput): Promise<HubspotNote>;
+  associateNoteToContact(noteId: string, contactId: string): Promise<void>;
+  updateDealStage(dealId: string, stageId: string): Promise<HubspotDealUpdateResponse>;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -168,5 +216,62 @@ export function createHubspotClient(config: HubspotConfig): HubspotClient {
     return deals;
   }
 
-  return { getDealPipelines, getDeals };
+  async function createContact(input: CreateContactInput): Promise<HubspotContact> {
+    const properties: HubspotContactProperties = { email: input.email };
+    if (input.firstName !== undefined) properties.firstname = input.firstName;
+    if (input.lastName !== undefined) properties.lastname = input.lastName;
+    if (input.company !== undefined) properties.company = input.company;
+    if (input.phone !== undefined) properties.phone = input.phone;
+
+    return apiFetch<HubspotContact>("/crm/v3/objects/contacts", {
+      method: "POST",
+      body: JSON.stringify({ properties }),
+    });
+  }
+
+  async function createNote(input: CreateNoteInput): Promise<HubspotNote> {
+    const properties: Record<string, string> = {
+      hs_note_body: input.body,
+      hs_timestamp: String(input.timestampMs ?? Date.now()),
+    };
+
+    return apiFetch<HubspotNote>("/crm/v3/objects/notes", {
+      method: "POST",
+      body: JSON.stringify({ properties }),
+    });
+  }
+
+  async function associateNoteToContact(
+    noteId: string,
+    contactId: string,
+  ): Promise<void> {
+    // Default association type for note→contact is `note_to_contact`.
+    // Using the v3 "default" association endpoint (no body required).
+    await apiFetch<unknown>(
+      `/crm/v3/objects/notes/${encodeURIComponent(noteId)}/associations/default/contacts/${encodeURIComponent(contactId)}`,
+      { method: "PUT" },
+    );
+  }
+
+  async function updateDealStage(
+    dealId: string,
+    stageId: string,
+  ): Promise<HubspotDealUpdateResponse> {
+    return apiFetch<HubspotDealUpdateResponse>(
+      `/crm/v3/objects/deals/${encodeURIComponent(dealId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ properties: { dealstage: stageId } }),
+      },
+    );
+  }
+
+  return {
+    getDealPipelines,
+    getDeals,
+    createContact,
+    createNote,
+    associateNoteToContact,
+    updateDealStage,
+  };
 }

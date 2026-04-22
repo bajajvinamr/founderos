@@ -37,6 +37,8 @@ import { agentReviewRoutes } from "./routes/agent-reviews.js";
 import { companyProviderRoutes } from "./routes/company-providers.js";
 import { decisionOutcomeRoutes } from "./routes/decision-outcomes.js";
 import { createDecisionFollowupCron } from "./services/decision-followup-cron.js";
+import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
+import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
 import { billingRoutes } from "./routes/billing.js";
 import { hireProposalRoutes } from "./routes/hire-proposal.js";
 import { llmRoutes } from "./routes/llms.js";
@@ -266,6 +268,7 @@ export async function createApp(
   api.use(agentReviewRoutes(db));
   api.use(companyProviderRoutes(db));
   api.use(decisionOutcomeRoutes(db));
+  api.use(weeklyWrapRoutes(db));
   api.use(permissionCoachRoutes(db));
   api.use("/billing", billingRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
@@ -419,6 +422,15 @@ export async function createApp(
   }).start();
   const decisionFollowupCron = createDecisionFollowupCron({ db });
   decisionFollowupCron.start();
+  const weeklyWrapDeliveryCron = createWeeklyWrapDeliveryCron({
+    db,
+    emailSender: createEmailSender({
+      apiKey: process.env.RESEND_API_KEY,
+      fromAddress: process.env.EMAIL_FROM,
+    }),
+    publicUrl: process.env.FOUNDEROS_PUBLIC_URL,
+  });
+  weeklyWrapDeliveryCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       void opts.feedbackExportService?.flushPendingFeedbackTraces().catch((err) => {
@@ -454,6 +466,7 @@ export async function createApp(
   process.once("exit", () => {
     if (feedbackExportTimer) clearInterval(feedbackExportTimer);
     decisionFollowupCron.stop();
+    weeklyWrapDeliveryCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();

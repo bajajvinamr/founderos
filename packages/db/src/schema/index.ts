@@ -70,3 +70,8 @@ export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";
 export { decisionOutcomes } from "./decision_outcomes.js";
 export { conversations, type ExtractedInsight } from "./conversations.js";
+export {
+  weeklyWraps,
+  type WeeklyWrapHighlight,
+  type WeeklyWrapMetrics,
+} from "./weekly_wraps.js";

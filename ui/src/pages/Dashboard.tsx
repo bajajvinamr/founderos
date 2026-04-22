@@ -7,6 +7,7 @@ import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
 import { heartbeatsApi } from "../api/heartbeats";
+import { authApi } from "../api/auth";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -31,6 +32,7 @@ import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle }
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { ProductTour } from "../components/ProductTour";
 import type { Agent, Issue } from "@founderos/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
@@ -47,6 +49,12 @@ export function Dashboard() {
   const seenActivityIdsRef = useRef<Set<string>>(new Set());
   const hydratedActivityRef = useRef(false);
   const activityAnimationTimersRef = useRef<number[]>([]);
+
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+    retry: false,
+  });
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -193,6 +201,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {session?.user?.id && selectedCompanyId && (
+        <ProductTour userId={session.user.id} companyId={selectedCompanyId} />
+      )}
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       {/* The Morning Brief — what a founder actually wants in their first 30
@@ -211,8 +222,12 @@ export function Dashboard() {
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
       {selectedCompanyId && <PendingOutcomesBanner companyId={selectedCompanyId} />}
       <PermissionCoachCard companyId={selectedCompanyId} />
-      <CompanyMemoryCard companyId={selectedCompanyId} />
-      <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
+      <div data-tour="memory">
+        <CompanyMemoryCard companyId={selectedCompanyId} />
+      </div>
+      <div data-tour="departments">
+        <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
+      </div>
 
       {hasNoAgents && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-950/60">
