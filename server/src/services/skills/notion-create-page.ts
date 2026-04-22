@@ -1,0 +1,231 @@
+/**
+ * Skill: `notion.create_page`
+ *
+ * Creates a Notion page on behalf of an agent, gated by the agent's
+ * permission level. Mirrors the `hubspot.create_contact` and
+ * `slack.post_message` patterns.
+ */
+
+import { and, eq } from "drizzle-orm";
+import type { Db } from "@founderos/db";
+import { integrations, approvals } from "@founderos/db";
+import type { AgentPermissionLevel } from "@founderos/shared";
+import { createNotionClient, NotionAuthError } from "../notion-client.js";
+import { logActivity } from "../activity-log.js";
+import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
+import { logger } from "../../middleware/logger.js";
+
+export const NOTION_CREATE_PAGE_SKILL_NAME = "notion.create_page" as const;
+
+export interface NotionCreatePageSkillInput {
+  parentPageId?: string;
+  parentDatabaseId?: string;
+  title: string;
+  bodyMarkdown?: string;
+}
+
+export interface NotionCreatePageContext {
+  db: Db;
+  companyId: string;
+  permissionLevel: AgentPermissionLevel;
+  agentId?: string | null;
+  runId?: string | null;
+}
+
+export type NotionCreatePageResult =
+  | { ok: true; status: "created"; pageId: string; url: string }
+  | { ok: true; status: "pending_approval"; approvalId: string }
+  | { ok: false; reason: "no_integration"; message: string }
+  | { ok: false; reason: "notion_error"; message: string };
+
+function validateInput(input: NotionCreatePageSkillInput): void {
+  if (!input.parentPageId && !input.parentDatabaseId) {
+    throw new Error("notion.create_page: `parentPageId` or `parentDatabaseId` is required");
+  }
+  if (typeof input.title !== "string" || input.title.trim().length === 0) {
+    throw new Error("notion.create_page: `title` is required");
+  }
+  if (input.bodyMarkdown !== undefined && typeof input.bodyMarkdown !== "string") {
+    throw new Error("notion.create_page: `bodyMarkdown` must be a string when provided");
+  }
+}
+
+async function createPendingApproval(params: {
+  db: Db;
+  companyId: string;
+  agentId?: string | null;
+  input: NotionCreatePageSkillInput;
+  integrationId: string;
+}): Promise<string> {
+  const { db, companyId, agentId, input, integrationId } = params;
+  const [row] = await db
+    .insert(approvals)
+    .values({
+      companyId,
+      type: "notion.create_page",
+      requestedByAgentId: agentId ?? null,
+      status: "pending",
+      payload: {
+        skill: NOTION_CREATE_PAGE_SKILL_NAME,
+        integrationId,
+        parentPageId: input.parentPageId ?? null,
+        parentDatabaseId: input.parentDatabaseId ?? null,
+        title: input.title,
+        bodyMarkdown: input.bodyMarkdown ?? null,
+      },
+    })
+    .returning({ id: approvals.id });
+  return row.id;
+}
+
+export async function executeNotionCreatePage(
+  ctx: NotionCreatePageContext,
+  input: NotionCreatePageSkillInput,
+): Promise<NotionCreatePageResult> {
+  validateInput(input);
+
+  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+
+  if (permissionLevel === "observe") {
+    throw new Error(
+      `Observe mode: skill "${NOTION_CREATE_PAGE_SKILL_NAME}" is not permitted`,
+    );
+  }
+
+  const [integrationRow] = await db
+    .select()
+    .from(integrations)
+    .where(
+      and(
+        eq(integrations.companyId, companyId),
+        eq(integrations.kind, "notion"),
+      ),
+    );
+
+  if (!integrationRow) {
+    return {
+      ok: false,
+      reason: "no_integration",
+      message: "Notion integration is not connected for this company",
+    };
+  }
+
+  if (permissionLevel === "draft" || permissionLevel === "approve") {
+    const approvalId = await createPendingApproval({
+      db,
+      companyId,
+      agentId,
+      input,
+      integrationId: integrationRow.id,
+    });
+
+    await logActivity(db, {
+      companyId,
+      actorType: agentId ? "agent" : "system",
+      actorId: agentId ?? "system",
+      agentId: agentId ?? null,
+      runId: runId ?? null,
+      action: "notion.create_page_pending_approval",
+      entityType: "integration",
+      entityId: integrationRow.id,
+      details: {
+        skill: NOTION_CREATE_PAGE_SKILL_NAME,
+        approvalId,
+        title: input.title,
+        permissionLevel,
+      },
+    }).catch((err) => {
+      logger.error(
+        { err, companyId, approvalId },
+        "notion-create-page: failed to log pending approval activity",
+      );
+    });
+
+    return { ok: true, status: "pending_approval", approvalId };
+  }
+
+  if (permissionLevel !== "autonomous") {
+    throw new Error(
+      `Unknown permission level "${permissionLevel}" for skill "${NOTION_CREATE_PAGE_SKILL_NAME}"`,
+    );
+  }
+
+  if (!integrationRow.encryptedApiKey) {
+    return {
+      ok: false,
+      reason: "no_integration",
+      message: "Notion integration is missing its access token",
+    };
+  }
+
+  let accessToken: string;
+  try {
+    accessToken = decryptWithMasterKey(integrationRow.encryptedApiKey);
+  } catch (err) {
+    logger.error(
+      { err, companyId, integrationId: integrationRow.id },
+      "notion-create-page: failed to decrypt access token",
+    );
+    return { ok: false, reason: "notion_error", message: "Failed to decrypt Notion access token" };
+  }
+
+  const client = createNotionClient({ accessToken });
+
+  try {
+    const page = await client.createPage(input);
+
+    await logActivity(db, {
+      companyId,
+      actorType: agentId ? "agent" : "system",
+      actorId: agentId ?? "system",
+      agentId: agentId ?? null,
+      runId: runId ?? null,
+      action: "notion.create_page_executed",
+      entityType: "integration",
+      entityId: integrationRow.id,
+      details: {
+        skill: NOTION_CREATE_PAGE_SKILL_NAME,
+        pageId: page.id,
+        title: input.title,
+        permissionLevel,
+      },
+    }).catch((err) => {
+      logger.error(
+        { err, companyId, integrationId: integrationRow.id },
+        "notion-create-page: failed to log audit entry",
+      );
+    });
+
+    return { ok: true, status: "created", pageId: page.id, url: page.url };
+  } catch (err: unknown) {
+    const message =
+      err instanceof NotionAuthError
+        ? "Notion access token is invalid or expired"
+        : err instanceof Error
+          ? err.message
+          : "Unknown Notion error";
+
+    await logActivity(db, {
+      companyId,
+      actorType: agentId ? "agent" : "system",
+      actorId: agentId ?? "system",
+      agentId: agentId ?? null,
+      runId: runId ?? null,
+      action: "notion.create_page_failed",
+      entityType: "integration",
+      entityId: integrationRow.id,
+      details: {
+        skill: NOTION_CREATE_PAGE_SKILL_NAME,
+        title: input.title,
+        error: message,
+      },
+    }).catch(() => {});
+
+    logger.error(
+      { err, companyId, integrationId: integrationRow.id },
+      `notion-create-page: createPage failed — ${message}`,
+    );
+
+    return { ok: false, reason: "notion_error", message };
+  }
+}

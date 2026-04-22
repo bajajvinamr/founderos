@@ -134,6 +134,20 @@ export {
   type HubspotMoveDealResult,
 } from "./skills/hubspot-move-deal.js";
 export {
+  executeNotionCreatePage,
+  NOTION_CREATE_PAGE_SKILL_NAME,
+  type NotionCreatePageSkillInput,
+  type NotionCreatePageContext,
+  type NotionCreatePageResult,
+} from "./skills/notion-create-page.js";
+export {
+  executeNotionAppendBlock,
+  NOTION_APPEND_BLOCK_SKILL_NAME,
+  type NotionAppendBlockSkillInput,
+  type NotionAppendBlockContext,
+  type NotionAppendBlockResult,
+} from "./skills/notion-append-block.js";
+export {
   postWeeklyWrapToSlack,
   type WeeklyWrapPosterParams,
   type WeeklyWrapPosterResult,

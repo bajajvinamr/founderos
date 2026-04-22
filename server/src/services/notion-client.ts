@@ -66,9 +66,34 @@ export interface NotionSearchResponse {
   has_more: boolean;
 }
 
+export interface NotionCreatePageInput {
+  parentPageId?: string;
+  parentDatabaseId?: string;
+  title: string;
+  bodyMarkdown?: string;
+}
+
+export interface NotionAppendBlockInput {
+  pageId: string;
+  text: string;
+}
+
+export interface NotionCreatePageResponse {
+  object: "page";
+  id: string;
+  url: string;
+}
+
+export interface NotionAppendBlockResponse {
+  object: "list";
+  results: Array<{ id: string }>;
+}
+
 export interface NotionClient {
   getMe(): Promise<NotionUser>;
   searchPages(): Promise<NotionPage[]>;
+  createPage(input: NotionCreatePageInput): Promise<NotionCreatePageResponse>;
+  appendBlocks(input: NotionAppendBlockInput): Promise<NotionAppendBlockResponse>;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -161,5 +186,65 @@ export function createNotionClient(config: NotionConfig): NotionClient {
     return pages;
   }
 
-  return { getMe, searchPages };
+  function paragraphBlocksFromText(text: string) {
+    // Split on newlines; each line becomes a paragraph block. Empty lines are dropped.
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (lines.length === 0) return [{
+      object: "block",
+      type: "paragraph",
+      paragraph: { rich_text: [{ type: "text", text: { content: "" } }] },
+    }];
+    return lines.map((line) => ({
+      object: "block",
+      type: "paragraph",
+      paragraph: {
+        rich_text: [{ type: "text", text: { content: line } }],
+      },
+    }));
+  }
+
+  async function createPage(input: NotionCreatePageInput): Promise<NotionCreatePageResponse> {
+    if (!input.parentPageId && !input.parentDatabaseId) {
+      throw new Error("Notion createPage: parentPageId or parentDatabaseId is required");
+    }
+    const parent = input.parentDatabaseId
+      ? { database_id: input.parentDatabaseId }
+      : { page_id: input.parentPageId! };
+
+    const titleProp = {
+      title: [{ type: "text", text: { content: input.title } }],
+    };
+    const properties = input.parentDatabaseId
+      ? { Name: titleProp }
+      : { title: titleProp };
+
+    const children = input.bodyMarkdown ? paragraphBlocksFromText(input.bodyMarkdown) : undefined;
+
+    const body: Record<string, unknown> = { parent, properties };
+    if (children) body.children = children;
+
+    return apiFetch<NotionCreatePageResponse>("/pages", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function appendBlocks(input: NotionAppendBlockInput): Promise<NotionAppendBlockResponse> {
+    if (!input.pageId || input.pageId.trim().length === 0) {
+      throw new Error("Notion appendBlocks: pageId is required");
+    }
+    if (!input.text || input.text.trim().length === 0) {
+      throw new Error("Notion appendBlocks: text is required");
+    }
+    const body = { children: paragraphBlocksFromText(input.text) };
+    return apiFetch<NotionAppendBlockResponse>(
+      `/blocks/${encodeURIComponent(input.pageId)}/children`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    );
+  }
+
+  return { getMe, searchPages, createPage, appendBlocks };
 }
