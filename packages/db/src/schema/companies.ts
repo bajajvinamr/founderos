@@ -23,6 +23,8 @@ export type CompanyMetrics = {
   nextMilestoneLabel?: string;       // e.g. "Series A Q4"
   mauCount?: number;                 // monthly active users
   deltas?: Record<string, { dir: "up" | "down" | "flat"; text: string }>;
+  /** Channel ID to post Weekly Wrap into; empty = disabled. */
+  weeklyWrapSlackChannelId?: string;
 };
 
 export const companies = pgTable(

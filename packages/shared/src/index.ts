@@ -408,6 +408,7 @@ export type {
   AgentReview,
   AgentReviewRecommendation,
   AgentReviewSource,
+  PermissionCoachRecommendation,
 } from "./types/index.js";
 
 export {

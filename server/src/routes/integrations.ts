@@ -6,8 +6,11 @@ import {
   integrationService,
   logActivity,
   deliverMorningBriefToSlack,
+  createSlackClient,
+  SlackAuthError,
 } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { logger } from "../middleware/logger.js";
 
 export function integrationRoutes(db: Db) {
   const router = Router();
@@ -144,6 +147,68 @@ export function integrationRoutes(db: Db) {
           ok: false,
           error: result.error,
         });
+      }
+    },
+  );
+
+  /**
+   * GET /api/companies/:companyId/integrations/slack/channels
+   *
+   * List Slack channels the bot can access for the company's connected
+   * Slack integration. Powers the "Slack post target" dropdown in Company
+   * Settings.
+   *
+   * Spec note: Wave 17B originally specced this as
+   * `GET /api/integrations/slack/channels` (no company scope). Integrations
+   * are company-scoped in this codebase, so the route is nested under
+   * `/companies/:companyId` to reuse `assertCompanyAccess`. Same payload
+   * shape either way.
+   */
+  router.get(
+    "/companies/:companyId/integrations/slack/channels",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const integration = await integrations.getByKind(companyId, "slack");
+      if (!integration) {
+        res.status(404).json({ error: "Slack integration not connected" });
+        return;
+      }
+
+      const botToken = await integrations.getDecryptedApiKey(
+        companyId,
+        integration.id,
+      );
+      if (!botToken) {
+        res
+          .status(400)
+          .json({ error: "Failed to decrypt Slack bot token" });
+        return;
+      }
+
+      try {
+        const client = createSlackClient({ botToken });
+        const channels = await client.listChannels();
+        res.json({
+          channels: channels.map((ch) => ({
+            id: ch.id,
+            name: ch.name,
+            isMember: ch.isMember,
+            isPrivate: ch.isPrivate,
+          })),
+        });
+      } catch (err: unknown) {
+        if (err instanceof SlackAuthError) {
+          res.status(400).json({ error: "Slack bot token is invalid or expired" });
+          return;
+        }
+        const msg = err instanceof Error ? err.message : "Unknown Slack error";
+        logger.error(
+          { err, companyId, integrationId: integration.id },
+          `slack-channels: listChannels failed — ${msg}`,
+        );
+        res.status(502).json({ error: msg });
       }
     },
   );

@@ -1,4 +1,5 @@
 export type { Company, CompanyMetrics } from "./company.js";
+export type { PermissionCoachRecommendation } from "./permission-coach.js";
 export type {
   FeedbackVote,
   FeedbackDataSharingPreference,

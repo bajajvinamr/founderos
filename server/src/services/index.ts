@@ -61,6 +61,19 @@ export {
 } from "./anthropic-key-validator.js";
 export { integrationService } from "./integrations.js";
 export { companyMemoryService } from "./company-memory.js";
+export {
+  decisionOutcomeService,
+  type DecisionOutcomeRecord,
+  type OutcomeStatus,
+  type RecordOutcomeInput,
+} from "./decision-outcomes.js";
+export {
+  createDecisionFollowupCron,
+  DEFAULT_TICK_INTERVAL_MS as DECISION_FOLLOWUP_TICK_INTERVAL_MS,
+  DEFAULT_FOLLOWUP_DELAY_MS as DECISION_FOLLOWUP_DELAY_MS,
+  type DecisionFollowupCron,
+  type DecisionFollowupCronOptions,
+} from "./decision-followup-cron.js";
 export { syncPostHog, type SyncResult } from "./posthog-sync.js";
 export {
   createPostHogClient,
@@ -92,6 +105,18 @@ export {
   deliverMorningBriefToSlack,
   type DigestResult,
 } from "./slack-digest.js";
+export {
+  executeSlackPostMessage,
+  SLACK_POST_MESSAGE_SKILL_NAME,
+  type SlackPostMessageInput,
+  type SlackPostMessageContext,
+  type SlackPostMessageResult,
+} from "./skills/slack-post-message.js";
+export {
+  postWeeklyWrapToSlack,
+  type WeeklyWrapPosterParams,
+  type WeeklyWrapPosterResult,
+} from "./weekly-wrap-poster.js";
 export { templateExportService } from "./template-export.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";

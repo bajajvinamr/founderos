@@ -17,8 +17,10 @@ import { OnboardingWizardNew } from "../components/OnboardingWizardNew";
 import { CompanyPulseWidget } from "../components/CompanyPulseWidget";
 import { CompanyMemoryCard } from "../components/CompanyMemoryCard";
 import { CompanyProvidersWidget } from "../components/CompanyProvidersWidget";
+import { PendingOutcomesBanner } from "../components/PendingOutcomesBanner";
 import { FounderBriefing } from "../components/FounderBriefing";
 import { StatusIcon } from "../components/StatusIcon";
+import { PermissionCoachCard } from "../components/PermissionCoachCard";
 
 import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
@@ -207,6 +209,8 @@ export function Dashboard() {
       />
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
+      {selectedCompanyId && <PendingOutcomesBanner companyId={selectedCompanyId} />}
+      <PermissionCoachCard companyId={selectedCompanyId} />
       <CompanyMemoryCard companyId={selectedCompanyId} />
       <CompanyProvidersWidget companyId={selectedCompanyId ?? undefined} />
 

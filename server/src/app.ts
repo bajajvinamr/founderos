@@ -31,17 +31,22 @@ import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
+import { conversationRoutes } from "./routes/conversations.js";
 import { integrationDataRoutes } from "./routes/integration-data.js";
 import { agentReviewRoutes } from "./routes/agent-reviews.js";
 import { companyProviderRoutes } from "./routes/company-providers.js";
+import { decisionOutcomeRoutes } from "./routes/decision-outcomes.js";
+import { createDecisionFollowupCron } from "./services/decision-followup-cron.js";
 import { billingRoutes } from "./routes/billing.js";
 import { hireProposalRoutes } from "./routes/hire-proposal.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
+import { permissionCoachRoutes } from "./routes/permission-coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { byoKeyRoutes } from "./routes/byo-key.js";
+import { digestRoutes } from "./routes/digest.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -57,6 +62,8 @@ import { createPluginJobCoordinator } from "./services/plugin-job-coordinator.js
 import { buildHostServices, flushPluginLogBuffer } from "./services/plugin-host-services.js";
 import { createPluginEventBus } from "./services/plugin-event-bus.js";
 import { setPluginEventBus } from "./services/activity-log.js";
+import { createDailyDigestCron } from "./services/daily-digest-cron.js";
+import { createEmailSender } from "./services/email-sender.js";
 import { createPluginDevWatcher } from "./services/plugin-dev-watcher.js";
 import { createPluginHostServiceCleanup } from "./services/plugin-host-service-cleanup.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
@@ -254,9 +261,12 @@ export async function createApp(
   api.use(integrationRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
+  api.use(conversationRoutes(db));
   api.use(integrationDataRoutes(db));
   api.use(agentReviewRoutes(db));
   api.use(companyProviderRoutes(db));
+  api.use(decisionOutcomeRoutes(db));
+  api.use(permissionCoachRoutes(db));
   api.use("/billing", billingRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
@@ -323,6 +333,7 @@ export async function createApp(
   );
   api.use(adapterRoutes());
   api.use(byoKeyRoutes(db));
+  api.use(digestRoutes(db, { publicUrl: process.env.FOUNDEROS_PUBLIC_URL }));
   api.use(onboardingRoutes(db));
   api.use(
     accessRoutes(db, {
@@ -398,6 +409,16 @@ export async function createApp(
 
   jobCoordinator.start();
   scheduler.start();
+  createDailyDigestCron({
+    db,
+    emailSender: createEmailSender({
+      apiKey: process.env.RESEND_API_KEY,
+      fromAddress: process.env.EMAIL_FROM,
+    }),
+    publicUrl: process.env.FOUNDEROS_PUBLIC_URL,
+  }).start();
+  const decisionFollowupCron = createDecisionFollowupCron({ db });
+  decisionFollowupCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       void opts.feedbackExportService?.flushPendingFeedbackTraces().catch((err) => {
@@ -432,6 +453,7 @@ export async function createApp(
   });
   process.once("exit", () => {
     if (feedbackExportTimer) clearInterval(feedbackExportTimer);
+    decisionFollowupCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();

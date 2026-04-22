@@ -28,6 +28,12 @@ export interface CompanyMetrics {
    * unset so founders are gently pushed to fill it in.
    */
   charter?: string;
+  /**
+   * Slack channel ID to post the Weekly Wrap into, when the CoS agent has
+   * sufficient permission and a Slack integration is connected. Configured
+   * from Company Settings → "Slack post target".
+   */
+  weeklyWrapSlackChannelId?: string;
 }
 
 export interface Company {

@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { approvalsApi } from "../api/approvals";
 import { agentsApi } from "../api/agents";
+import { decisionOutcomesApi, type DecisionOutcome } from "../api/decision-outcomes";
+import { DecisionOutcomePrompt } from "../components/DecisionOutcomePrompt";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -50,6 +52,30 @@ export function ApprovalDetail() {
     queryKey: queryKeys.agents.list(resolvedCompanyId ?? ""),
     queryFn: () => agentsApi.list(resolvedCompanyId ?? ""),
     enabled: !!resolvedCompanyId,
+  });
+
+  const { data: outcomes } = useQuery({
+    queryKey: queryKeys.decisionOutcomes.forApproval(resolvedCompanyId ?? "", approvalId ?? ""),
+    queryFn: () => decisionOutcomesApi.listForApproval(resolvedCompanyId!, approvalId!),
+    enabled: !!resolvedCompanyId && !!approvalId,
+  });
+
+  const promoteMutation = useMutation({
+    mutationFn: (outcomeId: string) =>
+      decisionOutcomesApi.promote(resolvedCompanyId!, approvalId!, outcomeId),
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.decisionOutcomes.forApproval(
+          resolvedCompanyId ?? "",
+          approvalId ?? "",
+        ),
+      });
+      if (resolvedCompanyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.companyMemory.list(resolvedCompanyId) });
+      }
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Promote failed"),
   });
 
   useEffect(() => {
@@ -363,6 +389,117 @@ export function ApprovalDetail() {
           </Button>
         </div>
       </div>
+
+      {approval.status === "approved" && resolvedCompanyId && (
+        <DecisionOutcomeSection
+          outcomes={outcomes ?? []}
+          companyId={resolvedCompanyId}
+          approvalId={approvalId!}
+          onPromote={(outcomeId) => promoteMutation.mutate(outcomeId)}
+          promoting={promoteMutation.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Outcome section
+// ---------------------------------------------------------------------------
+
+interface DecisionOutcomeSectionProps {
+  outcomes: DecisionOutcome[];
+  companyId: string;
+  approvalId: string;
+  onPromote: (outcomeId: string) => void;
+  promoting: boolean;
+}
+
+function outcomeLabel(status: DecisionOutcome["outcomeStatus"]): string {
+  switch (status) {
+    case "worked":
+      return "Worked";
+    case "did_not_work":
+      return "Did not work";
+    case "unclear":
+      return "Unclear";
+    case "dropped":
+      return "Dropped";
+    case "pending_followup":
+      return "Awaiting follow-up";
+    default:
+      return status;
+  }
+}
+
+function DecisionOutcomeSection({
+  outcomes,
+  companyId,
+  approvalId,
+  onPromote,
+  promoting,
+}: DecisionOutcomeSectionProps) {
+  const answered = outcomes.find((o) => o.outcomeStatus !== "pending_followup") ?? null;
+  const pending = outcomes.find((o) => o.outcomeStatus === "pending_followup") ?? null;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-medium">Outcome</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Two weeks after approval, record what actually happened. Promoted outcomes become company memory.
+        </p>
+      </div>
+
+      {answered ? (
+        <div className="border border-border rounded-lg p-4 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">{outcomeLabel(answered.outcomeStatus)}</p>
+              <p className="text-xs text-muted-foreground">
+                Recorded {answered.answeredAt
+                  ? new Date(answered.answeredAt).toLocaleString()
+                  : "just now"}
+              </p>
+            </div>
+            {answered.memoryEntryId ? (
+              <span className="text-xs rounded-md border border-green-400/60 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-2 py-1">
+                In company memory
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onPromote(answered.id)}
+                disabled={promoting}
+              >
+                {promoting ? "Promoting…" : "Promote to Company Memory"}
+              </Button>
+            )}
+          </div>
+          {answered.metricDelta && (
+            <p className="text-sm">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide mr-2">Metric</span>
+              {answered.metricDelta}
+            </p>
+          )}
+          {answered.founderNote && (
+            <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+              {answered.founderNote}
+            </p>
+          )}
+        </div>
+      ) : pending ? (
+        <DecisionOutcomePrompt companyId={companyId} approvalId={approvalId} />
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            The follow-up prompt will appear here automatically about two weeks after approval.
+            Record an outcome early if you already know the result.
+          </p>
+          <DecisionOutcomePrompt companyId={companyId} approvalId={approvalId} />
+        </div>
+      )}
     </div>
   );
 }

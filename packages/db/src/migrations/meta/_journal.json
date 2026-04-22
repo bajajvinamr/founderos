@@ -456,6 +456,27 @@
       "when": 1777200000000,
       "tag": "0065_subscription",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1777300000000,
+      "tag": "0066_digest_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1777400000000,
+      "tag": "0067_decision_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1777500000000,
+      "tag": "0068_conversations",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,13 @@ export type CreateIntegrationBody = {
   config?: Record<string, unknown>;
 };
 
+export type SlackChannelSummary = {
+  id: string;
+  name: string;
+  isMember: boolean;
+  isPrivate: boolean;
+};
+
 export const integrationsApi = {
   list: (companyId: string) =>
     api.get<Integration[]>(`/companies/${companyId}/integrations`),
@@ -22,5 +29,10 @@ export const integrationsApi = {
     api.post<{ ok: boolean; lastChecked: string }>(
       `/companies/${companyId}/integrations/${id}/test`,
       {},
+    ),
+
+  listSlackChannels: (companyId: string) =>
+    api.get<{ channels: SlackChannelSummary[] }>(
+      `/companies/${companyId}/integrations/slack/channels`,
     ),
 };

@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { Link } from "@/lib/router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_FEEDBACK_DATA_SHARING_TERMS_VERSION } from "@founderos/shared";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -8,6 +8,7 @@ import { useToast } from "../context/ToastContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
+import { integrationsApi } from "../api/integrations";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Settings, Check, Download, Upload, FileJson, Loader2, Copy } from "lucide-react";
@@ -123,6 +124,44 @@ export function CompanySettings() {
     onError: (err) => {
       pushToast({
         title: "Failed to save charter",
+        body: err instanceof Error ? err.message : "Unknown error",
+        tone: "error",
+      });
+    },
+  });
+
+  // ── Slack integration + Weekly Wrap post target ──────────────────────
+  const integrationsQuery = useQuery({
+    queryKey: ["integrations", selectedCompanyId],
+    queryFn: () => integrationsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+  const slackIntegration = integrationsQuery.data?.find(
+    (i) => i.kind === "slack" && i.status === "connected",
+  );
+  const slackChannelsQuery = useQuery({
+    queryKey: ["slackChannels", selectedCompanyId],
+    queryFn: () => integrationsApi.listSlackChannels(selectedCompanyId!),
+    enabled: !!selectedCompanyId && !!slackIntegration,
+  });
+  const weeklyWrapChannelId =
+    selectedCompany?.metrics?.weeklyWrapSlackChannelId ?? "";
+
+  const weeklyWrapChannelMutation = useMutation({
+    mutationFn: (channelId: string) =>
+      companiesApi.update(selectedCompanyId!, {
+        metrics: {
+          ...selectedCompany?.metrics,
+          weeklyWrapSlackChannelId: channelId || undefined,
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      pushToast({ title: "Slack post target saved", tone: "success" });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Failed to save Slack post target",
         body: err instanceof Error ? err.message : "Unknown error",
         tone: "error",
       });
@@ -480,6 +519,64 @@ export function CompanySettings() {
               </a>
             ) : null}
           </div>
+        </div>
+      </div>
+
+      {/* Slack */}
+      <div
+        className="space-y-4"
+        data-testid="company-settings-slack-section"
+      >
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Slack
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          {!slackIntegration ? (
+            <p className="text-sm text-muted-foreground">
+              Connect Slack in Integrations to post Weekly Wraps and other
+              agent messages to a channel.
+            </p>
+          ) : (
+            <Field
+              label="Slack post target"
+              hint="Channel the CoS agent posts the Weekly Wrap into. Requires permission ≥ draft."
+            >
+              <select
+                data-testid="company-settings-slack-post-target"
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                value={weeklyWrapChannelId}
+                onChange={(e) =>
+                  weeklyWrapChannelMutation.mutate(e.target.value)
+                }
+                disabled={
+                  weeklyWrapChannelMutation.isPending ||
+                  slackChannelsQuery.isLoading
+                }
+              >
+                <option value="">
+                  {slackChannelsQuery.isLoading
+                    ? "Loading channels…"
+                    : "— Not configured (disabled) —"}
+                </option>
+                {(slackChannelsQuery.data?.channels ?? [])
+                  .filter((ch) => ch.isMember)
+                  .map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.isPrivate ? "🔒 " : "#"}
+                      {ch.name}
+                    </option>
+                  ))}
+              </select>
+              {slackChannelsQuery.isError && (
+                <p className="mt-1 text-xs text-destructive">
+                  Failed to load Slack channels:{" "}
+                  {slackChannelsQuery.error instanceof Error
+                    ? slackChannelsQuery.error.message
+                    : "Unknown error"}
+                </p>
+              )}
+            </Field>
+          )}
         </div>
       </div>
 

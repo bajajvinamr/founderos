@@ -153,7 +153,18 @@ export const queryKeys = {
   companyMemory: {
     list: (companyId: string) => ["company-memory", companyId] as const,
   },
+  conversations: {
+    list: (companyId: string) => ["conversations", companyId] as const,
+    detail: (companyId: string, conversationId: string) =>
+      ["conversations", companyId, conversationId] as const,
+  },
   agentReviews: {
     latest: (agentId: string) => ["agent-reviews", "latest", agentId] as const,
+  },
+  permissionCoach: (companyId: string) => ["permission-coach", companyId] as const,
+  decisionOutcomes: {
+    pending: (companyId: string) => ["decision-outcomes", "pending", companyId] as const,
+    forApproval: (companyId: string, approvalId: string) =>
+      ["decision-outcomes", companyId, "for-approval", approvalId] as const,
   },
 };

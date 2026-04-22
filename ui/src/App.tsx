@@ -77,8 +77,10 @@ const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ de
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
 const WeeklyWrap = lazy(() => import("./pages/WeeklyWrap").then((m) => ({ default: m.WeeklyWrap })));
+const Conversations = lazy(() => import("./pages/Conversations").then((m) => ({ default: m.Conversations })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
+const NotificationsSettings = lazy(() => import("./pages/Settings/Notifications").then((m) => ({ default: m.NotificationsSettings })));
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -240,6 +242,8 @@ function boardRoutes() {
       <Route path="activity" element={<Activity />} />
       <Route path="audit" element={<AuditLog />} />
       <Route path="weekly" element={<WeeklyWrap />} />
+      <Route path="conversations" element={<Conversations />} />
+      <Route path="conversations/:convId" element={<Conversations />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
       <Route path="inbox/mine" element={<Inbox />} />
       <Route path="inbox/recent" element={<Inbox />} />
@@ -420,6 +424,9 @@ export function App() {
             <Route path="plugins/:pluginId" element={<PluginSettings />} />
             <Route path="adapters" element={<AdapterManager />} />
           </Route>
+          <Route path="settings/notifications" element={<Layout />}>
+            <Route index element={<NotificationsSettings />} />
+          </Route>
           <Route path="companies" element={<UnprefixedBoardRedirect />} />
           <Route path="issues" element={<UnprefixedBoardRedirect />} />
           <Route path="issues/:issueId" element={<UnprefixedBoardRedirect />} />
@@ -446,6 +453,8 @@ export function App() {
           <Route path="execution-workspaces/:workspaceId/issues" element={<UnprefixedBoardRedirect />} />
           <Route path="tests/ux/chat" element={<UnprefixedBoardRedirect />} />
           <Route path="tests/ux/runs" element={<UnprefixedBoardRedirect />} />
+          <Route path="conversations" element={<UnprefixedBoardRedirect />} />
+          <Route path="conversations/:convId" element={<UnprefixedBoardRedirect />} />
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
           </Route>
