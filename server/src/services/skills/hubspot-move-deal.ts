@@ -21,6 +21,10 @@ import { createHubspotClient, HubspotAuthError } from "../hubspot-client.js";
 import { logActivity } from "../activity-log.js";
 import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
 import { logger } from "../../middleware/logger.js";
+import {
+  evaluateComposioRoute,
+  runComposioTool,
+} from "./composio-skill-bridge.js";
 
 export const HUBSPOT_MOVE_DEAL_SKILL_NAME = "hubspot.move_deal" as const;
 
@@ -35,13 +39,16 @@ export interface HubspotMoveDealContext {
   permissionLevel: AgentPermissionLevel;
   agentId?: string | null;
   runId?: string | null;
+  /** Wave 21: FounderOS user id for Composio routing. Optional. */
+  userId?: string | null;
 }
 
 export type HubspotMoveDealResult =
   | { ok: true; status: "moved"; dealId: string; newStage: string }
   | { ok: true; status: "pending_approval"; approvalId: string }
   | { ok: false; reason: "no_integration"; message: string }
-  | { ok: false; reason: "hubspot_error"; message: string };
+  | { ok: false; reason: "hubspot_error"; message: string }
+  | { ok: false; reason: "composio_error"; message: string };
 
 function validateInput(input: HubspotMoveDealInput): void {
   if (typeof input.dealId !== "string" || input.dealId.trim().length === 0) {
@@ -84,12 +91,80 @@ export async function executeHubspotMoveDeal(
 ): Promise<HubspotMoveDealResult> {
   validateInput(input);
 
-  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+  const { db, companyId, permissionLevel, agentId, runId, userId } = ctx;
 
   if (permissionLevel === "observe") {
     throw new Error(
       `Observe mode: skill "${HUBSPOT_MOVE_DEAL_SKILL_NAME}" is not permitted`,
     );
+  }
+
+  // ── Wave 21: Composio routing (autonomous only) ────────────────────────
+  if (permissionLevel === "autonomous" && userId) {
+    const route = await evaluateComposioRoute({
+      db,
+      companyId,
+      userId,
+      appName: "hubspot",
+    });
+    if (route.shouldUse) {
+      const composioOutcome = await runComposioTool({
+        userId,
+        toolName: "hubspot_update_deal",
+        input: {
+          dealId: input.dealId,
+          properties: { dealstage: input.stageId },
+        },
+      });
+      if (composioOutcome.ok) {
+        const newStage =
+          typeof (composioOutcome.output as { properties?: { dealstage?: string } })
+            ?.properties?.dealstage === "string"
+            ? ((composioOutcome.output as { properties: { dealstage: string } })
+                .properties.dealstage as string)
+            : input.stageId;
+        await logActivity(db, {
+          companyId,
+          actorType: agentId ? "agent" : "system",
+          actorId: agentId ?? "system",
+          agentId: agentId ?? null,
+          runId: runId ?? null,
+          action: "hubspot.move_deal_executed",
+          entityType: "integration",
+          entityId: route.composioConnectionId ?? "composio",
+          details: {
+            skill: HUBSPOT_MOVE_DEAL_SKILL_NAME,
+            dealId: input.dealId,
+            newStage,
+            permissionLevel,
+            via: "composio",
+          },
+        }).catch(() => {});
+        return { ok: true, status: "moved", dealId: input.dealId, newStage };
+      }
+      await logActivity(db, {
+        companyId,
+        actorType: agentId ? "agent" : "system",
+        actorId: agentId ?? "system",
+        agentId: agentId ?? null,
+        runId: runId ?? null,
+        action: "hubspot.move_deal_failed",
+        entityType: "integration",
+        entityId: route.composioConnectionId ?? "composio",
+        details: {
+          skill: HUBSPOT_MOVE_DEAL_SKILL_NAME,
+          dealId: input.dealId,
+          stageId: input.stageId,
+          error: composioOutcome.message,
+          via: "composio",
+        },
+      }).catch(() => {});
+      return {
+        ok: false,
+        reason: "composio_error",
+        message: composioOutcome.message,
+      };
+    }
   }
 
   const [integrationRow] = await db
@@ -201,6 +276,7 @@ export async function executeHubspotMoveDeal(
         dealId: input.dealId,
         newStage,
         permissionLevel,
+        via: "native",
       },
     }).catch((err) => {
       logger.error(

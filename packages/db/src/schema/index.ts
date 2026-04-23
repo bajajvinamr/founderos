@@ -80,3 +80,8 @@ export {
   type AgentHandoff,
   type AgentHandoffInsert,
 } from "./agent_handoffs.js";
+export {
+  composioConnections,
+  type ComposioConnection,
+  type ComposioConnectionInsert,
+} from "./composio_connections.js";

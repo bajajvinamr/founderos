@@ -167,6 +167,13 @@ These are set in `fly.toml` `[env]` section or via `fly config set`. They appear
 | `VITE_SENTRY_TRACES_SAMPLE_RATE` | Env | `0.1` | Frontend transaction sample rate (0-1). Default 10% for development, increase for production monitoring. |
 | `FOUNDEROS_TELEMETRY_ENABLED` | Env | `true` | Enable FounderOS telemetry (usage, errors). Set to `false` to disable. |
 
+### Third-Party Tool Aggregation
+
+| Variable | Type | Default | Notes |
+|----------|------|---------|-------|
+| `COMPOSIO_API_KEY` | Secret | None | Enables [Composio](https://composio.dev) managed OAuth across 250+ SaaS tools. When set, the six action skills (Slack, HubSpot, Notion) can route per-user through Composio. When unset, all integrations use FounderOS's native OAuth. See [Composio section in admin guide](../runbooks/admin-guide.md#composio). |
+| `COMPOSIO_API_BASE_URL` | Env | `https://backend.composio.dev/api/v1` | Override the Composio REST endpoint (self-hosted Composio or staging). |
+
 ### Storage & Attachments
 
 | Variable | Type | Default | Notes |

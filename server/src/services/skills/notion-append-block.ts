@@ -14,6 +14,10 @@ import { createNotionClient, NotionAuthError } from "../notion-client.js";
 import { logActivity } from "../activity-log.js";
 import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
 import { logger } from "../../middleware/logger.js";
+import {
+  evaluateComposioRoute,
+  runComposioTool,
+} from "./composio-skill-bridge.js";
 
 export const NOTION_APPEND_BLOCK_SKILL_NAME = "notion.append_block" as const;
 
@@ -28,13 +32,16 @@ export interface NotionAppendBlockContext {
   permissionLevel: AgentPermissionLevel;
   agentId?: string | null;
   runId?: string | null;
+  /** Wave 21: FounderOS user id for Composio routing. Optional. */
+  userId?: string | null;
 }
 
 export type NotionAppendBlockResult =
   | { ok: true; status: "appended"; blockId: string }
   | { ok: true; status: "pending_approval"; approvalId: string }
   | { ok: false; reason: "no_integration"; message: string }
-  | { ok: false; reason: "notion_error"; message: string };
+  | { ok: false; reason: "notion_error"; message: string }
+  | { ok: false; reason: "composio_error"; message: string };
 
 function validateInput(input: NotionAppendBlockSkillInput): void {
   if (typeof input.pageId !== "string" || input.pageId.trim().length === 0) {
@@ -77,12 +84,76 @@ export async function executeNotionAppendBlock(
 ): Promise<NotionAppendBlockResult> {
   validateInput(input);
 
-  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+  const { db, companyId, permissionLevel, agentId, runId, userId } = ctx;
 
   if (permissionLevel === "observe") {
     throw new Error(
       `Observe mode: skill "${NOTION_APPEND_BLOCK_SKILL_NAME}" is not permitted`,
     );
+  }
+
+  // ── Wave 21: Composio routing (autonomous only) ────────────────────────
+  if (permissionLevel === "autonomous" && userId) {
+    const route = await evaluateComposioRoute({
+      db,
+      companyId,
+      userId,
+      appName: "notion",
+    });
+    if (route.shouldUse) {
+      const composioOutcome = await runComposioTool({
+        userId,
+        toolName: "notion_append_block_children",
+        input: { block_id: input.pageId, text: input.text },
+      });
+      if (composioOutcome.ok) {
+        const blockId =
+          typeof composioOutcome.output?.id === "string"
+            ? (composioOutcome.output.id as string)
+            : typeof composioOutcome.output?.blockId === "string"
+              ? (composioOutcome.output.blockId as string)
+              : "";
+        await logActivity(db, {
+          companyId,
+          actorType: agentId ? "agent" : "system",
+          actorId: agentId ?? "system",
+          agentId: agentId ?? null,
+          runId: runId ?? null,
+          action: "notion.append_block_executed",
+          entityType: "integration",
+          entityId: route.composioConnectionId ?? "composio",
+          details: {
+            skill: NOTION_APPEND_BLOCK_SKILL_NAME,
+            pageId: input.pageId,
+            blockId,
+            permissionLevel,
+            via: "composio",
+          },
+        }).catch(() => {});
+        return { ok: true, status: "appended", blockId };
+      }
+      await logActivity(db, {
+        companyId,
+        actorType: agentId ? "agent" : "system",
+        actorId: agentId ?? "system",
+        agentId: agentId ?? null,
+        runId: runId ?? null,
+        action: "notion.append_block_failed",
+        entityType: "integration",
+        entityId: route.composioConnectionId ?? "composio",
+        details: {
+          skill: NOTION_APPEND_BLOCK_SKILL_NAME,
+          pageId: input.pageId,
+          error: composioOutcome.message,
+          via: "composio",
+        },
+      }).catch(() => {});
+      return {
+        ok: false,
+        reason: "composio_error",
+        message: composioOutcome.message,
+      };
+    }
   }
 
   const [integrationRow] = await db
@@ -177,6 +248,7 @@ export async function executeNotionAppendBlock(
         pageId: input.pageId,
         blockId,
         permissionLevel,
+        via: "native",
       },
     }).catch(() => {});
 

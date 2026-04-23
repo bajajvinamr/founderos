@@ -486,6 +486,57 @@ Before handing an instance to a customer:
 
 ---
 
+## Composio
+
+[Composio](https://composio.dev) gives FounderOS a single managed-OAuth layer
+across 250+ SaaS tools (Slack, HubSpot, Notion, LinkedIn, and more). When
+enabled, skill calls that target a supported app route through Composio on
+behalf of the specific FounderOS user who owns the connection — Composio
+holds the OAuth tokens, we only store an opaque connection id.
+
+### Enabling
+
+Set a single env var (Fly example):
+
+```bash
+fly secrets set -a <app> COMPOSIO_API_KEY="<your-composio-api-key>"
+```
+
+When set, FounderOS:
+
+- Exposes `GET /api/composio/status` as `{ enabled: true, configuredApps: […] }`.
+- Surfaces a "Connect via Composio" affordance on the Integrations page for
+  each supported app.
+- In the autonomous permission level, routes the six action skills
+  (`slack.post_message`, `hubspot.create_contact`, `hubspot.log_note`,
+  `hubspot.move_deal`, `notion.create_page`, `notion.append_block`) through
+  Composio when the calling user has an active connection for that app.
+
+### Disabling / unset
+
+When `COMPOSIO_API_KEY` is unset (the default), Composio is fully off:
+
+- `/api/composio/status` returns `{ enabled: false }`.
+- Every skill falls back to the native client (our `slack-client.ts`,
+  `hubspot-client.ts`, `notion-client.ts`) and FounderOS's own encrypted OAuth
+  flow — behaviour is identical to pre-Wave-21.
+
+### Failure handling
+
+Composio is **not** a silent dual-path. If a user explicitly connected via
+Composio and a call fails (transient outage, revoked consent, etc.), the
+skill returns `{ ok: false, reason: "composio_error" }` instead of silently
+retrying through the native client — so retries are deterministic and audit
+log entries carry `details.via = "composio"` for traceability.
+
+### Free tier
+
+Composio's free tier is 10 K executions/month — adequate for the 100-user
+target. Monitor usage in the Composio dashboard; upgrade before hitting the
+cap to avoid 429s surfacing as `composio_error`.
+
+---
+
 ## Next steps
 
 - [Incidents](./incidents.md) — what to do when something breaks

@@ -14,6 +14,10 @@ import { createNotionClient, NotionAuthError } from "../notion-client.js";
 import { logActivity } from "../activity-log.js";
 import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
 import { logger } from "../../middleware/logger.js";
+import {
+  evaluateComposioRoute,
+  runComposioTool,
+} from "./composio-skill-bridge.js";
 
 export const NOTION_CREATE_PAGE_SKILL_NAME = "notion.create_page" as const;
 
@@ -30,13 +34,16 @@ export interface NotionCreatePageContext {
   permissionLevel: AgentPermissionLevel;
   agentId?: string | null;
   runId?: string | null;
+  /** Wave 21: FounderOS user id for Composio routing. Optional. */
+  userId?: string | null;
 }
 
 export type NotionCreatePageResult =
   | { ok: true; status: "created"; pageId: string; url: string }
   | { ok: true; status: "pending_approval"; approvalId: string }
   | { ok: false; reason: "no_integration"; message: string }
-  | { ok: false; reason: "notion_error"; message: string };
+  | { ok: false; reason: "notion_error"; message: string }
+  | { ok: false; reason: "composio_error"; message: string };
 
 function validateInput(input: NotionCreatePageSkillInput): void {
   if (!input.parentPageId && !input.parentDatabaseId) {
@@ -84,12 +91,85 @@ export async function executeNotionCreatePage(
 ): Promise<NotionCreatePageResult> {
   validateInput(input);
 
-  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+  const { db, companyId, permissionLevel, agentId, runId, userId } = ctx;
 
   if (permissionLevel === "observe") {
     throw new Error(
       `Observe mode: skill "${NOTION_CREATE_PAGE_SKILL_NAME}" is not permitted`,
     );
+  }
+
+  // ── Wave 21: Composio routing (autonomous only) ────────────────────────
+  if (permissionLevel === "autonomous" && userId) {
+    const route = await evaluateComposioRoute({
+      db,
+      companyId,
+      userId,
+      appName: "notion",
+    });
+    if (route.shouldUse) {
+      const composioOutcome = await runComposioTool({
+        userId,
+        toolName: "notion_create_page",
+        input: {
+          parent_page_id: input.parentPageId,
+          parent_database_id: input.parentDatabaseId,
+          title: input.title,
+          markdown_content: input.bodyMarkdown,
+        },
+      });
+      if (composioOutcome.ok) {
+        const pageId =
+          typeof composioOutcome.output?.id === "string"
+            ? (composioOutcome.output.id as string)
+            : typeof composioOutcome.output?.pageId === "string"
+              ? (composioOutcome.output.pageId as string)
+              : "";
+        const url =
+          typeof composioOutcome.output?.url === "string"
+            ? (composioOutcome.output.url as string)
+            : "";
+        await logActivity(db, {
+          companyId,
+          actorType: agentId ? "agent" : "system",
+          actorId: agentId ?? "system",
+          agentId: agentId ?? null,
+          runId: runId ?? null,
+          action: "notion.create_page_executed",
+          entityType: "integration",
+          entityId: route.composioConnectionId ?? "composio",
+          details: {
+            skill: NOTION_CREATE_PAGE_SKILL_NAME,
+            pageId,
+            title: input.title,
+            permissionLevel,
+            via: "composio",
+          },
+        }).catch(() => {});
+        return { ok: true, status: "created", pageId, url };
+      }
+      await logActivity(db, {
+        companyId,
+        actorType: agentId ? "agent" : "system",
+        actorId: agentId ?? "system",
+        agentId: agentId ?? null,
+        runId: runId ?? null,
+        action: "notion.create_page_failed",
+        entityType: "integration",
+        entityId: route.composioConnectionId ?? "composio",
+        details: {
+          skill: NOTION_CREATE_PAGE_SKILL_NAME,
+          title: input.title,
+          error: composioOutcome.message,
+          via: "composio",
+        },
+      }).catch(() => {});
+      return {
+        ok: false,
+        reason: "composio_error",
+        message: composioOutcome.message,
+      };
+    }
   }
 
   const [integrationRow] = await db
@@ -188,6 +268,7 @@ export async function executeNotionCreatePage(
         pageId: page.id,
         title: input.title,
         permissionLevel,
+        via: "native",
       },
     }).catch((err) => {
       logger.error(

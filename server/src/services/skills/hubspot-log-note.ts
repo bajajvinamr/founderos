@@ -21,6 +21,10 @@ import { createHubspotClient, HubspotAuthError } from "../hubspot-client.js";
 import { logActivity } from "../activity-log.js";
 import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
 import { logger } from "../../middleware/logger.js";
+import {
+  evaluateComposioRoute,
+  runComposioTool,
+} from "./composio-skill-bridge.js";
 
 export const HUBSPOT_LOG_NOTE_SKILL_NAME = "hubspot.log_note" as const;
 
@@ -35,13 +39,16 @@ export interface HubspotLogNoteContext {
   permissionLevel: AgentPermissionLevel;
   agentId?: string | null;
   runId?: string | null;
+  /** Wave 21: FounderOS user id for Composio routing. Optional. */
+  userId?: string | null;
 }
 
 export type HubspotLogNoteResult =
   | { ok: true; status: "logged"; noteId: string }
   | { ok: true; status: "pending_approval"; approvalId: string }
   | { ok: false; reason: "no_integration"; message: string }
-  | { ok: false; reason: "hubspot_error"; message: string };
+  | { ok: false; reason: "hubspot_error"; message: string }
+  | { ok: false; reason: "composio_error"; message: string };
 
 function validateInput(input: HubspotLogNoteInput): void {
   if (typeof input.contactId !== "string" || input.contactId.trim().length === 0) {
@@ -84,12 +91,76 @@ export async function executeHubspotLogNote(
 ): Promise<HubspotLogNoteResult> {
   validateInput(input);
 
-  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+  const { db, companyId, permissionLevel, agentId, runId, userId } = ctx;
 
   if (permissionLevel === "observe") {
     throw new Error(
       `Observe mode: skill "${HUBSPOT_LOG_NOTE_SKILL_NAME}" is not permitted`,
     );
+  }
+
+  // ── Wave 21: Composio routing (autonomous only) ────────────────────────
+  if (permissionLevel === "autonomous" && userId) {
+    const route = await evaluateComposioRoute({
+      db,
+      companyId,
+      userId,
+      appName: "hubspot",
+    });
+    if (route.shouldUse) {
+      const composioOutcome = await runComposioTool({
+        userId,
+        toolName: "hubspot_create_note",
+        input: { contactId: input.contactId, body: input.body },
+      });
+      if (composioOutcome.ok) {
+        const noteId =
+          typeof composioOutcome.output?.id === "string"
+            ? (composioOutcome.output.id as string)
+            : typeof composioOutcome.output?.noteId === "string"
+              ? (composioOutcome.output.noteId as string)
+              : "";
+        await logActivity(db, {
+          companyId,
+          actorType: agentId ? "agent" : "system",
+          actorId: agentId ?? "system",
+          agentId: agentId ?? null,
+          runId: runId ?? null,
+          action: "hubspot.log_note_executed",
+          entityType: "integration",
+          entityId: route.composioConnectionId ?? "composio",
+          details: {
+            skill: HUBSPOT_LOG_NOTE_SKILL_NAME,
+            noteId,
+            contactId: input.contactId,
+            permissionLevel,
+            via: "composio",
+          },
+        }).catch(() => {});
+        return { ok: true, status: "logged", noteId };
+      }
+      await logActivity(db, {
+        companyId,
+        actorType: agentId ? "agent" : "system",
+        actorId: agentId ?? "system",
+        agentId: agentId ?? null,
+        runId: runId ?? null,
+        action: "hubspot.log_note_failed",
+        entityType: "integration",
+        entityId: route.composioConnectionId ?? "composio",
+        details: {
+          skill: HUBSPOT_LOG_NOTE_SKILL_NAME,
+          contactId: input.contactId,
+          error: composioOutcome.message,
+          via: "composio",
+        },
+      }).catch(() => {});
+      return {
+        ok: false,
+        reason: "composio_error",
+        message: composioOutcome.message,
+      };
+    }
   }
 
   const [integrationRow] = await db
@@ -197,6 +268,7 @@ export async function executeHubspotLogNote(
         noteId: note.id,
         contactId: input.contactId,
         permissionLevel,
+        via: "native",
       },
     }).catch((err) => {
       logger.error(

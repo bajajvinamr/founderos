@@ -26,6 +26,10 @@ import { createHubspotClient, HubspotAuthError } from "../hubspot-client.js";
 import { logActivity } from "../activity-log.js";
 import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
 import { logger } from "../../middleware/logger.js";
+import {
+  evaluateComposioRoute,
+  runComposioTool,
+} from "./composio-skill-bridge.js";
 
 /** Public skill name exposed to agents. */
 export const HUBSPOT_CREATE_CONTACT_SKILL_NAME = "hubspot.create_contact" as const;
@@ -47,13 +51,16 @@ export interface HubspotCreateContactContext {
   agentId?: string | null;
   /** Optional run ID for tracing. */
   runId?: string | null;
+  /** Wave 21: FounderOS user id for Composio routing. Optional. */
+  userId?: string | null;
 }
 
 export type HubspotCreateContactResult =
   | { ok: true; status: "created"; contactId: string; url: string }
   | { ok: true; status: "pending_approval"; approvalId: string }
   | { ok: false; reason: "no_integration"; message: string }
-  | { ok: false; reason: "hubspot_error"; message: string };
+  | { ok: false; reason: "hubspot_error"; message: string }
+  | { ok: false; reason: "composio_error"; message: string };
 
 // Rough RFC-5322 compatible email check — we only need to reject obviously bad
 // input here; HubSpot will do its own validation and return 4xx if malformed.
@@ -121,13 +128,88 @@ export async function executeHubspotCreateContact(
 ): Promise<HubspotCreateContactResult> {
   validateInput(input);
 
-  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+  const { db, companyId, permissionLevel, agentId, runId, userId } = ctx;
 
   // ── Permission: observe ────────────────────────────────────────────────
   if (permissionLevel === "observe") {
     throw new Error(
       `Observe mode: skill "${HUBSPOT_CREATE_CONTACT_SKILL_NAME}" is not permitted`,
     );
+  }
+
+  // ── Wave 21: Composio routing (autonomous only) ────────────────────────
+  if (permissionLevel === "autonomous" && userId) {
+    const route = await evaluateComposioRoute({
+      db,
+      companyId,
+      userId,
+      appName: "hubspot",
+    });
+    if (route.shouldUse) {
+      const composioOutcome = await runComposioTool({
+        userId,
+        toolName: "hubspot_create_contact",
+        input: {
+          email: input.email,
+          firstname: input.firstName,
+          lastname: input.lastName,
+          company: input.company,
+          phone: input.phone,
+        },
+      });
+      if (composioOutcome.ok) {
+        const contactId =
+          typeof composioOutcome.output?.id === "string"
+            ? (composioOutcome.output.id as string)
+            : typeof composioOutcome.output?.contactId === "string"
+              ? (composioOutcome.output.contactId as string)
+              : "";
+        await logActivity(db, {
+          companyId,
+          actorType: agentId ? "agent" : "system",
+          actorId: agentId ?? "system",
+          agentId: agentId ?? null,
+          runId: runId ?? null,
+          action: "hubspot.create_contact_executed",
+          entityType: "integration",
+          entityId: route.composioConnectionId ?? "composio",
+          details: {
+            skill: HUBSPOT_CREATE_CONTACT_SKILL_NAME,
+            contactId,
+            email: input.email,
+            permissionLevel,
+            via: "composio",
+          },
+        }).catch(() => {});
+        return {
+          ok: true,
+          status: "created",
+          contactId,
+          url: contactUrl(contactId),
+        };
+      }
+      await logActivity(db, {
+        companyId,
+        actorType: agentId ? "agent" : "system",
+        actorId: agentId ?? "system",
+        agentId: agentId ?? null,
+        runId: runId ?? null,
+        action: "hubspot.create_contact_failed",
+        entityType: "integration",
+        entityId: route.composioConnectionId ?? "composio",
+        details: {
+          skill: HUBSPOT_CREATE_CONTACT_SKILL_NAME,
+          email: input.email,
+          error: composioOutcome.message,
+          via: "composio",
+        },
+      }).catch(() => {});
+      return {
+        ok: false,
+        reason: "composio_error",
+        message: composioOutcome.message,
+      };
+    }
   }
 
   // ── Look up company's HubSpot integration ──────────────────────────────
@@ -237,6 +319,7 @@ export async function executeHubspotCreateContact(
         contactId: contact.id,
         email: input.email,
         permissionLevel,
+        via: "native",
       },
     }).catch((err) => {
       logger.error(

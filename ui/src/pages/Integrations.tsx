@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   Plug,
   FlaskConical,
+  Zap,
 } from "lucide-react";
 import {
   INTEGRATION_CATALOG,
@@ -20,6 +21,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { useToast } from "../context/ToastContext";
 import { integrationsApi } from "../api/integrations";
+import { composioApi, type ComposioConnection } from "../api/composio";
 import { ConnectIntegrationDialog } from "../components/ConnectIntegrationDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -129,11 +131,15 @@ function IntegrationCard({
   integration,
   companyId,
   onConnect,
+  composioEnabled,
+  composioConnection,
 }: {
   kind: IntegrationKind;
   integration: Integration | undefined;
   companyId: string;
   onConnect: (kind: IntegrationKind) => void;
+  composioEnabled: boolean;
+  composioConnection: ComposioConnection | undefined;
 }) {
   const catalog = INTEGRATION_CATALOG[kind];
   const queryClient = useQueryClient();
@@ -148,6 +154,26 @@ function IntegrationCard({
     },
     onError: () => {
       pushToast({ title: `${catalog.label} test failed`, tone: "error" });
+    },
+  });
+
+  // Wave 21 — Composio managed OAuth. Opens the provider's consent page in a
+  // new tab; we rely on the background refresh-poll to mark the row active.
+  const composioConnectMutation = useMutation({
+    mutationFn: () => composioApi.connect(companyId, kind),
+    onSuccess: (res) => {
+      window.open(res.redirectUrl, "_blank", "noopener,noreferrer");
+      pushToast({
+        title: `Opened Composio consent for ${catalog.label}`,
+        tone: "info",
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["composio-connections", companyId],
+      });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Composio connect failed";
+      pushToast({ title: msg, tone: "error" });
     },
   });
 
@@ -216,6 +242,38 @@ function IntegrationCard({
         <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-2.5 text-xs text-red-600 dark:text-red-400">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           {integration.lastError}
+        </div>
+      )}
+
+      {/* Composio managed OAuth (Wave 21) */}
+      {composioEnabled && (
+        <div className="rounded-md border border-dashed border-border/70 p-2.5 text-[11px] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Zap className="h-3 w-3" />
+            <span>
+              {composioConnection?.status === "active"
+                ? "Composio: connected"
+                : composioConnection?.status === "pending"
+                  ? "Composio: awaiting consent"
+                  : "Composio: not connected"}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            disabled={composioConnectMutation.isPending}
+            onClick={() => composioConnectMutation.mutate()}
+          >
+            {composioConnectMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            ) : (
+              <ExternalLink className="h-3 w-3 mr-1" />
+            )}
+            {composioConnection?.status === "active"
+              ? "Reconnect"
+              : "Connect via Composio"}
+          </Button>
         </div>
       )}
 
@@ -327,6 +385,31 @@ export function Integrations() {
     enabled: !!selectedCompanyId,
   });
 
+  // Wave 21 — Composio status + connection polling.
+  const { data: composioStatus } = useQuery({
+    queryKey: ["composio-status"],
+    queryFn: () => composioApi.status(),
+  });
+  const composioEnabled = composioStatus?.enabled ?? false;
+
+  const { data: composioConnectionsResp } = useQuery({
+    queryKey: ["composio-connections", selectedCompanyId],
+    queryFn: () => composioApi.listConnections(selectedCompanyId!, true),
+    enabled: !!selectedCompanyId && composioEnabled,
+    // Poll while any connection is pending so we catch the OAuth callback
+    // without a webhook. 2 s is the spec.
+    refetchInterval: (query) => {
+      const data = query.state.data as
+        | { connections: ComposioConnection[] }
+        | undefined;
+      const hasPending = data?.connections.some((c) => c.status === "pending");
+      return hasPending ? 2000 : false;
+    },
+  });
+  const composioByApp = new Map<string, ComposioConnection>(
+    (composioConnectionsResp?.connections ?? []).map((c) => [c.appName, c]),
+  );
+
   const connectedCount = integrations.filter((i) => i.status === "connected").length;
   const totalCount = INTEGRATION_KINDS.length;
 
@@ -381,6 +464,8 @@ export function Integrations() {
               integration={kindMap.get(kind)}
               companyId={selectedCompanyId}
               onConnect={(k) => setConnectKind(k)}
+              composioEnabled={composioEnabled}
+              composioConnection={composioByApp.get(kind)}
             />
           ))}
         </div>

@@ -33,6 +33,10 @@ import { createSlackClient, SlackAuthError } from "../slack-client.js";
 import { logActivity } from "../activity-log.js";
 import { decryptWithMasterKey } from "../../secrets/local-encrypted-provider.js";
 import { logger } from "../../middleware/logger.js";
+import {
+  evaluateComposioRoute,
+  runComposioTool,
+} from "./composio-skill-bridge.js";
 
 /** Public skill name exposed to agents. */
 export const SLACK_POST_MESSAGE_SKILL_NAME = "slack.post_message" as const;
@@ -52,6 +56,14 @@ export interface SlackPostMessageContext {
   agentId?: string | null;
   /** Optional run ID for tracing. */
   runId?: string | null;
+  /**
+   * FounderOS user id of the operator who owns the integration credentials
+   * (Wave 21 — Composio routing). When present AND the user has an active
+   * Composio connection for Slack, the skill routes through Composio and
+   * skips the decrypt/HTTP path entirely. When absent, behaviour is
+   * identical to pre-Wave-21.
+   */
+  userId?: string | null;
 }
 
 export type SlackPostMessageResult =
@@ -59,7 +71,8 @@ export type SlackPostMessageResult =
   | { ok: true; status: "pending_approval"; channelId: string; approvalId: string }
   | { ok: false; reason: "no_integration"; message: string }
   | { ok: false; reason: "channel_not_found"; message: string }
-  | { ok: false; reason: "slack_error"; message: string };
+  | { ok: false; reason: "slack_error"; message: string }
+  | { ok: false; reason: "composio_error"; message: string };
 
 function normalizeBlocks(blocks: unknown): unknown[] | undefined {
   if (blocks === undefined || blocks === null) return undefined;
@@ -119,13 +132,83 @@ export async function executeSlackPostMessage(
   validateInput(input);
   const blocks = normalizeBlocks(input.blocks);
 
-  const { db, companyId, permissionLevel, agentId, runId } = ctx;
+  const { db, companyId, permissionLevel, agentId, runId, userId } = ctx;
 
   // ── Permission: observe ────────────────────────────────────────────────
   if (permissionLevel === "observe") {
     throw new Error(
       `Observe mode: skill "${SLACK_POST_MESSAGE_SKILL_NAME}" is not permitted`,
     );
+  }
+
+  // ── Wave 21: Composio routing (autonomous only) ────────────────────────
+  // If Composio is enabled AND this (company, user) has an active Slack
+  // connection, route through Composio and skip the native OAuth path
+  // entirely. Draft / approve still go through the approvals queue below.
+  if (permissionLevel === "autonomous" && userId) {
+    const route = await evaluateComposioRoute({
+      db,
+      companyId,
+      userId,
+      appName: "slack",
+    });
+    if (route.shouldUse) {
+      const composioOutcome = await runComposioTool({
+        userId,
+        toolName: "slack_send_message",
+        input: { channel: input.channelId, text: input.text },
+      });
+      if (composioOutcome.ok) {
+        const ts =
+          typeof composioOutcome.output?.ts === "string"
+            ? (composioOutcome.output.ts as string)
+            : typeof composioOutcome.output?.message_ts === "string"
+              ? (composioOutcome.output.message_ts as string)
+              : "";
+        await logActivity(db, {
+          companyId,
+          actorType: agentId ? "agent" : "system",
+          actorId: agentId ?? "system",
+          agentId: agentId ?? null,
+          runId: runId ?? null,
+          action: "slack.message_posted",
+          entityType: "integration",
+          entityId: route.composioConnectionId ?? "composio",
+          details: {
+            skill: SLACK_POST_MESSAGE_SKILL_NAME,
+            channelId: input.channelId,
+            ts,
+            permissionLevel,
+            via: "composio",
+          },
+        }).catch(() => {});
+        return { ok: true, status: "posted", channelId: input.channelId, ts };
+      }
+      // Fail loud — do NOT silently fall back to native. The user
+      // explicitly connected via Composio, so a transient outage must
+      // surface as a retryable error.
+      await logActivity(db, {
+        companyId,
+        actorType: agentId ? "agent" : "system",
+        actorId: agentId ?? "system",
+        agentId: agentId ?? null,
+        runId: runId ?? null,
+        action: "slack.message_post_failed",
+        entityType: "integration",
+        entityId: route.composioConnectionId ?? "composio",
+        details: {
+          skill: SLACK_POST_MESSAGE_SKILL_NAME,
+          channelId: input.channelId,
+          error: composioOutcome.message,
+          via: "composio",
+        },
+      }).catch(() => {});
+      return {
+        ok: false,
+        reason: "composio_error",
+        message: composioOutcome.message,
+      };
+    }
   }
 
   // ── Look up company's Slack integration ────────────────────────────────
@@ -260,6 +343,7 @@ export async function executeSlackPostMessage(
         channelId: input.channelId,
         ts: result.ts,
         permissionLevel,
+        via: "native",
       },
     }).catch((err) => {
       logger.error(
