@@ -219,7 +219,11 @@ export function healthRoutes(
           // /internal/sdk/metadata used to be public but returns 410 now.
           // /api/v1/auth-configs is a stable authed endpoint that returns
           // the org's configured auth providers — perfect ping target.
-          fetch(`${process.env.COMPOSIO_API_BASE_URL ?? "https://backend.composio.dev/api/v1"}/auth-configs`, {
+          // Composio v1 API was fully deprecated (410). v3 is the current
+          // surface. /toolkits is a lightweight authed read — 200 on valid
+          // key, 401 otherwise. Base URL env var covers the v1 client path;
+          // health check hardcodes v3 host so we verify the real platform.
+          fetch("https://backend.composio.dev/api/v3/toolkits?limit=1", {
             method: "GET",
             headers: {
               "x-api-key": process.env.COMPOSIO_API_KEY ?? "",
