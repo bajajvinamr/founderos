@@ -40,6 +40,7 @@ import { createDecisionFollowupCron } from "./services/decision-followup-cron.js
 import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
 import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
 import { billingRoutes } from "./routes/billing.js";
+import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
 import { hireProposalRoutes } from "./routes/hire-proposal.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
@@ -270,6 +271,7 @@ export async function createApp(
   api.use(decisionOutcomeRoutes(db));
   api.use(weeklyWrapRoutes(db));
   api.use(permissionCoachRoutes(db));
+  api.use(agentHandoffRoutes(db));
   api.use("/billing", billingRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();

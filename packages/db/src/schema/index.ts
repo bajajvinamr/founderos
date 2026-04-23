@@ -75,3 +75,8 @@ export {
   type WeeklyWrapHighlight,
   type WeeklyWrapMetrics,
 } from "./weekly_wraps.js";
+export {
+  agentHandoffs,
+  type AgentHandoff,
+  type AgentHandoffInsert,
+} from "./agent_handoffs.js";
