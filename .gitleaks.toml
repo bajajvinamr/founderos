@@ -1,0 +1,46 @@
+title = "FounderOS Gitleaks Config"
+
+[allowlist]
+files = [
+  "(.*?)\\.(pem|key)$",
+  "^\\.env\\.example$",
+]
+paths = [
+  "test/.*fixtures.*",
+  ".*\\.test\\.(ts|js)$",
+]
+
+[[rules]]
+id = "founderos-anthropic-api-key"
+description = "Anthropic API key (sk-ant-...)"
+regex = '''sk-ant-[A-Za-z0-9]{20,}'''
+keywords = ["sk-ant"]
+secretGroup = 1
+
+[[rules]]
+id = "founderos-anthropic-project-key"
+description = "Anthropic Project key (sk-proj-...)"
+regex = '''sk-proj-[A-Za-z0-9]{20,}'''
+keywords = ["sk-proj"]
+secretGroup = 1
+
+[[rules]]
+id = "founderos-supabase-sbp"
+description = "Supabase service role key (sbp_...)"
+regex = '''sbp_[A-Za-z0-9_]{20,}'''
+keywords = ["sbp_"]
+secretGroup = 1
+
+[[rules]]
+id = "founderos-supabase-live"
+description = "Supabase live key (sk_live_...)"
+regex = '''sk_live_[A-Za-z0-9]{20,}'''
+keywords = ["sk_live_"]
+secretGroup = 1
+
+[[rules]]
+id = "founderos-supabase-service-role"
+description = "Supabase service role JWT (eyJ...)"
+regex = '''eyJ[A-Za-z0-9_-]{100,}'''
+keywords = ["Authorization", "Bearer"]
+secretGroup = 1

@@ -1,17 +1,19 @@
-# Replace @cryppadotta if a different maintainer or team should own release infrastructure.
+# Ownership Map for FounderOS
+# This is a stop-gap until a team joins. Single founder owns all areas.
+# As the team grows, split into domain teams: @team-backend, @team-frontend, @team-infra, etc.
 
-.github/** @cryppadotta @devinfoley
-scripts/release*.sh @cryppadotta @devinfoley
-scripts/release-*.mjs @cryppadotta @devinfoley
-scripts/create-github-release.sh @cryppadotta @devinfoley
-scripts/rollback-latest.sh @cryppadotta @devinfoley
-doc/RELEASING.md @cryppadotta @devinfoley
-doc/PUBLISHING.md @cryppadotta @devinfoley
-doc/RELEASE-AUTOMATION-SETUP.md @cryppadotta @devinfoley
+# Default owner for all paths
+* @vbseries245
 
-# Package files — dependency changes require review
-# package.json matches recursively at all depths (covers root + all workspaces)
-package.json @cryppadotta @devinfoley
-pnpm-lock.yaml @cryppadotta @devinfoley
-pnpm-workspace.yaml @cryppadotta @devinfoley
-.npmrc @cryppadotta @devinfoley
+# Core areas with explicit ownership (currently same person)
+/server/ @vbseries245
+/ui/ @vbseries245
+/packages/db/ @vbseries245
+/docs/ @vbseries245
+/.github/ @vbseries245
+
+# Package files require owner review
+package.json @vbseries245
+pnpm-lock.yaml @vbseries245
+pnpm-workspace.yaml @vbseries245
+.npmrc @vbseries245

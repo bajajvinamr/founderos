@@ -1,0 +1,55 @@
+name: NPM Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: npm-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Run npm audit
+        id: audit
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
+      - name: Report audit results
+        if: always()
+        run: |
+          if [ "${{ steps.audit.outcome }}" = "failure" ]; then
+            echo "## :warning: High+ Severity Vulnerabilities Found" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Audit failed: high or critical vulnerabilities detected. Please remediate before merge." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "## :white_check_mark: Audit Passed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No high or critical vulnerabilities detected." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,73 @@
+name: Bug Report
+description: Report a bug to help us improve
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of the bug
+      placeholder: "e.g. Agent fails to parse JSON responses from Claude API"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How to reliably reproduce the issue
+      placeholder: |
+        1. Navigate to the agents dashboard
+        2. Create a new agent with language model Claude 3.5 Sonnet
+        3. Run the agent
+        4. Observe the error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs Actual
+      description: What should happen vs what actually happens
+      placeholder: |
+        **Expected:** Agent completes execution and returns valid result
+        **Actual:** Error thrown in console, agent hangs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Where does this occur?
+      options:
+        - Local development
+        - Demo instance
+        - Production
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Relevant error messages, logs, or UI screenshots
+      placeholder: "Paste error messages or attach screenshots"
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console Errors
+      description: Browser console errors (if applicable)
+      placeholder: "Paste any error stack traces from browser/server logs"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other relevant details

@@ -1,0 +1,48 @@
+name: PR Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate-title:
+    name: Validate PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check-size:
+    name: Check PR Size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate diff size
+        id: diff
+        run: |
+          INSERTIONS=$(git diff origin/${{ github.base_ref }}...HEAD --numstat | awk '{sum+=$1} END {print sum}')
+          DELETIONS=$(git diff origin/${{ github.base_ref }}...HEAD --numstat | awk '{sum+=$2} END {print sum}')
+          DELTA=$((INSERTIONS + DELETIONS))
+          echo "delta=$DELTA" >> $GITHUB_OUTPUT
+          echo "insertions=$INSERTIONS" >> $GITHUB_OUTPUT
+          echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
+
+      - name: Warn if large
+        if: steps.diff.outputs.delta > 800
+        run: |
+          echo "⚠️ Large PR detected: ${{ steps.diff.outputs.delta }} lines changed"
+          echo "Consider breaking this into smaller, focused PRs for easier review."
+
+      - name: Fail if too large
+        if: steps.diff.outputs.delta > 2000
+        run: |
+          echo "❌ PR exceeds size limit: ${{ steps.diff.outputs.delta }} lines (max: 2000)"
+          exit 1

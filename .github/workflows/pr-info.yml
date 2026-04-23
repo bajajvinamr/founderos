@@ -1,0 +1,202 @@
+name: PR Info
+
+# Posts a single auto-updating summary comment on every pull request with:
+#   - files changed (counts + categories: migrations, scripts, ui, server, packages, workflows)
+#   - new Drizzle migrations added
+#   - test pass count (parsed from ci.yml's test-results artifact, if present)
+#   - UI bundle size and delta vs the base branch
+#
+# Runs in a separate workflow so a noisy or slow comment step never blocks CI
+# signal. Uses `pull_request_target` so it can comment on forks while still
+# checking out the PR head for analysis.
+#
+# Documented in .github/workflows/README.md.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-info-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "9.15.4"
+  BUNDLE_SIZE_BUDGET_KB: "1536"
+
+jobs:
+  summary:
+    name: PR summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}" --depth=1 || \
+          git fetch origin "${{ github.event.pull_request.base.sha }}" --depth=1 || true
+
+      - name: Compute diff stats
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          files="$(git diff --name-only "$BASE" "$HEAD" || true)"
+          count="$(printf '%s\n' "$files" | grep -c '.' || true)"
+          mig="$(printf '%s\n' "$files" | grep -E '^packages/db/src/migrations/[0-9]+_.*\.sql$' || true)"
+          mig_count="$(printf '%s\n' "$mig" | grep -c '.' || true)"
+          ui_changed="$(printf '%s\n' "$files" | grep -c '^ui/' || true)"
+          server_changed="$(printf '%s\n' "$files" | grep -c '^server/' || true)"
+          pkg_changed="$(printf '%s\n' "$files" | grep -c '^packages/' || true)"
+          wf_changed="$(printf '%s\n' "$files" | grep -c '^.github/workflows/' || true)"
+          {
+            echo "total_count=$count"
+            echo "migration_count=$mig_count"
+            echo "ui_count=$ui_changed"
+            echo "server_count=$server_changed"
+            echo "pkg_count=$pkg_changed"
+            echo "workflow_count=$wf_changed"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "migration_list<<EOF"
+            echo "$mig"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI (head)
+        run: pnpm --filter @founderos/ui build
+
+      - name: Measure head bundle
+        id: bundle_head
+        env:
+          BUNDLE_DIST_DIR: ui/dist
+        run: pnpm ci:bundle-size
+
+      - name: Build UI (base)
+        id: bundle_base
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          git worktree add -f /tmp/pr-base "$BASE"
+          cd /tmp/pr-base
+          pnpm install --frozen-lockfile
+          pnpm --filter @founderos/ui build
+          BUNDLE_DIST_DIR="$PWD/ui/dist" pnpm ci:bundle-size || true
+
+      - name: Try to download test-results from CI run
+        id: tests
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const sha = context.payload.pull_request.head.sha;
+            const runs = await github.rest.actions.listWorkflowRunsForRepo({
+              owner, repo, head_sha: sha, per_page: 20,
+            });
+            const ciRun = runs.data.workflow_runs.find(r => r.name === 'CI');
+            if (!ciRun) { core.setOutput('pass_count', ''); core.setOutput('fail_count', ''); return; }
+            const arts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner, repo, run_id: ciRun.id,
+            });
+            const art = arts.data.artifacts.find(a => a.name === 'test-results');
+            if (!art) { core.setOutput('pass_count', ''); core.setOutput('fail_count', ''); return; }
+            const zip = await github.rest.actions.downloadArtifact({
+              owner, repo, artifact_id: art.id, archive_format: 'zip',
+            });
+            fs.writeFileSync('/tmp/test-results.zip', Buffer.from(zip.data));
+            require('child_process').execSync('unzip -o /tmp/test-results.zip -d /tmp/test-results');
+            const json = JSON.parse(fs.readFileSync('/tmp/test-results/test-results.json', 'utf8'));
+            const pass = json.numPassedTests ?? 0;
+            const fail = json.numFailedTests ?? 0;
+            const total = json.numTotalTests ?? (pass + fail);
+            core.setOutput('pass_count', String(pass));
+            core.setOutput('fail_count', String(fail));
+            core.setOutput('total_count', String(total));
+
+      - name: Post / update PR comment
+        uses: actions/github-script@v7
+        env:
+          TOTAL_CHANGED: ${{ steps.diff.outputs.total_count }}
+          MIG_COUNT: ${{ steps.diff.outputs.migration_count }}
+          MIG_LIST: ${{ steps.diff.outputs.migration_list }}
+          UI_COUNT: ${{ steps.diff.outputs.ui_count }}
+          SERVER_COUNT: ${{ steps.diff.outputs.server_count }}
+          PKG_COUNT: ${{ steps.diff.outputs.pkg_count }}
+          WF_COUNT: ${{ steps.diff.outputs.workflow_count }}
+          BUNDLE_TOTAL_KB: ${{ steps.bundle_head.outputs.total_kb }}
+          BUNDLE_BUDGET_KB: ${{ steps.bundle_head.outputs.budget_kb }}
+          BUNDLE_ASSETS: ${{ steps.bundle_head.outputs.asset_count }}
+          PASS_COUNT: ${{ steps.tests.outputs.pass_count }}
+          FAIL_COUNT: ${{ steps.tests.outputs.fail_count }}
+          TEST_TOTAL: ${{ steps.tests.outputs.total_count }}
+        with:
+          script: |
+            const MARKER = '<!-- founderos/pr-info -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const env = process.env;
+            const migs = (env.MIG_LIST || '').trim().split('\n').filter(Boolean);
+            const migBlock = migs.length
+              ? migs.map(m => `  - \`${m}\``).join('\n')
+              : '  - _none_';
+
+            const testsLine = env.PASS_COUNT
+              ? `${env.PASS_COUNT} passed${env.FAIL_COUNT && env.FAIL_COUNT !== '0' ? `, ${env.FAIL_COUNT} failed` : ''} (of ${env.TEST_TOTAL})`
+              : '_pending CI run_';
+
+            const bundleLine = env.BUNDLE_TOTAL_KB
+              ? `${env.BUNDLE_TOTAL_KB} KB gzipped / ${env.BUNDLE_BUDGET_KB} KB budget across ${env.BUNDLE_ASSETS} assets`
+              : '_build failed_';
+
+            const body = [
+              MARKER,
+              '### PR summary',
+              '',
+              `- **Files changed:** ${env.TOTAL_CHANGED} `+
+                `(ui: ${env.UI_COUNT}, server: ${env.SERVER_COUNT}, packages: ${env.PKG_COUNT}, workflows: ${env.WF_COUNT})`,
+              `- **New migrations:** ${env.MIG_COUNT}`,
+              migBlock,
+              `- **Tests:** ${testsLine}`,
+              `- **UI bundle:** ${bundleLine}`,
+              '',
+              '_This comment is auto-updated on each push. See [workflows/README.md](.github/workflows/README.md)._',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.startsWith(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

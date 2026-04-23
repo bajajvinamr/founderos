@@ -1,0 +1,51 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us about the feature you'd like to see in FounderOS!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this feature solve or what gap does it fill?
+      placeholder: "e.g. Users cannot schedule agents to run at specific times, limiting automation"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Your idea for how to solve this
+      placeholder: "e.g. Add a scheduling UI where users can specify cron expressions or select common intervals (hourly, daily, weekly)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches you've thought about
+      placeholder: |
+        - webhook triggers instead of scheduled runs
+        - integrating with Zapier/Make for scheduling
+        - letting users write custom scheduler plugins
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who benefits and how many users?
+      placeholder: "e.g. All power users running recurring tasks. Estimated 30-40% of active users based on support requests"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any screenshots, examples, or links

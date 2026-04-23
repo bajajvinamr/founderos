@@ -1,0 +1,179 @@
+name: Uptime
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub cron is UTC; actual cadence drifts up to 5 min
+    # under load, which is fine for a non-paging heartbeat monitor.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+env:
+  FLY_URL: https://founderos.fly.dev
+  VERCEL_URL: https://founderos-bice.vercel.app
+  INCIDENT_LABEL: incident
+  # Stable title for auto-deduplication. Uptime workflow opens AT MOST one
+  # issue with this title. While it's open, new failures comment on it.
+  INCIDENT_TITLE: "Uptime: production endpoints failing"
+  # Only open an incident after N consecutive failures (reduces noise from
+  # flaky DNS / transient GitHub runner networking hiccups).
+  INCIDENT_THRESHOLD: "3"
+
+jobs:
+  probe:
+    name: Probe production endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      status: ${{ steps.run.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run smoke probe
+        id: run
+        timeout-minutes: 5
+        run: |
+          chmod +x scripts/ci/smoke.sh
+          set +e
+          scripts/ci/smoke.sh \
+            --url "$FLY_URL/api/healthz" \
+            --url "$VERCEL_URL/" \
+            --url "$VERCEL_URL/api/healthz" \
+            --retries 2 --initial-delay 3 --timeout 20 \
+            --json "$RUNNER_TEMP/uptime-results.json"
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 0 ]]; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uptime-results-${{ github.run_id }}
+          path: ${{ runner.temp }}/uptime-results.json
+          retention-days: 7
+
+  # Opens/updates a single auto-deduplicated incident issue after
+  # INCIDENT_THRESHOLD consecutive failures. Dedup key: exact issue title.
+  incident:
+    name: Manage incident issue
+    needs: probe
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update incident state
+        uses: actions/github-script@v7
+        env:
+          PROBE_STATUS: ${{ needs.probe.result == 'success' && 'pass' || 'fail' }}
+          SMOKE_OUTPUT: ${{ needs.probe.outputs.status }}
+        with:
+          script: |
+            const title      = process.env.INCIDENT_TITLE || "Uptime: production endpoints failing";
+            const label      = process.env.INCIDENT_LABEL || "incident";
+            const threshold  = parseInt(process.env.INCIDENT_THRESHOLD || "3", 10);
+            const probeFailed = (process.env.SMOKE_OUTPUT || process.env.PROBE_STATUS) === "fail";
+
+            // Find any existing open issue with this exact title.
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: "open",
+              labels: label,
+              per_page: 50,
+            });
+            const existing = openIssues.find(i => i.title === title);
+
+            // ── Healthy now ─────────────────────────────────────────────
+            if (!probeFailed) {
+              if (existing) {
+                const now = new Date().toISOString();
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  issue_number: existing.number,
+                  body: `Probe recovered at ${now} (run: ${context.runId}). Auto-closing.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  issue_number: existing.number,
+                  state: "closed",
+                });
+                core.info(`Closed incident #${existing.number} — probe recovered.`);
+              } else {
+                core.info("Probe passed; no open incident. Nothing to do.");
+              }
+              return;
+            }
+
+            // ── Failing now ─────────────────────────────────────────────
+            // Count recent consecutive failures by looking at the last N
+            // uptime workflow runs. "Recent" = the last INCIDENT_THRESHOLD
+            // runs of THIS workflow only.
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              workflow_id: "uptime.yml",
+              per_page: threshold + 5,
+            });
+            // The current run is conclusion=null (still in progress) so we
+            // consider it failed since we're in that branch. Drop completed
+            // cancelled ones; count consecutive failures from the top.
+            const relevant = runs.data.workflow_runs
+              .filter(r => r.id !== context.runId && r.conclusion !== "cancelled" && r.conclusion !== "skipped")
+              .slice(0, threshold - 1);
+            const priorFails = relevant.every(r => r.conclusion === "failure");
+            const consecutiveFails = relevant.length + 1; // +1 for current run
+            core.info(`Probe failed. Prior runs scanned: ${relevant.length}. All recent failed: ${priorFails}. Consecutive ~${consecutiveFails}.`);
+
+            if (!priorFails || consecutiveFails < threshold) {
+              core.info(`Below threshold (${threshold}). Not opening incident yet.`);
+              return;
+            }
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `Production uptime probe has failed ${consecutiveFails}+ times in a row.`,
+              ``,
+              `**Endpoints being probed:**`,
+              `- ${process.env.FLY_URL}/api/healthz`,
+              `- ${process.env.VERCEL_URL}/`,
+              `- ${process.env.VERCEL_URL}/api/healthz`,
+              ``,
+              `**Latest run:** ${runUrl}`,
+              ``,
+              `**Runbook:** see \`docs/ops/deploy-runbook.md\` → "Responding to an uptime incident".`,
+              ``,
+              `This issue auto-closes when the probe recovers.`,
+            ].join("\n");
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: existing.number,
+                body: `Still failing as of run ${runUrl}.`,
+              });
+              core.info(`Commented on existing incident #${existing.number}.`);
+            } else {
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                title,
+                body,
+                labels: [label],
+              });
+              core.info(`Opened incident #${issue.number}.`);
+            }

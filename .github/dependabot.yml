@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 5
+    groups:
+      - dependency-type: "minor"
+        update-types: ["minor", "patch"]
+      - dependency-type: "major"
+        update-types: ["major"]
+    labels:
+      - dependencies
+      - security
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    labels:
+      - dependencies
+      - auto-merge

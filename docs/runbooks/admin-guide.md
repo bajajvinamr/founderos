@@ -471,6 +471,25 @@ If `SENTRY_DSN` and `VITE_SENTRY_DSN` are not set, Sentry is disabled (no-op). E
 
 ---
 
+## Security automation
+
+FounderOS runs continuous security scanning on every push and pull request:
+
+- **Gitleaks:** Scans for hardcoded secrets (API keys, credentials, tokens). Configured to catch Anthropic (`sk-ant-`, `sk-proj-`), Supabase (`sbp_`, `sk_live_`), and service role JWTs. See `.gitleaks.toml` for allowlist and custom rules.
+- **CodeQL:** Static analysis (OWASP Top 10, injection, XSS, etc.). Runs on push to main, all PRs, and weekly schedule. Results surface in GitHub Security tab.
+- **Dependabot:** Automatic dependency updates weekly (Mondays 06:00 UTC). Groups minor+patch together per ecosystem; major versions as separate PRs. Opens max 5 PRs at once, labeled `dependencies` + `security`.
+- **NPM Audit:** Runs on every push/PR. Fails only on high+ severity. Produces markdown summary in workflow artifacts.
+- **OSSF Scorecard:** Automated hygiene check on main branch, weekly. Scores supply chain security (branch protection, signed commits, dependency handling, etc.).
+
+**Responding to security alerts:**
+- **Gitleaks PR comment:** Review the flagged content. If a true positive secret is exposed, rotate it immediately (see sections above: API key rotation, `BETTER_AUTH_SECRET` rotation, master key backup).
+- **Dependabot PRs:** Review lock file changes. Merge or auto-merge as-needed. High+critical audit failures block merge (see `.github/workflows/npm-audit.yml`).
+- **CodeQL issues:** Review findings in GitHub Security tab. Address CRITICAL issues before merge.
+
+For vulnerability disclosure, see [SECURITY.md](../../SECURITY.md).
+
+---
+
 ## Security quick-checks
 
 Before handing an instance to a customer:

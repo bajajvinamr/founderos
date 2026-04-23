@@ -1,38 +1,328 @@
 name: CI
 
+# Canonical PR checks. Every job runs in parallel after `install`, with
+# fail-fast disabled so all failures surface at once. A new push to the same
+# PR cancels previous in-flight runs.
+#
+# Documented in .github/workflows/README.md.
+
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, master]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "9.15.4"
+  BUNDLE_SIZE_BUDGET_KB: "1536" # 1.5 MB gzipped total for ui/dist/assets/*.js
 
-      - name: Install pnpm
+jobs:
+  install:
+    name: install + cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pnpm-store: ${{ steps.pnpm-store.outputs.path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
 
-      - name: Setup Node
+      - name: Setup Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: pnpm
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install deps
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm -r typecheck
+  typecheck:
+    name: typecheck
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Restore pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v3
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck all workspaces
+        run: pnpm typecheck
+      - name: Typecheck CI helper scripts
+        run: pnpm exec tsc -p scripts/ci/tsconfig.json
 
-      - name: Tests
+  lint:
+    name: lint
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v3
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Forbidden token check
+        run: pnpm check:tokens
+      - name: Lint workspaces
+        run: pnpm lint
+
+  test:
+    name: test (+ coverage)
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v3
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run tests with coverage
+        id: tests
+        env:
+          CI: "true"
+        run: |
+          set -o pipefail
+          pnpm exec vitest run \
+            --reporter=default \
+            --reporter=json \
+            --outputFile=./test-results.json \
+            --coverage \
+            --coverage.reporter=text-summary \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=lcov \
+            || echo "::warning::vitest run reported failures (see summary)"
+
+      - name: Coverage summary
+        if: always()
+        run: pnpm ci:coverage-summary || true
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/
+            **/coverage/
+            !**/node_modules/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Enforce test pass
         run: pnpm test:run
+
+  migration-check:
+    name: migration-check
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v3
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Check migration numbering + journal
+        run: pnpm --filter @founderos/db check:migrations
+
+  schema-drift:
+    name: schema-drift
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Detect changed migrations
+        id: changed
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "No base SHA — skipping."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE" "$HEAD" -- 'packages/db/src/migrations/*.sql' || true)"
+          printf 'files<<EOF\n%s\nEOF\n' "$changed" >> "$GITHUB_OUTPUT"
+          if [ -n "$changed" ]; then
+            echo "Migration files changed:"
+            echo "$changed"
+          else
+            echo "No migration files changed."
+          fi
+      - run: pnpm install --frozen-lockfile
+        if: steps.changed.outputs.files != ''
+      - name: Verify journal + snapshot for each new migration
+        if: steps.changed.outputs.files != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          journal="packages/db/src/migrations/meta/_journal.json"
+          if [ ! -f "$journal" ]; then
+            echo "::error::Missing $journal"
+            exit 1
+          fi
+          fail=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            base="$(basename "$f" .sql)"
+            num="${base%%_*}"
+            snap="packages/db/src/migrations/meta/${num}_snapshot.json"
+            if ! grep -q "\"tag\": \"$base\"" "$journal"; then
+              echo "::error file=$journal::journal has no entry for tag '$base'"
+              fail=1
+            fi
+            if [ ! -f "$snap" ]; then
+              echo "::error file=$f::missing snapshot $snap for migration $base"
+              fail=1
+            fi
+          done <<< "${{ steps.changed.outputs.files }}"
+          if [ "$fail" -ne 0 ]; then
+            echo "Run 'pnpm db:generate' to regenerate journal + snapshots."
+            exit 1
+          fi
+          echo "All changed migrations have matching journal + snapshot entries."
+
+  bundle-size:
+    name: bundle-size
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v3
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Build UI bundle
+        run: pnpm --filter @founderos/ui build
+      - name: Check bundle size against budget
+        id: bundle
+        env:
+          BUNDLE_SIZE_BUDGET_KB: ${{ env.BUNDLE_SIZE_BUDGET_KB }}
+        run: pnpm ci:bundle-size
+      - name: Upload bundle artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: ui/dist
+          retention-days: 7
+          if-no-files-found: ignore
+
+  ci:
+    name: ci (all checks)
+    needs: [typecheck, lint, test, migration-check, schema-drift, bundle-size]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Aggregate results
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          echo "$RESULTS"
+          echo "$RESULTS" | grep -q '"result": "failure"' && {
+            echo "::error::One or more checks failed."
+            exit 1
+          } || echo "All checks passed."
