@@ -16,6 +16,18 @@ const BOARD_ROUTE_ROOTS = new Set([
   "activity",
   "inbox",
   "design-guide",
+  // Added in waves 2-21 — missing these made the URL root get misread
+  // as a company prefix, producing "No company matches prefix DEPARTMENTS" etc.
+  "departments",
+  "weekly",
+  "decisions",
+  "conversations",
+  "hire",
+  "plugins",
+  "audit",
+  "settings",
+  "onboarding",
+  "integrations",
 ]);
 
 const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "docs", "instance"]);

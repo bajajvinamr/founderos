@@ -42,6 +42,7 @@ import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
 import { billingRoutes } from "./routes/billing.js";
 import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
 import { composioRoutes } from "./routes/composio.js";
+import { debugRoutes } from "./routes/debug.js";
 import { hireProposalRoutes } from "./routes/hire-proposal.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
@@ -274,6 +275,7 @@ export async function createApp(
   api.use(permissionCoachRoutes(db));
   api.use(agentHandoffRoutes(db));
   api.use(composioRoutes(db));
+  api.use(debugRoutes());
   api.use("/billing", billingRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
