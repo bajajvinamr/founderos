@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Loader2, X } from "lucide-react";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -61,10 +61,46 @@ export function FounderOnboardingWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const decisions = useMemo(
-    () => buildFirstDecisions(draft.bottlenecks),
-    [draft.bottlenecks],
-  );
+  // Server-generated decisions: real Claude call that uses the founder's
+  // vision + bottlenecks + team to produce 3 tailored cards. Fetched lazily
+  // once the user has reached step 5 (all context fields are populated).
+  // Falls back to client-side templates if the fetch is still in flight or
+  // errors — we never block the wizard on the LLM round-trip.
+  const canFetchDecisions =
+    step >= 5 &&
+    draft.vision.trim().length >= 10 &&
+    draft.bottlenecks.length >= 1;
+
+  const serverDecisionsQuery = useQuery({
+    queryKey: [
+      "onboarding",
+      "first-decisions",
+      draft.vision.trim(),
+      draft.bottlenecks.join("|"),
+      draft.team,
+    ],
+    enabled: canFetchDecisions,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+    queryFn: async () => {
+      const res = await api.post<{
+        decisions: Array<{ id: string; slot: "cos" | "growth" | "content" | "finance"; title: string; rationale: string }>;
+        source: "llm" | "fallback";
+      }>("/onboarding/first-decisions", {
+        vision: draft.vision.trim(),
+        bottlenecks: draft.bottlenecks,
+        team: draft.team,
+      });
+      return res;
+    },
+  });
+
+  const decisions = useMemo(() => {
+    if (serverDecisionsQuery.data?.decisions?.length) {
+      return serverDecisionsQuery.data.decisions;
+    }
+    return buildFirstDecisions(draft.bottlenecks);
+  }, [serverDecisionsQuery.data, draft.bottlenecks]);
 
   // Keep charters in sync whenever inputs that feed them change, but only
   // until the user has manually edited a charter (we detect that via a

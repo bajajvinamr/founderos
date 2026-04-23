@@ -46,11 +46,31 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       setSession(nextSession);
       // Keep React Query's cached session in sync so downstream consumers
       // (CloudAccessGate, Sidebar, etc.) re-render on sign-in / sign-out.
       queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
+
+      // On sign-in: force an authenticated request against the backend so
+      // the server-side actor middleware resolves the session and runs the
+      // inline post-signup bootstrap (first-user-wins admin promotion).
+      // Without this, the UI's `/api/health` call races the promotion and
+      // BootstrapPendingPage flashes for new users (the symptom our cofounder
+      // hit). Then invalidate the health query so CloudAccessGate re-checks
+      // and sees bootstrapStatus: "ready".
+      if (event === "SIGNED_IN" && nextSession?.access_token) {
+        try {
+          await fetch("/api/auth/get-session", {
+            method: "GET",
+            headers: { Authorization: `Bearer ${nextSession.access_token}` },
+            credentials: "include",
+          });
+        } catch {
+          // best-effort; health invalidation below still forces a recheck
+        }
+        queryClient.invalidateQueries({ queryKey: queryKeys.health });
+      }
     });
 
     return () => {

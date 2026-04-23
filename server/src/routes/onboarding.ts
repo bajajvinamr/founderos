@@ -40,6 +40,7 @@ import {
   secretService,
   validateAnthropicKey,
 } from "../services/index.js";
+import { generateFirstDecisions } from "../services/onboarding-decisions.js";
 import type { AgentRole } from "@founderos/shared";
 
 // ---------------------------------------------------------------------------
@@ -97,7 +98,10 @@ const bootstrapSchema = z.object({
 });
 
 const firstDecisionsSchema = z.object({
+  vision: z.string().min(1).max(2000),
   bottlenecks: z.array(z.string().min(1)).min(1).max(2),
+  team: z.enum(["solo", "with_cofounder", "with_team"]),
+  companyName: z.string().min(1).max(140).optional(),
 });
 
 const acceptDecisionSchema = z.object({
@@ -389,7 +393,13 @@ export function onboardingRoutes(db: Db) {
     async (req, res) => {
       assertBoard(req);
       const input = req.body as z.infer<typeof firstDecisionsSchema>;
-      res.json({ decisions: buildServerFirstDecisions(input.bottlenecks) });
+      const { decisions, source } = await generateFirstDecisions(db, {
+        vision: input.vision,
+        bottlenecks: input.bottlenecks,
+        team: input.team,
+        companyName: input.companyName,
+      });
+      res.json({ decisions, source });
     },
   );
 
