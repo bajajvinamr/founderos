@@ -35,6 +35,21 @@ Tests listed here fail under parallel execution but pass in isolation. These are
 
 ---
 
+### 3. agent-instructions-routes.test.ts > GET /api/agents/:id/instructions
+
+**Location:** `server/src/__tests__/agent-instructions-routes.test.ts:162`
+
+**Issue:** Route handler returns `{}` (empty body, 200) instead of `{ mode: "managed", rootPath: "/tmp/agent-1", ... }` when tests contend on the embedded-PG data dir. Only observed under full parallel runs — passes in isolation.
+
+**Symptom:** Reported 1 failure on `pnpm -w run test` during 2026-04-23 retro; did not appear in the preceding run (which failed `workspace-runtime` instead). Classic shared-state symptom — different failures per run.
+
+**Fix options:**
+1. Isolate the test suite's DB fixture (its own `DATABASE_URL` / fresh PGlite instance per file)
+2. Serialize with `describe.sequential` while a proper fix is built
+3. Audit `agent-instructions` route's startup-time memoization — it may be caching the first caller's agent row across tests
+
+---
+
 ## Verification
 
 To verify a fix works:

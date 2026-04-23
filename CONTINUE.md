@@ -1,6 +1,13 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-23 by Claude (session handover)_
+_Last updated: 2026-04-23 by Claude (session handover + retrospection pass)_
+
+## 2026-04-23 — retrospection pass
+
+- **Shipped:** 7 hygiene fixes — see `docs/retros/2026-04-23-retro.md`. Created project `CLAUDE.md`, deleted 2 dead master-targeted workflows, renamed `e2e.yml` → `e2e-manual.yml`, marked shipped plan as SHIPPED, updated `CI-KNOWN-FLAKES.md` with a 3rd flake, deleted local `dev` branch.
+- **Pending (tracked debt):** Composio v3 migration (`composio-client.ts`), 3 files >4000 lines (`heartbeat.ts`, `company-portability.ts`, `AgentDetail.tsx`), flaky-test infra (per-file DB fixtures).
+- **Known issues:** 2–3 flaky tests per root run (shared embedded-PG data dir), all 17 in-code TODOs are legitimate deferred-feature markers (no rot).
+- **Exact next step:** Pick one of — (a) install `@composio/core` and migrate client off v1, (b) begin `heartbeat.ts` decomposition, (c) budget an afternoon for per-file DB fixtures to fix flakes at root cause. See `docs/retros/2026-04-23-retro.md` "Next retro target" for the 3-week review date.
 
 ## Prod status (verified just now)
 
