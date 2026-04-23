@@ -1,6 +1,15 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-23 by Claude (session handover + retrospection pass)_
+_Last updated: 2026-04-24 by Claude (forward plan locked)_
+
+## 2026-04-24 — forward plan locked
+
+- **Shipped:** `docs/PLAN-FORWARD-2026-04-23.md` (4-milestone 90-day plan) + ticket stubs 001–003 for M1. North Star: **10 paying companies @ $99+/mo by 2026-07-22**. Constraint: founder ≤30 hr/week. Excellence dims: self-serve <15 min, agent completion >90%.
+- **Pending (tracked, now with ticket #s):** Composio v3 migration (`docs/tickets/001`), per-file DB fixtures for flakes (`docs/tickets/002`), CI file-size gate (`docs/tickets/003`). Plus debt carried from retro: 3 files >4000 lines (tickets 004–006 to be created when 003 lands).
+- **Known issues:** 2–3 flaky tests per root run (covered by ticket 002), Composio v1 client still deprecated (covered by ticket 001).
+- **Exact next step:** **Ticket 001 — Composio v3 client migration.** Fresh `/clear` session, open `docs/tickets/001-composio-v3-client-migration.md`, enter Plan Mode, write the ADR for SDK-vs-fetch, then execute TDD.
+
+## 2026-04-23 — retrospection pass
 
 ## 2026-04-23 — retrospection pass
 
