@@ -1,6 +1,6 @@
 # Issue Documents Plan
 
-Status: Draft  
+Status: **SHIPPED** (verified 2026-04-23 retro — routes in `server/src/routes/issues.ts`, tests in `server/src/__tests__/issue-document-restore-routes.test.ts`)  
 Owner: Backend + UI + Agent Protocol  
 Date: 2026-03-13  
 Primary issue: `PAP-448`
