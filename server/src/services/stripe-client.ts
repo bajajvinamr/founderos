@@ -1,7 +1,9 @@
+import Stripe from "stripe";
 import { logger } from "../middleware/logger.js";
 
 export interface CheckoutSessionParams {
   customerId?: string;
+  customerEmail?: string;
   priceId: string;
   successUrl: string;
   cancelUrl: string;
@@ -10,7 +12,7 @@ export interface CheckoutSessionParams {
 export interface StripeSubscription {
   id: string;
   customerId: string;
-  status: "active" | "past_due" | "canceled" | "incomplete";
+  status: "active" | "past_due" | "canceled" | "incomplete" | "trialing" | "unpaid" | "paused" | "incomplete_expired";
   currentPeriodEnd?: number;
 }
 
@@ -22,46 +24,82 @@ export interface StripeWebhookEvent {
   };
 }
 
+const API_VERSION = "2026-03-25.dahlia" as const;
+
 export class StripeClient {
-  private secretKey: string;
+  private client: Stripe | null;
   private enabled: boolean;
 
   constructor(secretKey?: string) {
-    this.secretKey = secretKey || "";
-    this.enabled = !!secretKey;
+    const key = secretKey?.trim() || "";
+    this.enabled = key.length > 0;
+    this.client = this.enabled
+      ? new Stripe(key, {
+          apiVersion: API_VERSION,
+          typescript: true,
+          appInfo: { name: "FounderOS", version: "0.3.1" },
+        })
+      : null;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
   }
 
   async createCheckoutSession(params: CheckoutSessionParams): Promise<{ url: string }> {
-    if (!this.enabled) {
-      logger.info("Stripe checkout skipped — STRIPE_SECRET_KEY not set");
-      return { url: "" };
+    if (!this.client) {
+      throw new Error("Stripe not configured — STRIPE_SECRET_KEY missing");
     }
-
-    // TODO: Implement Stripe.js client or HTTP wrapper
-    // For now, stub with TODO comment
-    logger.warn("createCheckoutSession: stub implementation, needs Stripe integration");
-    throw new Error("Stripe integration not yet implemented");
+    const session = await this.client.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: params.priceId, quantity: 1 }],
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      ...(params.customerId ? { customer: params.customerId } : {}),
+      ...(params.customerEmail && !params.customerId
+        ? { customer_email: params.customerEmail }
+        : {}),
+      allow_promotion_codes: true,
+      billing_address_collection: "auto",
+    });
+    if (!session.url) {
+      throw new Error("Stripe returned checkout session without a URL");
+    }
+    return { url: session.url };
   }
 
   async retrieveSubscription(subscriptionId: string): Promise<StripeSubscription | null> {
-    if (!this.enabled) {
-      logger.info("Stripe subscription retrieval skipped — STRIPE_SECRET_KEY not set");
+    if (!this.client) return null;
+    try {
+      const sub = await this.client.subscriptions.retrieve(subscriptionId);
+      const firstItem = sub.items.data[0];
+      return {
+        id: sub.id,
+        customerId: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
+        status: sub.status,
+        currentPeriodEnd: firstItem?.current_period_end,
+      };
+    } catch (error) {
+      logger.error({ error, subscriptionId }, "Failed to retrieve Stripe subscription");
       return null;
     }
-
-    // TODO: Implement Stripe API call
-    logger.warn("retrieveSubscription: stub implementation, needs Stripe integration");
-    throw new Error("Stripe integration not yet implemented");
   }
 
   constructWebhookEvent(
     body: Buffer | string,
     signature: string,
-    endpointSecret: string
+    endpointSecret: string,
   ): StripeWebhookEvent {
-    // TODO: Use stripe.webhooks.constructEvent for signature verification
-    logger.warn("constructWebhookEvent: stub implementation, needs Stripe integration");
-    throw new Error("Stripe webhook verification not yet implemented");
+    if (!this.client) {
+      throw new Error("Stripe not configured — cannot verify webhook");
+    }
+    // Real signature verification. Throws on invalid signature or expired timestamp.
+    const event = this.client.webhooks.constructEvent(body, signature, endpointSecret);
+    return {
+      id: event.id,
+      type: event.type,
+      data: { object: event.data.object as unknown as Record<string, unknown> },
+    };
   }
 }
 
