@@ -1,4 +1,4 @@
-name: E2E Tests
+name: E2E Manual (on-demand)
 
 on:
   workflow_dispatch:
