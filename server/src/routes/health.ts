@@ -215,9 +215,14 @@ export function healthRoutes(
       const composioStart = Date.now();
       try {
         const response = await Promise.race([
-          fetch("https://backend.composio.dev/api/v1/internal/sdk/metadata", {
+          // Any authenticated Composio endpoint works as a liveness check.
+          // /internal/sdk/metadata used to be public but returns 410 now.
+          // /api/v1/auth-configs is a stable authed endpoint that returns
+          // the org's configured auth providers — perfect ping target.
+          fetch(`${process.env.COMPOSIO_API_BASE_URL ?? "https://backend.composio.dev/api/v1"}/auth-configs`, {
             method: "GET",
             headers: {
+              "x-api-key": process.env.COMPOSIO_API_KEY ?? "",
               "User-Agent": "FounderOS/health-check",
             },
           }),
