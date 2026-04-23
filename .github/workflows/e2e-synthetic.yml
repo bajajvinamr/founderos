@@ -1,0 +1,192 @@
+name: E2E synthetic monitor
+
+# Runs every 30 min against prod. Uses the `public-only` profile so we never
+# touch auth-required endpoints or mutate anything.
+#
+# Incident-dedup pattern mirrors .github/workflows/uptime.yml: a single open
+# GitHub issue titled INCIDENT_TITLE is kept open while the probe is failing
+# and auto-closed when it recovers. We only open an incident after
+# INCIDENT_THRESHOLD consecutive failures (≈ 90 minutes) so a flaky one-off
+# is a warning, not a page.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: e2e-synthetic
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+env:
+  FOUNDEROS_E2E_BASE_URL: https://founderos-bice.vercel.app
+  FOUNDEROS_E2E_PROFILE: public-only
+  INCIDENT_LABEL: incident
+  # Stable title — dedup key for the issue the workflow keeps open.
+  INCIDENT_TITLE: "E2E synthetic failing in production"
+  INCIDENT_THRESHOLD: "3"
+
+jobs:
+  probe:
+    name: Run public-only E2E against prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      status: ${{ steps.run.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser (chromium only)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run synthetic E2E
+        id: run
+        run: |
+          set +e
+          # Only run the 7 public-safe test IDs. Kept in sync with
+          # PUBLIC_ONLY_TEST_IDS in e2e/tests/critical-flows.spec.ts.
+          pnpm e2e --grep "landing|auth-page|unauth-redirect|health|company-prefix-routing|composio-status|static-assets"
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 0 ]]; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-report-${{ github.run_id }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 14
+
+  # Opens/updates a single auto-deduplicated incident issue after
+  # INCIDENT_THRESHOLD consecutive failures. Dedup key: exact issue title.
+  incident:
+    name: Manage incident issue
+    needs: probe
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update incident state
+        uses: actions/github-script@v7
+        env:
+          PROBE_STATUS: ${{ needs.probe.result == 'success' && 'pass' || 'fail' }}
+          SMOKE_OUTPUT: ${{ needs.probe.outputs.status }}
+        with:
+          script: |
+            const title      = process.env.INCIDENT_TITLE || "E2E synthetic failing in production";
+            const label      = process.env.INCIDENT_LABEL || "incident";
+            const threshold  = parseInt(process.env.INCIDENT_THRESHOLD || "3", 10);
+            const probeFailed = (process.env.SMOKE_OUTPUT || process.env.PROBE_STATUS) === "fail";
+
+            // Find any existing open issue with this exact title.
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: "open",
+              labels: label,
+              per_page: 50,
+            });
+            const existing = openIssues.find(i => i.title === title);
+
+            // ── Healthy now ─────────────────────────────────────────────
+            if (!probeFailed) {
+              if (existing) {
+                const now = new Date().toISOString();
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  issue_number: existing.number,
+                  body: `E2E synthetic recovered at ${now} (run: ${context.runId}). Auto-closing.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  issue_number: existing.number,
+                  state: "closed",
+                });
+                core.info(`Closed incident #${existing.number} — synthetic recovered.`);
+              } else {
+                core.info("Synthetic passed; no open incident. Nothing to do.");
+              }
+              return;
+            }
+
+            // ── Failing now ─────────────────────────────────────────────
+            // Count recent consecutive failures by looking at the last N
+            // e2e-synthetic workflow runs.
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              workflow_id: "e2e-synthetic.yml",
+              per_page: threshold + 5,
+            });
+            const relevant = runs.data.workflow_runs
+              .filter(r => r.id !== context.runId && r.conclusion !== "cancelled" && r.conclusion !== "skipped")
+              .slice(0, threshold - 1);
+            const priorFails = relevant.every(r => r.conclusion === "failure");
+            const consecutiveFails = relevant.length + 1; // +1 for current run
+            core.info(`Synthetic failed. Prior runs scanned: ${relevant.length}. All recent failed: ${priorFails}. Consecutive ~${consecutiveFails}.`);
+
+            if (!priorFails || consecutiveFails < threshold) {
+              core.info(`Below threshold (${threshold}). Not opening incident yet.`);
+              return;
+            }
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The E2E synthetic monitor has failed ${consecutiveFails}+ times in a row against production.`,
+              ``,
+              `**Target:** ${process.env.FOUNDEROS_E2E_BASE_URL || 'https://founderos-bice.vercel.app'}`,
+              `**Profile:** public-only (landing, auth, health, composio status, routing, static assets)`,
+              ``,
+              `**Latest run:** ${runUrl}`,
+              ``,
+              `**Runbook:** pull the Playwright report artifact from the run, identify the failing test id,`,
+              `and cross-reference against the regression table in \`e2e/README.md\`.`,
+              ``,
+              `This issue auto-closes when the next synthetic probe passes.`,
+            ].join("\n");
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: existing.number,
+                body: `Still failing as of run ${runUrl}.`,
+              });
+              core.info(`Commented on existing incident #${existing.number}.`);
+            } else {
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                title,
+                body,
+                labels: [label],
+              });
+              core.info(`Opened incident #${issue.number}.`);
+            }

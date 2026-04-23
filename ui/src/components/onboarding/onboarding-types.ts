@@ -85,12 +85,25 @@ export interface FirstDecisionCard {
   rationale: string;
 }
 
+/**
+ * Where the agent's Claude auth comes from.
+ *   - `claude_local`: user has the Claude Code CLI installed and authed.
+ *     The adapter spawns `claude` locally; we never see an API key.
+ *     Works for anyone with Claude Pro or a local subscription.
+ *   - `anthropic_api`: user provides an sk-ant-... key. Required for
+ *     hosted deployments where we can't shell into a local CLI.
+ *   - `skip`: set it up later in Settings → Providers.
+ */
+export const ADAPTER_CHOICES = ["claude_local", "anthropic_api", "skip"] as const;
+export type AdapterChoice = (typeof ADAPTER_CHOICES)[number];
+
 export interface OnboardingDraft {
   vision: string;
   bottlenecks: Bottleneck[];
   team: TeamShape;
   cofounderName: string;
   cofounderEmail: string;
+  adapterChoice: AdapterChoice;
   anthropicKey: string;
   integrations: Record<IntegrationKey, boolean>;
   charters: AgentCharterMap;

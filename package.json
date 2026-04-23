@@ -39,6 +39,8 @@
     "smoke:openclaw-join": "./scripts/smoke/openclaw-join.sh",
     "smoke:openclaw-docker-ui": "./scripts/smoke/openclaw-docker-ui.sh",
     "smoke:openclaw-sse-standalone": "./scripts/smoke/openclaw-sse-standalone.sh",
+    "e2e": "playwright test --config=e2e/playwright.config.ts",
+    "e2e:install": "playwright install chromium",
     "test:e2e": "npx playwright test --config tests/e2e/playwright.config.ts",
     "test:smoke": "npx playwright test --config tests/e2e/smoke/playwright.config.ts",
     "test:e2e:headed": "npx playwright test --config tests/e2e/playwright.config.ts --headed",

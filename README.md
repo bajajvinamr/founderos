@@ -69,6 +69,10 @@ Single-tenant per customer — every instance runs in its own Fly machine with a
 - **Validation**: Zod at every route boundary, invariants locked with unit tests
 - **Crypto**: AES-256-GCM envelope encryption for stored provider keys
 
+## Architecture decisions
+
+Why the stack looks the way it does — forking Paperclip, the Fly/Vercel split, Supabase for auth, BYO Anthropic key, the permission ladder, Composio, and the rest. See [`docs/adr/`](./docs/adr/README.md).
+
 ## License
 
 MIT. See [`LICENSE`](./LICENSE) for the full text and [`NOTICE.md`](./NOTICE.md) for upstream open-source attributions.

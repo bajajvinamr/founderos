@@ -38,6 +38,7 @@ function buildInitialDraft(): OnboardingDraft {
     team: "solo",
     cofounderName: "",
     cofounderEmail: "",
+    adapterChoice: "claude_local",
     anthropicKey: "",
     integrations: { ...DEFAULT_INTEGRATION_STATE },
     charters: buildAutoCharters({
@@ -137,7 +138,11 @@ export function FounderOnboardingWizard() {
     if (current === 1) return draft.vision.trim().length >= 10;
     if (current === 2) return draft.bottlenecks.length >= 1;
     if (current === 3) return true;
-    if (current === 4) return validation.status === "valid";
+    if (current === 4) {
+      // claude_local + skip don't require a validated key; only anthropic_api does.
+      if (draft.adapterChoice === "claude_local" || draft.adapterChoice === "skip") return true;
+      return validation.status === "valid";
+    }
     if (current === 5) return true;
     if (current === 6) return true;
     return false;
@@ -158,7 +163,8 @@ export function FounderOnboardingWizard() {
                 email: draft.cofounderEmail.trim() || null,
               }
             : null,
-        anthropicKey: draft.anthropicKey,
+        adapterChoice: draft.adapterChoice,
+        anthropicKey: draft.adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
         integrations: draft.integrations,
         charters: draft.charters,
       };
@@ -291,9 +297,13 @@ export function FounderOnboardingWizard() {
               )}
               {step === 4 && (
                 <Step4Plugin
+                  adapterChoice={draft.adapterChoice}
                   anthropicKey={draft.anthropicKey}
                   integrations={draft.integrations}
                   validation={validation}
+                  onAdapterChoiceChange={(choice) =>
+                    patchDraft({ adapterChoice: choice })
+                  }
                   onAnthropicKeyChange={(key) =>
                     patchDraft({ anthropicKey: key })
                   }

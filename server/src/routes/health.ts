@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Db } from "@founderos/db";
 import { and, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
-import { heartbeatRuns, instanceUserRoles, invites } from "@founderos/db";
+import { heartbeatRuns, instanceUserRoles, invites, companies } from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import { readPersistedDevServerStatus, toDevServerHealthStatus } from "../dev-server-status.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
@@ -97,6 +97,195 @@ export function healthRoutes(
         companyDeletionEnabled: opts.companyDeletionEnabled,
       },
       ...(devServer ? { devServer } : {}),
+    });
+  });
+
+  // Deep health check: exercises the full stack
+  router.get("/deep", async (req, res) => {
+    const checks: Array<{
+      name: string;
+      status: "ok" | "fail" | "skipped";
+      latencyMs: number;
+      detail?: string;
+    }> = [];
+    let overallStatus: "ok" | "degraded" | "failing" = "ok";
+
+    // 1. DB round-trip: SELECT 1
+    const dbStart = Date.now();
+    try {
+      if (!db) {
+        checks.push({
+          name: "db_roundtrip",
+          status: "skipped",
+          latencyMs: 0,
+          detail: "no db instance",
+        });
+      } else {
+        await Promise.race([
+          db.execute(sql`SELECT 1`),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("db timeout")), 200)
+          ),
+        ]);
+        const latency = Date.now() - dbStart;
+        checks.push({
+          name: "db_roundtrip",
+          status: "ok",
+          latencyMs: latency,
+        });
+      }
+    } catch (error) {
+      const latency = Date.now() - dbStart;
+      checks.push({
+        name: "db_roundtrip",
+        status: "fail",
+        latencyMs: latency,
+        detail: error instanceof Error ? error.message : "unknown error",
+      });
+      overallStatus = "failing";
+    }
+
+    // 2. Table check: SELECT count(*) FROM companies
+    const tableStart = Date.now();
+    try {
+      if (!db) {
+        checks.push({
+          name: "table_check",
+          status: "skipped",
+          latencyMs: 0,
+          detail: "no db instance",
+        });
+      } else {
+        await Promise.race([
+          db.select({ count: count() }).from(companies).limit(1),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("table check timeout")), 200)
+          ),
+        ]);
+        const latency = Date.now() - tableStart;
+        checks.push({
+          name: "table_check",
+          status: "ok",
+          latencyMs: latency,
+        });
+      }
+    } catch (error) {
+      const latency = Date.now() - tableStart;
+      checks.push({
+        name: "table_check",
+        status: "fail",
+        latencyMs: latency,
+        detail: error instanceof Error ? error.message : "unknown error",
+      });
+      overallStatus = "failing";
+    }
+
+    // 3. Session resolver: confirm req.actor.type is set
+    const sessionStart = Date.now();
+    try {
+      const actor = (req as any).actor;
+      if (!actor || !actor.type) {
+        checks.push({
+          name: "session_resolver",
+          status: "fail",
+          latencyMs: Date.now() - sessionStart,
+          detail: "actor.type not set",
+        });
+        overallStatus = "degraded";
+      } else {
+        checks.push({
+          name: "session_resolver",
+          status: "ok",
+          latencyMs: Date.now() - sessionStart,
+          detail: actor.type,
+        });
+      }
+    } catch (error) {
+      checks.push({
+        name: "session_resolver",
+        status: "fail",
+        latencyMs: Date.now() - sessionStart,
+        detail: error instanceof Error ? error.message : "unknown error",
+      });
+      overallStatus = "degraded";
+    }
+
+    // 4. Composio ping (optional if COMPOSIO_API_KEY set)
+    if (process.env.COMPOSIO_API_KEY) {
+      const composioStart = Date.now();
+      try {
+        const response = await Promise.race([
+          fetch("https://backend.composio.dev/api/v1/internal/sdk/metadata", {
+            method: "GET",
+            headers: {
+              "User-Agent": "FounderOS/health-check",
+            },
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("composio timeout")), 3000)
+          ),
+        ]);
+        const latency = Date.now() - composioStart;
+        if (!response || !(response instanceof Response)) {
+          throw new Error("invalid response");
+        }
+        if (response.ok) {
+          checks.push({
+            name: "composio_ping",
+            status: "ok",
+            latencyMs: latency,
+          });
+        } else {
+          checks.push({
+            name: "composio_ping",
+            status: "fail",
+            latencyMs: latency,
+            detail: `HTTP ${response.status}`,
+          });
+          overallStatus = "degraded";
+        }
+      } catch (error) {
+        const latency = Date.now() - composioStart;
+        checks.push({
+          name: "composio_ping",
+          status: "fail",
+          latencyMs: latency,
+          detail: error instanceof Error ? error.message : "unknown error",
+        });
+        overallStatus = "degraded";
+      }
+    } else {
+      checks.push({
+        name: "composio_ping",
+        status: "skipped",
+        latencyMs: 0,
+        detail: "COMPOSIO_API_KEY not set",
+      });
+    }
+
+    // 5. Sentry wired: check DSN is non-empty
+    const sentryStart = Date.now();
+    if (process.env.SENTRY_DSN) {
+      checks.push({
+        name: "sentry_wired",
+        status: "ok",
+        latencyMs: Date.now() - sentryStart,
+      });
+    } else {
+      checks.push({
+        name: "sentry_wired",
+        status: "fail",
+        latencyMs: Date.now() - sentryStart,
+        detail: "SENTRY_DSN not set",
+      });
+      overallStatus = "degraded";
+    }
+
+    const statusCode = overallStatus === "failing" ? 503 : 200;
+    res.status(statusCode).json({
+      status: overallStatus,
+      checks,
+      version: serverVersion,
     });
   });
 

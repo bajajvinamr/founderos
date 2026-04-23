@@ -178,6 +178,33 @@ jobs:
             exit 1
           fi
 
+      - name: Run deep health check
+        id: deep
+        timeout-minutes: 2
+        run: |
+          set +e
+          response="$(curl -sS -m 10 "$FLY_URL/api/health/deep")"
+          rc=$?
+          set -e
+
+          if [[ "$rc" -ne 0 ]]; then
+            echo "deep_health=fail" >> "$GITHUB_OUTPUT"
+            echo "deep_response=curl failed with rc=$rc" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          # Check if response contains "ok" status
+          status="$(echo "$response" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("status","unknown"))' 2>/dev/null || echo "unknown")"
+
+          if [[ "$status" == "ok" ]]; then
+            echo "deep_health=pass" >> "$GITHUB_OUTPUT"
+            echo "deep_response=$response" >> "$GITHUB_OUTPUT"
+          else
+            echo "deep_health=fail" >> "$GITHUB_OUTPUT"
+            echo "deep_response=$response" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -185,11 +212,18 @@ jobs:
           path: ${{ runner.temp }}/smoke-results.json
           retention-days: 14
 
-  # ─── 5. Rollback on smoke failure ────────────────────────────────────
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deep-health-response
+          path: /tmp/deep-health-response.json
+          retention-days: 14
+
+  # ─── 5. Rollback on smoke or deep health failure ────────────────────
   rollback-on-fail:
-    name: Rollback Fly (smoke failed)
+    name: Rollback Fly (smoke or deep health failed)
     needs: [deploy-fly, smoke]
-    if: ${{ failure() && needs.smoke.result == 'failure' }}
+    if: ${{ failure() && (needs.smoke.result == 'failure') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:

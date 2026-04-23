@@ -86,7 +86,8 @@ const bootstrapSchema = z.object({
     })
     .nullable()
     .optional(),
-  anthropicKey: z.string().min(10),
+  adapterChoice: z.enum(["claude_local", "anthropic_api", "skip"]).optional().default("anthropic_api"),
+  anthropicKey: z.string().default(""),
   integrations: z.record(z.boolean()).optional().default({}),
   charters: z.object({
     cos: charterSchema,
@@ -134,7 +135,13 @@ function deriveCompanyNameFromVision(vision: string): string {
   return words.length > 40 ? words.slice(0, 40) : words;
 }
 
-function buildAgentAdapterConfig(anthropicSecretId: string) {
+function buildAgentAdapterConfig(anthropicSecretId: string | null) {
+  // When the founder picked claude_local or skip, we don't inject an API
+  // key — claude_local authenticates via the user's existing `claude` CLI
+  // session, and skip defers provider setup to the settings page.
+  if (!anthropicSecretId) {
+    return { env: {} };
+  }
   return {
     env: {
       ANTHROPIC_API_KEY: {
@@ -260,15 +267,22 @@ export function onboardingRoutes(db: Db) {
 
       const input = req.body as z.infer<typeof bootstrapSchema>;
 
-      // 1. Validate the Anthropic key against the live API before we
-      //    start mutating state. Fail fast if the key is wrong — nothing
-      //    worse than finishing onboarding and discovering no agent can
-      //    actually run.
-      const keyCheck = await validateAnthropicKey(input.anthropicKey);
-      if (!keyCheck.valid) {
-        throw unprocessable(
-          `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
-        );
+      // 1. Validate the Anthropic key against the live API — only if the
+      //    founder chose the anthropic_api adapter. For claude_local they
+      //    auth via the local Claude Code CLI session; for skip they set
+      //    it up later. Fail fast if the wrong path is mis-configured.
+      if (input.adapterChoice === "anthropic_api") {
+        if (!input.anthropicKey || input.anthropicKey.length < 10) {
+          throw unprocessable(
+            "Anthropic API key is required when adapterChoice is 'anthropic_api'",
+          );
+        }
+        const keyCheck = await validateAnthropicKey(input.anthropicKey);
+        if (!keyCheck.valid) {
+          throw unprocessable(
+            `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
+          );
+        }
       }
 
       const actorUserId = req.actor.userId ?? "local-board";
@@ -285,17 +299,21 @@ export function onboardingRoutes(db: Db) {
         "active",
       );
 
-      // 3. Anthropic key as a company secret.
-      const secret = await secrets.create(
-        company.id,
-        {
-          name: ANTHROPIC_SECRET_NAME,
-          provider: "local_encrypted",
-          value: input.anthropicKey,
-          description: "Auto-saved during FounderOS onboarding",
-        },
-        { userId: actorUserId },
-      );
+      // 3. Anthropic key as a company secret — only when the founder
+      //    provided one. claude_local + skip don't need a stored key.
+      const secret =
+        input.adapterChoice === "anthropic_api" && input.anthropicKey
+          ? await secrets.create(
+              company.id,
+              {
+                name: ANTHROPIC_SECRET_NAME,
+                provider: "local_encrypted",
+                value: input.anthropicKey,
+                description: "Auto-saved during FounderOS onboarding",
+              },
+              { userId: actorUserId },
+            )
+          : null;
 
       // 4. Company goal + onboarding project.
       const goal = await goals.create(company.id, {
@@ -334,7 +352,7 @@ export function onboardingRoutes(db: Db) {
         .catch(() => null);
 
       // 6. Provision four agents with charters.
-      const adapterConfig = buildAgentAdapterConfig(secret.id);
+      const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
       const agentIdsBySlot: Record<AgentSlot, string> = {
         cos: "",
         growth: "",
