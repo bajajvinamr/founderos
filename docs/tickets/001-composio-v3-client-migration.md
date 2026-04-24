@@ -1,6 +1,20 @@
-# Ticket 001 — Composio v3 client migration
+# Ticket 001 — Composio v3 client migration — SHIPPED 2026-04-24
 
-**Milestone:** M1 · **Owner:** unassigned · **Created:** 2026-04-23
+**Milestone:** M1 · **Owner:** Claude · **Created:** 2026-04-23 · **Shipped:** 2026-04-24
+
+## Resolution
+
+Migrated `server/src/services/composio-client.ts` to v3. `executeTool`, `initiateConnection`, and `getConnection` now hit `/api/v3/tools/execute/{slug}`, `/api/v3/connected_accounts`, and `/api/v3/connected_accounts/{id}` respectively.
+
+Shipped fetch-wrapper path (approach 2 in the ADR). No SDK dependency, no transitive `openai`/`pusher-js`. Shapes confirmed against `@composio/client@0.1.0-alpha.66` generated resources before writing — authoritative because the Composio SDK generates its client from the same OpenAPI spec the backend serves.
+
+**Architectural shift:** v3 requires a pre-created `auth_config.id` per toolkit. Resolved per-app from `COMPOSIO_AUTH_CONFIG_<APPNAME>` (e.g. `COMPOSIO_AUTH_CONFIG_SLACK`) — admin creates the config once in the Composio dashboard, drops the id into the Fly secret, and `initiateConnection({userId, appName})` works unchanged for callers. Fails loud with a setup-instructive error when missing.
+
+**Caller contract unchanged.** `initiateConnection({userId, appName})` still accepts the same shape; `authConfigId` is optional.
+
+Tests: 13 passing (was 8). New coverage for v3 body shape, explicit connected_account_id override, missing auth_config setup error, env-resolved auth config id, and v3 path of `getConnection`.
+
+Deep health check (`composio_ping`) was already on v3 — unchanged.
 
 ## Problem
 

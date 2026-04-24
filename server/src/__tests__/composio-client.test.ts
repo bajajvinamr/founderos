@@ -205,13 +205,15 @@ describe("composio-client", () => {
   });
 
   // 2 ────────────────────────────────────────────────────────────────────
-  it("executeTool returns { ok: true, output } on success", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(
+  it("executeTool returns { ok: true, output } on success, hits v3 path, sends user_id + arguments", async () => {
+    let capturedBody: unknown = null;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return new Response(
         JSON.stringify({ successful: true, data: { ts: "1700000000.001" } }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    ) as unknown as typeof fetch;
+      );
+    }) as unknown as typeof fetch;
 
     const client = createComposioClient({
       apiKey: "sk-test",
@@ -223,13 +225,22 @@ describe("composio-client", () => {
       params: { channel: "C123", text: "hi" },
     });
     expect(result).toEqual({ ok: true, output: { ts: "1700000000.001" } });
+
+    // Path must be v3 `/api/v3/tools/execute/{slug}` — not the v1
+    // `/actions/{slug}/execute` path (which returns 410).
     expect(fetchImpl).toHaveBeenCalledWith(
-      expect.stringContaining("/actions/slack_send_message/execute"),
+      expect.stringContaining("/api/v3/tools/execute/slack_send_message"),
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ "x-api-key": "sk-test" }),
       }),
     );
+
+    // Body must use v3 field names: `user_id` + `arguments` (not entityId + input).
+    expect(capturedBody).toEqual({
+      user_id: "user-A",
+      arguments: { channel: "C123", text: "hi" },
+    });
   });
 
   // 3 ────────────────────────────────────────────────────────────────────
@@ -254,26 +265,132 @@ describe("composio-client", () => {
     }
   });
 
+  // 3b ───────────────────────────────────────────────────────────────────
+  it("executeTool forwards explicit connected_account_id when supplied", async () => {
+    let capturedBody: unknown = null;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return new Response(
+        JSON.stringify({ successful: true, data: { ok: true } }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const client = createComposioClient({ apiKey: "sk-test", fetchImpl });
+    await client.executeTool({
+      userId: "user-A",
+      toolName: "slack_send_message",
+      params: { channel: "C123" },
+      connectedAccountId: "ca_abc123",
+    });
+    expect(capturedBody).toEqual({
+      user_id: "user-A",
+      arguments: { channel: "C123" },
+      connected_account_id: "ca_abc123",
+    });
+  });
+
   // 4 ────────────────────────────────────────────────────────────────────
-  it("initiateConnection returns redirectUrl and connectionId", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(
+  it("initiateConnection posts v3 body { auth_config, connection } and extracts redirectUrl from connectionData.val", async () => {
+    let capturedBody: unknown = null;
+    let capturedUrl = "";
+    const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
+      capturedUrl = String(url);
+      capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return new Response(
         JSON.stringify({
-          connectedAccountId: "cc-xyz",
-          redirectUrl: "https://backend.composio.dev/oauth?state=abc",
+          id: "ca_xyz",
+          status: "INITIATED",
+          connectionData: {
+            authScheme: "OAUTH2",
+            val: {
+              redirectUrl: "https://backend.composio.dev/oauth?state=abc",
+              status: "INITIATED",
+            },
+          },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    ) as unknown as typeof fetch;
+      );
+    }) as unknown as typeof fetch;
 
     const client = createComposioClient({ apiKey: "sk-test", fetchImpl });
     const out = await client.initiateConnection({
       userId: "user-A",
       appName: "slack",
+      authConfigId: "ac_slack_1",
+      redirectUri: "https://app.example.com/integrations/slack/callback",
     });
     expect(out).toEqual({
-      connectionId: "cc-xyz",
+      connectionId: "ca_xyz",
       redirectUrl: "https://backend.composio.dev/oauth?state=abc",
+    });
+    expect(capturedUrl).toContain("/api/v3/connected_accounts");
+    expect(capturedBody).toEqual({
+      auth_config: { id: "ac_slack_1" },
+      connection: {
+        user_id: "user-A",
+        callback_url: "https://app.example.com/integrations/slack/callback",
+      },
+    });
+  });
+
+  // 4b ───────────────────────────────────────────────────────────────────
+  it("initiateConnection throws a setup-instructive error when no auth_config id is configured", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not be called", { status: 500 })) as unknown as typeof fetch;
+    const client = createComposioClient({ apiKey: "sk-test", fetchImpl });
+    await expect(
+      client.initiateConnection({ userId: "user-A", appName: "gmail" }),
+    ).rejects.toThrow(/COMPOSIO_AUTH_CONFIG_GMAIL/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  // 4c ───────────────────────────────────────────────────────────────────
+  it("initiateConnection resolves auth_config id from COMPOSIO_AUTH_CONFIG_<APP> when not passed explicitly", async () => {
+    process.env.COMPOSIO_AUTH_CONFIG_SLACK = "ac_env_slack";
+    let capturedBody: unknown = null;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return new Response(
+        JSON.stringify({
+          id: "ca_xyz",
+          connectionData: { val: { redirectUrl: "https://r/u" } },
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const client = createComposioClient({ apiKey: "sk-test", fetchImpl });
+    const out = await client.initiateConnection({ userId: "user-A", appName: "slack" });
+    expect(out.connectionId).toBe("ca_xyz");
+    expect(
+      (capturedBody as { auth_config?: { id?: string } } | null)?.auth_config
+        ?.id,
+    ).toBe("ac_env_slack");
+    delete process.env.COMPOSIO_AUTH_CONFIG_SLACK;
+  });
+
+  // 4d ───────────────────────────────────────────────────────────────────
+  it("getConnection hits v3 path and normalizes status", async () => {
+    let capturedUrl = "";
+    const fetchImpl = vi.fn(async (url: unknown) => {
+      capturedUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          id: "ca_xyz",
+          status: "ACTIVE",
+          user_id: "user-A",
+          auth_config: { id: "ac_slack_1", toolkit: { slug: "slack" } },
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const client = createComposioClient({ apiKey: "sk-test", fetchImpl });
+    const out = await client.getConnection({ connectionId: "ca_xyz" });
+    expect(capturedUrl).toContain("/api/v3/connected_accounts/ca_xyz");
+    expect(out).toEqual({
+      connectionId: "ca_xyz",
+      status: "active",
+      appName: "slack",
+      entityId: "user-A",
     });
   });
 });
