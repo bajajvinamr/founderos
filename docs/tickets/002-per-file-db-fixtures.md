@@ -1,6 +1,16 @@
-# Ticket 002 — Per-file DB fixtures for flaky tests
+# Ticket 002 — Per-file DB fixtures for flaky tests — PARTIAL 2026-04-24
 
-**Milestone:** M1 · **Owner:** unassigned · **Created:** 2026-04-23
+**Milestone:** M1 · **Owner:** Claude · **Created:** 2026-04-23 · **Resolved:** 2026-04-24
+
+## Resolution
+
+On investigation, the three quarantined flakes had distinct root causes, not the shared-PG-data-dir assumption in the original framing:
+
+- **health.test.ts** — module-cache race under vitest fork parallelism. Fixed in `838fe52` (hoisted `vi.mock` + static imports). 3/3 pass in isolation and under full-suite parallel load.
+- **agent-instructions-routes.test.ts** — not reproducible after the retro (5/5 in isolation on 2026-04-24). Pure mock-based, no DB contact. Removed from quarantine.
+- **workspace-runtime.test.ts** — still flakes ~1/1570 under parallel load. Root cause is shared HTTP services on ephemeral ports, NOT embedded PG. Per-file DB fixtures would not fix this. Tracked as an orthogonal issue in CI-KNOWN-FLAKES.md.
+
+Two of three flakes gone with targeted fixes. Shared-PG refactor was not needed.
 
 ## Problem
 

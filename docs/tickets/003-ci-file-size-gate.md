@@ -1,6 +1,10 @@
-# Ticket 003 — CI file-size gate
+# Ticket 003 — CI file-size gate — SHIPPED 2026-04-24
 
-**Milestone:** M1 · **Owner:** unassigned · **Created:** 2026-04-23
+**Milestone:** M1 · **Owner:** Claude · **Created:** 2026-04-23 · **Shipped:** 2026-04-24 (`015b2cf`)
+
+## Resolution
+
+Shipped in commit `015b2cf`. `scripts/ci/file-size-check.ts` (zero deps, custom glob matcher). `.github/workflows/ci.yml` has a new `file-size` job (3-min timeout, `fetch-depth: 0`). Warns ≥1500 lines, fails ≥2500. Grandfathered offenders in `.github/file-size-allowlist.txt`: heartbeat.ts, company-portability.ts, AgentDetail.tsx, cli/src/commands/worktree.ts. Tickets 004-007 for the refactors not created — internal hygiene, not buyer-blocking.
 
 ## Problem
 
