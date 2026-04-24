@@ -48,8 +48,8 @@ Current deploys:
 
 - **Router prefix parsing:** `ui/src/lib/company-routes.ts` has a `BOARD_ROUTE_ROOTS` set. When adding a new top-level route (`/settings`, `/weekly`, `/departments`), add its slug there or the router will mistake the route root for a company prefix.
 - **Adapter choice on onboarding:** `claude_local` + `skip` don't need an API key. Only `anthropic_api` requires + validates a key. Server route `onboarding/bootstrap` enforces this — don't re-add a blanket key requirement.
-- **Composio client is v1 — deprecated.** `composio-client.ts` still targets `/api/v1/*` which returns 410. Health check was moved to v3 but tool execution not yet migrated. Flag to user before wiring any new composio-backed flow.
-- **Test flakes:** ~2/1569 tests fail under parallel execution due to shared embedded-PG data dir. Documented in `docs/CI-KNOWN-FLAKES.md`. Not your bug if you see `health.test.ts` or `workspace-runtime.test.ts` red.
+- **Composio client is v3.** `composio-client.ts` targets `/api/v3/tools/execute/{slug}`, `/api/v3/connected_accounts`, `/api/v3/connected_accounts/{id}`. Per-toolkit `auth_config.id` must be pre-created in the Composio dashboard and dropped into `COMPOSIO_AUTH_CONFIG_<APP>` Fly secrets (slack, gmail, github, googlecalendar, googlesheets, googledrive, notion, linkedin live on prod). `COMPOSIO_V3_READY=1` enables the routes.
+- **Test flakes:** 1/1570 tests flakes under parallel load — `workspace-runtime.test.ts` (shared HTTP services on ephemeral ports, not embedded PG). Documented in `docs/CI-KNOWN-FLAKES.md`. Not your bug if you see it red.
 
 ## Where things live
 
