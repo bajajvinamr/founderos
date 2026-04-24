@@ -48,7 +48,16 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 
 export function isComposioEnabled(): boolean {
   const key = process.env.COMPOSIO_API_KEY;
-  return typeof key === "string" && key.trim().length > 0;
+  const hasKey = typeof key === "string" && key.trim().length > 0;
+  if (!hasKey) return false;
+
+  // v1 API was fully deprecated (410 on every path). Until the v3 migration
+  // ships (see docs/tickets/001-composio-v3-client-migration.md) we keep
+  // composio gated off by default so no route silently 410s on a user's
+  // first integration attempt. Set COMPOSIO_V3_READY=1 once the client is
+  // migrated to v3 and a real integration has been verified end-to-end.
+  const v3Ready = process.env.COMPOSIO_V3_READY === "1";
+  return v3Ready;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────

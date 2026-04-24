@@ -35,8 +35,21 @@ The health check was already migrated to v3 (`/api/v3/toolkits?limit=1`) in comm
 
 ## Approach options (pick in ADR before coding)
 
-1. **Install `@composio/core` SDK** (`0.6.11` on npm as of 2026-04-24). Clean; Composio owns the shapes. Adds 1 dep.
+1. **Install `@composio/core` SDK** (`0.6.11` on npm as of 2026-04-24, ISC license). Clean; Composio owns the shapes. Adds 1 dep but pulls in `openai` + `pusher-js` transitively.
 2. **Keep fetch wrapper, update paths + body shapes to v3.** Zero new deps. Requires a real-key probe against v3 first to capture the exact body shapes (docs punt to SDK for concrete schemas).
+
+## Session notes (2026-04-24, attempted in session but deferred)
+
+Briefly installed `@composio/core@0.6.11` to inspect the API. Finding that blocks a 15-min fix: **v3's `connectedAccounts.initiate(userId, authConfigId, options)` requires a pre-created `authConfigId`** — you no longer pass `appName` ("slack") and have it auto-create a config. Our current `ComposioInitiateConnectionInput = { userId, appName }` does exactly that.
+
+This is an architectural change, not a path rename:
+- Need to decide where `authConfigId` lives (FounderOS DB? Looked up per-toolkit? Bootstrapped once per instance?)
+- Need to model the auth-config lifecycle (who creates it, who updates it, who deletes it on toolkit removal)
+- The 4 existing test files mock v1 fetch shapes — need full rewrite, not patch
+
+Uninstalled `@composio/core` since we're not landing the migration in this session. The fetch wrapper stays on v1 but is **gated off by default** via `COMPOSIO_V3_READY` env flag (see `isComposioEnabled()` in `composio-client.ts`). Without this flag, all composio routes graceful-degrade to "not enabled" instead of 410'ing.
+
+Per the forward plan's process guarantee, this ticket requires a fresh `/clear` session in Plan Mode with TDD inversion. Not snackable.
 
 ## Verification
 

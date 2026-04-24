@@ -159,6 +159,14 @@ function makeComposioRow(
 
 describe("composio-client", () => {
   const originalKey = process.env.COMPOSIO_API_KEY;
+  const originalV3Ready = process.env.COMPOSIO_V3_READY;
+
+  // Composio is now gated behind COMPOSIO_V3_READY=1 until the v3 migration
+  // ships (see docs/tickets/001). Tests that rely on the client actually
+  // executing opt in here; the "reflects env" test below checks both gates.
+  beforeEach(() => {
+    process.env.COMPOSIO_V3_READY = "1";
+  });
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -168,14 +176,30 @@ describe("composio-client", () => {
     } else {
       process.env.COMPOSIO_API_KEY = originalKey;
     }
+    if (originalV3Ready === undefined) {
+      delete process.env.COMPOSIO_V3_READY;
+    } else {
+      process.env.COMPOSIO_V3_READY = originalV3Ready;
+    }
   });
 
   // 1 ────────────────────────────────────────────────────────────────────
-  it("isComposioEnabled reflects env", () => {
+  it("isComposioEnabled reflects env (both key and v3-ready gate)", () => {
+    // No key → disabled regardless of v3 flag.
     delete process.env.COMPOSIO_API_KEY;
+    process.env.COMPOSIO_V3_READY = "1";
     expect(isComposioEnabled()).toBe(false);
+
+    // Key set but v3-ready flag off → disabled (protects against v1 410s).
     process.env.COMPOSIO_API_KEY = "sk-composio-xxx";
+    delete process.env.COMPOSIO_V3_READY;
+    expect(isComposioEnabled()).toBe(false);
+
+    // Key set + v3-ready → enabled.
+    process.env.COMPOSIO_V3_READY = "1";
     expect(isComposioEnabled()).toBe(true);
+
+    // Whitespace-only key → disabled even with v3-ready.
     process.env.COMPOSIO_API_KEY = "   ";
     expect(isComposioEnabled()).toBe(false);
   });
@@ -256,10 +280,14 @@ describe("composio-client", () => {
 
 describe("slack skill × composio routing", () => {
   const originalKey = process.env.COMPOSIO_API_KEY;
+  const originalV3Ready = process.env.COMPOSIO_V3_READY;
 
   beforeEach(() => {
     vi.clearAllMocks();
     _resetComposioClientForTests();
+    // Opt into composio for this describe block — the v3-ready gate is
+    // normally off by default (safety rail for prod until ticket 001 lands).
+    process.env.COMPOSIO_V3_READY = "1";
   });
 
   afterEach(() => {
@@ -269,6 +297,11 @@ describe("slack skill × composio routing", () => {
       delete process.env.COMPOSIO_API_KEY;
     } else {
       process.env.COMPOSIO_API_KEY = originalKey;
+    }
+    if (originalV3Ready === undefined) {
+      delete process.env.COMPOSIO_V3_READY;
+    } else {
+      process.env.COMPOSIO_V3_READY = originalV3Ready;
     }
     vi.unstubAllGlobals();
   });
