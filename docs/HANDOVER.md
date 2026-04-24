@@ -113,7 +113,8 @@ Give each buyer the repo + `scripts/fly-provision.sh` + the self-host doc. They 
 | Cost spike alarm | `docs/runbooks/incidents.md` § "Cost spike" | Check `audit_log` for runaway agent |
 | DB connection drops | `docs/runbooks/incidents.md` § "DB drops" | Check Fly MPG status + connection pool |
 | Deploy failure | `.github/workflows/README.md` | Check which CI gate failed; known flakes in `docs/CI-KNOWN-FLAKES.md` |
-| Composio integration returns "not enabled" | By design — v3 migration pending (ticket `docs/tickets/001`) | Set `COMPOSIO_V3_READY=1` only after migration ships |
+| Composio integration returns "not enabled" | Should not happen — v3 is live. If seen, `COMPOSIO_V3_READY` got unset; run `fly secrets list -a founderos \| grep COMPOSIO` |
+| Individual toolkit returns "no auth_config id" | Expected when buyer connects a toolkit without a provisioned auth config | Create auth config in Composio dashboard, set `COMPOSIO_AUTH_CONFIG_<APP>` in Fly secrets, redeploy |
 
 ---
 

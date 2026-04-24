@@ -1,6 +1,17 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-24 by Claude (multi-company deep E2E shipped + handover verified)_
+_Last updated: 2026-04-24 by Claude (Composio integrations LIVE on prod)_
+
+## 2026-04-24 — Composio v3 live on prod + 8 toolkits wired
+
+- **Shipped:**
+  - Composio v3 client migration (commit `d8ef5da`) — v1 was 410ing, ported to `/api/v3/tools/execute/{slug}`, `/api/v3/connected_accounts`, `/api/v3/connected_accounts/{id}`. Architecture shift: `auth_config.id` resolved per-app from `COMPOSIO_AUTH_CONFIG_<APP>` env vars. Caller contract unchanged. 13 tests pass.
+  - Deployed Fly prod + set 8 Composio auth_config secrets + flipped `COMPOSIO_V3_READY=1`.
+  - `/api/composio/status` now filters by provisioned auth configs — honest "what's connectable" list.
+  - Expanded `COMPOSIO_CONFIGURED_APPS` to 9 slugs (hubspot in list but filtered out at runtime since no auth config).
+- **Live toolkits on prod:** slack, notion, linkedin, gmail, github, googlecalendar, googlesheets, googledrive. Deep health green, `composio_ping: ok` 364ms.
+- **Buyer-visible behavior:** Integrations page shows 8 connectable toolkits. Each user clicks Connect, gets their own OAuth flow via Composio, returns with an active connected_account scoped to their userId.
+- **Auto-deploy still not active** — pushed `d196da8` via manual `fly deploy`. `FLY_API_TOKEN` + `VERCEL_TOKEN` as GitHub secrets remain buyer action.
 
 ## 2026-04-24 — multi-company deep E2E + final verification
 
