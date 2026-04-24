@@ -52,7 +52,7 @@ These are **user-action-only** — I cannot do them for you. Listed in the order
      STRIPE_WEBHOOK_SECRET=whsec_... \
      -a founderos
    ```
-4. Smoke test: `curl -X POST https://founderos.fly.dev/api/billing/checkout -d '{"email":"test@example.com"}'` — should return a `{url}` to a Stripe-hosted page (test in test-mode keys first).
+4. Smoke test: `curl -X POST https://founderos.fly.dev/api/billing/checkout -H 'Content-Type: application/json' -d '{"email":"test@example.com"}'` — should return a `{url}` to a Stripe-hosted page (test in test-mode keys first).
 
 **Rollback:** if anything breaks, `fly secrets unset STRIPE_SECRET_KEY -a founderos` — routes degrade to 501, no user data touched.
 
@@ -138,7 +138,7 @@ See `docs/PLAN-FORWARD-2026-04-23.md` for the 90-day roadmap past handover.
 - [ ] GitHub repo secrets (`FLY_API_TOKEN`, `VERCEL_TOKEN`) set
 - [ ] Branch protection applied to `main`
 - [ ] Buyer has admin access to: Fly org, Vercel project, Supabase project, Stripe account
-- [ ] Buyer has watched the handover Loom (link: _to be added by you_)
+- [ ] Buyer has watched the handover Loom (record one; drop the URL here before you walk the buyer through this doc)
 - [ ] Buyer can find `docs/runbooks/` and knows to read `CONTINUE.md` before any new session
 - [ ] `docs/HANDOVER.md` (this file) has been walked through live once
 

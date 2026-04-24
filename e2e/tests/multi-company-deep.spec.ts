@@ -42,7 +42,6 @@
 import {
   describeResponse,
   expect,
-  loadCompanyCtx,
   test,
   type AgentSummary,
   type ApiHelper,
@@ -342,6 +341,13 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
     const companies = await loadAllCompanies(api);
     const subset = companies.slice(0, 4);
 
+    // Track whether the optional routes were actually exercised (200) vs all 404.
+    // If every agent 404s on skills/activity, we'd silently pass — catch that.
+    let skillsExercised = 0;
+    let activityExercised = 0;
+    let instructionsExercised = 0;
+    let agentsChecked = 0;
+
     for (const company of subset) {
       const label = `${company.issuePrefix}/${company.name}`;
       const agents = await loadAgentsForCompany(api, company.id);
@@ -352,6 +358,7 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
       ).toBeGreaterThanOrEqual(AGENTS_TO_DEEP_CHECK_PER_COMPANY);
 
       for (const agent of deepCheck) {
+        agentsChecked += 1;
         const agentLabel = `${label}/${agent.name}`;
 
         // Detail
@@ -371,9 +378,9 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
           `[${agentLabel}] agent detail leaks across companies`,
         ).toBe(company.id);
 
-        // Activity — must be an array (possibly empty on a fresh seed)
-        const act = await api.get(`/api/agents/${agent.id}/activity`);
+        // Activity — must be an array (possibly empty on a fresh seed).
         // Not every build exposes /activity on the agent route; accept 404.
+        const act = await api.get(`/api/agents/${agent.id}/activity`);
         if (act.status !== 404) {
           expect(
             act.status,
@@ -383,6 +390,7 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
             Array.isArray(act.json),
             describeResponse(`[${agentLabel}] activity not array`, act),
           ).toBe(true);
+          activityExercised += 1;
         }
 
         // Skills — response is an envelope: { adapterType, entries: [...], ... }
@@ -406,6 +414,7 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
               sk,
             ),
           ).toBe(true);
+          skillsExercised += 1;
         }
 
         // Instructions — either an object body (200) or 404 (unconfigured). Never 500.
@@ -422,9 +431,21 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
             inst.json && typeof inst.json === "object",
             describeResponse(`[${agentLabel}] instructions body not object`, inst),
           ).toBe(true);
+          instructionsExercised += 1;
         }
       }
     }
+
+    // Don't silently pass if all optional routes 404 across every agent in
+    // every tenant. At least one of the three surfaces must be live for the
+    // deep check to have contract value. If ALL three are dead, the route
+    // layer was probably deleted and we need to know.
+    expect(
+      skillsExercised + activityExercised + instructionsExercised,
+      `All optional agent routes returned 404 across ${agentsChecked} agents. ` +
+        `skills/activity/instructions appear unimplemented — deep check is ` +
+        `effectively a liveness probe, not a contract test.`,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -469,7 +490,7 @@ test.describe("[per-project] issue (task) listings", () => {
 // ────────────────────────────────────────────────────────────────────────
 
 test.describe("[isolation] cross-tenant safety", () => {
-  test("[cross-tenant-issues] issues from company A never appear in company B's list", async ({
+  test("[cross-tenant-issues] no issue id is shared across any pair of tenants", async ({
     api,
     profile,
   }) => {
@@ -483,21 +504,35 @@ test.describe("[isolation] cross-tenant safety", () => {
       "Need ≥2 companies to check cross-tenant isolation",
     ).toBeGreaterThanOrEqual(2);
 
-    const [first, second] = companies;
-    const firstIssues = await loadIssuesForCompany(api, first.id);
-    const secondIssues = await loadIssuesForCompany(api, second.id);
+    // Fetch every tenant's issues so we can check all pairs, not just the
+    // first two. A leak between any two tenants would otherwise slip through.
+    const perCompany: Array<{ company: CompanySummary; issues: Issue[] }> = [];
+    for (const c of companies) {
+      perCompany.push({
+        company: c,
+        issues: await loadIssuesForCompany(api, c.id),
+      });
+    }
 
-    const firstIds = new Set(firstIssues.map((i) => i.id));
-    for (const b of secondIssues) {
-      expect(
-        firstIds.has(b.id),
-        `Tenant isolation breach: issue id=${b.id} appears in ` +
-          `both ${first.name} and ${second.name} issue lists`,
-      ).toBe(false);
+    // Map every issue id → owning company. The first time we see an id we
+    // record it; a second occurrence is an isolation breach.
+    const owner = new Map<string, CompanySummary>();
+    for (const { company, issues } of perCompany) {
+      for (const issue of issues) {
+        const already = owner.get(issue.id);
+        expect(
+          already,
+          already
+            ? `Tenant isolation breach: issue id=${issue.id} appears in ` +
+                `both ${already.name} and ${company.name}`
+            : `(unreachable)`,
+        ).toBeUndefined();
+        owner.set(issue.id, company);
+      }
     }
   });
 
-  test("[cross-tenant-agents] agents from company A never appear in company B's agent list", async ({
+  test("[cross-tenant-agents] no agent id is shared across any pair of tenants, and ≥1 tenant has ≥1 agent", async ({
     api,
     profile,
   }) => {
@@ -511,17 +546,40 @@ test.describe("[isolation] cross-tenant safety", () => {
       "Need ≥2 companies to check cross-tenant isolation",
     ).toBeGreaterThanOrEqual(2);
 
-    const [first, second] = companies;
-    const firstAgents = await loadAgentsForCompany(api, first.id);
-    const secondAgents = await loadAgentsForCompany(api, second.id);
+    const perCompany: Array<{
+      company: CompanySummary;
+      agents: AgentSummary[];
+    }> = [];
+    for (const c of companies) {
+      perCompany.push({
+        company: c,
+        agents: await loadAgentsForCompany(api, c.id),
+      });
+    }
 
-    const firstIds = new Set(firstAgents.map((a) => a.id));
-    for (const b of secondAgents) {
-      expect(
-        firstIds.has(b.id),
-        `Tenant isolation breach: agent id=${b.id} appears in ` +
-          `both ${first.name} and ${second.name} agent lists`,
-      ).toBe(false);
+    // Guard against the vacuous-pass failure mode: if every tenant has zero
+    // agents, the isolation loop below iterates nothing and the test is
+    // silently green on an empty DB. Require ≥1 agent total before asserting.
+    const totalAgents = perCompany.reduce((n, x) => n + x.agents.length, 0);
+    expect(
+      totalAgents,
+      "No agents returned for ANY tenant — isolation test would be vacuous. " +
+        "Run the demo seed or check auth scope.",
+    ).toBeGreaterThan(0);
+
+    const owner = new Map<string, CompanySummary>();
+    for (const { company, agents } of perCompany) {
+      for (const agent of agents) {
+        const already = owner.get(agent.id);
+        expect(
+          already,
+          already
+            ? `Tenant isolation breach: agent id=${agent.id} appears in ` +
+                `both ${already.name} and ${company.name}`
+            : `(unreachable)`,
+        ).toBeUndefined();
+        owner.set(agent.id, company);
+      }
     }
   });
 });
@@ -582,6 +640,3 @@ test.describe("[health-under-load] deep health stays green", () => {
   });
 });
 
-// Tiny compile-time use of loadCompanyCtx to preserve the import when tests
-// above are extended in the future.
-void loadCompanyCtx;
