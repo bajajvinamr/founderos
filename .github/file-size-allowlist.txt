@@ -7,7 +7,6 @@
 # Known offenders as of 2026-04-23 (see forward plan).
 # Tickets 004-007 will track the actual decomposition.
 server/src/services/heartbeat.ts
-server/src/services/company-portability.ts
 
 # Remaining large files revealed by the initial audit that are still over
 # the warn threshold — keep them visible but not blocking. Address over
