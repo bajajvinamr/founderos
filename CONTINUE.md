@@ -1,6 +1,12 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-24 by Claude (Composio integrations LIVE on prod)_
+_Last updated: 2026-04-24 by Claude (CLAUDE.md drift fixed — composio v3 warning removed)_
+
+## 2026-04-24 — autonomous-loop hygiene pass
+
+- **Shipped (7b7622f):** CLAUDE.md "Known pitfalls" section no longer warns composio-client is v1. v3 shipped in `d8ef5da`; pitfall now describes the v3 auth_config.id env-var pattern. Flake count updated 2→1/1570 (health.test fixed, agent-instructions was not-reproducible).
+- **Considered, deferred:** workspace-runtime flake (last remaining 1/1570 under parallel load). Root cause is cross-file HTTP port contention, not fixable via `describe.sequential`. Proper fix = mock the HTTP services (bigger refactor); current skip is the right local optimum. Blast radius of touching test infra across 1569 tests isn't justified by a skipped test no one feels.
+- **Exact next step:** Nothing autonomous-safe left. All remaining items are buyer-action (Stripe env, GitHub secrets, branch protection, Loom) or deferred internal hygiene (tickets 004-007, workspace-runtime mock refactor).
 
 ## 2026-04-24 — Composio v3 live on prod + 8 toolkits wired
 
