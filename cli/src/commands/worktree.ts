@@ -3,20 +3,12 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  promises as fsPromises,
-  readdirSync,
-  readFileSync,
-  readlinkSync,
   rmSync,
-  statSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { createServer } from "node:net";
-import { Readable } from "node:stream";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -153,19 +145,6 @@ type EmbeddedPostgresHandle = {
   stop: () => Promise<void>;
 };
 
-type GitWorkspaceInfo = {
-  root: string;
-  commonDir: string;
-  gitDir: string;
-  hooksPath: string;
-};
-
-type CopiedGitHooksResult = {
-  sourceHooksPath: string;
-  targetHooksPath: string;
-  copied: boolean;
-};
-
 type SeedWorktreeDatabaseResult = {
   backupSummary: string;
   reboundWorkspaces: Array<{
@@ -210,189 +189,17 @@ function resolveWorktreeStartPoint(explicit?: string): string | undefined {
   return explicit ?? nonEmpty(process.env.FOUNDEROS_WORKTREE_START_POINT) ?? undefined;
 }
 
-type ConfiguredStorage = {
-  getObject(companyId: string, objectKey: string): Promise<Buffer>;
-  putObject(companyId: string, objectKey: string, body: Buffer, contentType: string): Promise<void>;
+import {
+  isMissingStorageObjectError,
+  openConfiguredStorage,
+  readSourceAttachmentBody,
+  type ConfiguredStorage,
+} from "./worktree-storage.js";
+export {
+  isMissingStorageObjectError,
+  readSourceAttachmentBody,
 };
-
-function assertStorageCompanyPrefix(companyId: string, objectKey: string): void {
-  if (!objectKey.startsWith(`${companyId}/`) || objectKey.includes("..")) {
-    throw new Error(`Invalid object key for company ${companyId}.`);
-  }
-}
-
-function normalizeStorageObjectKey(objectKey: string): string {
-  const normalized = objectKey.replace(/\\/g, "/").trim();
-  if (!normalized || normalized.startsWith("/")) {
-    throw new Error("Invalid object key.");
-  }
-  const parts = normalized.split("/").filter((part) => part.length > 0);
-  if (parts.length === 0 || parts.some((part) => part === "." || part === "..")) {
-    throw new Error("Invalid object key.");
-  }
-  return parts.join("/");
-}
-
-function resolveLocalStoragePath(baseDir: string, objectKey: string): string {
-  const resolved = path.resolve(baseDir, normalizeStorageObjectKey(objectKey));
-  const root = path.resolve(baseDir);
-  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Invalid object key path.");
-  }
-  return resolved;
-}
-
-async function s3BodyToBuffer(body: unknown): Promise<Buffer> {
-  if (!body) {
-    throw new Error("Object not found.");
-  }
-  if (Buffer.isBuffer(body)) {
-    return body;
-  }
-  if (body instanceof Readable) {
-    return await streamToBuffer(body);
-  }
-
-  const candidate = body as {
-    transformToWebStream?: () => ReadableStream<Uint8Array>;
-    arrayBuffer?: () => Promise<ArrayBuffer>;
-  };
-  if (typeof candidate.transformToWebStream === "function") {
-    const webStream = candidate.transformToWebStream();
-    const reader = webStream.getReader();
-    const chunks: Uint8Array[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) chunks.push(value);
-    }
-    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
-  }
-  if (typeof candidate.arrayBuffer === "function") {
-    return Buffer.from(await candidate.arrayBuffer());
-  }
-
-  throw new Error("Unsupported storage response body.");
-}
-
-function normalizeS3Prefix(prefix: string | undefined): string {
-  if (!prefix) return "";
-  return prefix.trim().replace(/^\/+/, "").replace(/\/+$/, "");
-}
-
-function buildS3ObjectKey(prefix: string, objectKey: string): string {
-  return prefix ? `${prefix}/${objectKey}` : objectKey;
-}
-
-const dynamicImport = new Function("specifier", "return import(specifier);") as (specifier: string) => Promise<any>;
-
-function createConfiguredStorageFromFounderOSConfig(config: FounderOSConfig): ConfiguredStorage {
-  if (config.storage.provider === "local_disk") {
-    const baseDir = expandHomePrefix(config.storage.localDisk.baseDir);
-    return {
-      async getObject(companyId: string, objectKey: string) {
-        assertStorageCompanyPrefix(companyId, objectKey);
-        return await fsPromises.readFile(resolveLocalStoragePath(baseDir, objectKey));
-      },
-      async putObject(companyId: string, objectKey: string, body: Buffer) {
-        assertStorageCompanyPrefix(companyId, objectKey);
-        const filePath = resolveLocalStoragePath(baseDir, objectKey);
-        await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
-        await fsPromises.writeFile(filePath, body);
-      },
-    };
-  }
-
-  const prefix = normalizeS3Prefix(config.storage.s3.prefix);
-  let s3ClientPromise: Promise<any> | null = null;
-  async function getS3Client() {
-    if (!s3ClientPromise) {
-      s3ClientPromise = (async () => {
-        const sdk = await dynamicImport("@aws-sdk/client-s3");
-        return {
-          sdk,
-          client: new sdk.S3Client({
-            region: config.storage.s3.region,
-            endpoint: config.storage.s3.endpoint,
-            forcePathStyle: config.storage.s3.forcePathStyle,
-          }),
-        };
-      })();
-    }
-    return await s3ClientPromise;
-  }
-  const bucket = config.storage.s3.bucket;
-  return {
-    async getObject(companyId: string, objectKey: string) {
-      assertStorageCompanyPrefix(companyId, objectKey);
-      const { sdk, client } = await getS3Client();
-      const response = await client.send(
-        new sdk.GetObjectCommand({
-          Bucket: bucket,
-          Key: buildS3ObjectKey(prefix, objectKey),
-        }),
-      );
-      return await s3BodyToBuffer(response.Body);
-    },
-    async putObject(companyId: string, objectKey: string, body: Buffer, contentType: string) {
-      assertStorageCompanyPrefix(companyId, objectKey);
-      const { sdk, client } = await getS3Client();
-      await client.send(
-        new sdk.PutObjectCommand({
-          Bucket: bucket,
-          Key: buildS3ObjectKey(prefix, objectKey),
-          Body: body,
-          ContentType: contentType,
-          ContentLength: body.length,
-        }),
-      );
-    },
-  };
-}
-
-function openConfiguredStorage(configPath: string): ConfiguredStorage {
-  const config = readConfig(configPath);
-  if (!config) {
-    throw new Error(`Config not found at ${configPath}.`);
-  }
-  return createConfiguredStorageFromFounderOSConfig(config);
-}
-
-async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
-
-export function isMissingStorageObjectError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; status?: unknown; name?: unknown; message?: unknown };
-  return candidate.code === "ENOENT"
-    || candidate.status === 404
-    || candidate.name === "NoSuchKey"
-    || candidate.name === "NotFound"
-    || candidate.message === "Object not found.";
-}
-
-export async function readSourceAttachmentBody(
-  sourceStorages: Array<Pick<ConfiguredStorage, "getObject">>,
-  companyId: string,
-  objectKey: string,
-): Promise<Buffer | null> {
-  for (const sourceStorage of sourceStorages) {
-    try {
-      return await sourceStorage.getObject(companyId, objectKey);
-    } catch (error) {
-      if (isMissingStorageObjectError(error)) {
-        continue;
-      }
-      throw error;
-    }
-  }
-  return null;
-}
+export type { ConfiguredStorage };
 
 export function resolveWorktreeMakeTargetPath(name: string): string {
   return path.resolve(os.homedir(), resolveWorktreeMakeName(name));
@@ -439,228 +246,19 @@ export function resolveGitWorktreeAddArgs(input: {
   return ["worktree", "add", "-b", input.branchName, input.targetPath, commitish];
 }
 
-function readPidFilePort(postmasterPidFile: string): number | null {
-  if (!existsSync(postmasterPidFile)) return null;
-  try {
-    const lines = readFileSync(postmasterPidFile, "utf8").split("\n");
-    const port = Number(lines[3]?.trim());
-    return Number.isInteger(port) && port > 0 ? port : null;
-  } catch {
-    return null;
-  }
-}
-
-function readRunningPostmasterPid(postmasterPidFile: string): number | null {
-  if (!existsSync(postmasterPidFile)) return null;
-  try {
-    const pid = Number(readFileSync(postmasterPidFile, "utf8").split("\n")[0]?.trim());
-    if (!Number.isInteger(pid) || pid <= 0) return null;
-    process.kill(pid, 0);
-    return pid;
-  } catch {
-    return null;
-  }
-}
-
-async function isPortAvailable(port: number): Promise<boolean> {
-  return await new Promise<boolean>((resolve) => {
-    const server = createServer();
-    server.unref();
-    server.once("error", () => resolve(false));
-    server.listen(port, "127.0.0.1", () => {
-      server.close(() => resolve(true));
-    });
-  });
-}
-
-async function findAvailablePort(preferredPort: number, reserved = new Set<number>()): Promise<number> {
-  let port = Math.max(1, Math.trunc(preferredPort));
-  while (reserved.has(port) || !(await isPortAvailable(port))) {
-    port += 1;
-  }
-  return port;
-}
-
-function resolveRepoManagedWorktreesRoot(cwd: string): string | null {
-  const normalized = path.resolve(cwd);
-  const marker = `${path.sep}.founderos${path.sep}worktrees${path.sep}`;
-  const index = normalized.indexOf(marker);
-  if (index === -1) return null;
-  const repoRoot = normalized.slice(0, index);
-  return path.resolve(repoRoot, ".founderos", "worktrees");
-}
-
-function collectClaimedWorktreePorts(homeDir: string, currentInstanceId: string, cwd: string): {
-  serverPorts: Set<number>;
-  databasePorts: Set<number>;
-} {
-  const serverPorts = new Set<number>();
-  const databasePorts = new Set<number>();
-  const configPaths = new Set<string>();
-  const instancesDir = path.resolve(homeDir, "instances");
-  if (existsSync(instancesDir)) {
-    for (const entry of readdirSync(instancesDir, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.name === currentInstanceId) continue;
-
-      const configPath = path.resolve(instancesDir, entry.name, "config.json");
-      if (existsSync(configPath)) {
-        configPaths.add(configPath);
-      }
-    }
-  }
-
-  const repoManagedWorktreesRoot = resolveRepoManagedWorktreesRoot(cwd);
-  if (repoManagedWorktreesRoot && existsSync(repoManagedWorktreesRoot)) {
-    for (const entry of readdirSync(repoManagedWorktreesRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const configPath = path.resolve(repoManagedWorktreesRoot, entry.name, ".founderos", "config.json");
-      if (existsSync(configPath)) {
-        configPaths.add(configPath);
-      }
-    }
-  }
-
-  for (const configPath of configPaths) {
-    try {
-      const config = readConfig(configPath);
-      if (config?.server.port) {
-        serverPorts.add(config.server.port);
-      }
-      if (config?.database.mode === "embedded-postgres") {
-        databasePorts.add(config.database.embeddedPostgresPort);
-      }
-    } catch {
-      // Ignore malformed sibling configs.
-    }
-  }
-
-  return { serverPorts, databasePorts };
-}
-
-function detectGitBranchName(cwd: string): string | null {
-  try {
-    const value = execFileSync("git", ["branch", "--show-current"], {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return nonEmpty(value);
-  } catch {
-    return null;
-  }
-}
-
-function detectGitWorkspaceInfo(cwd: string): GitWorkspaceInfo | null {
-  try {
-    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const commonDirRaw = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const gitDirRaw = execFileSync("git", ["rev-parse", "--git-dir"], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const hooksPathRaw = execFileSync("git", ["rev-parse", "--git-path", "hooks"], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return {
-      root: path.resolve(root),
-      commonDir: path.resolve(root, commonDirRaw),
-      gitDir: path.resolve(root, gitDirRaw),
-      hooksPath: path.resolve(root, hooksPathRaw),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function copyDirectoryContents(sourceDir: string, targetDir: string): boolean {
-  if (!existsSync(sourceDir)) return false;
-
-  const entries = readdirSync(sourceDir, { withFileTypes: true });
-  if (entries.length === 0) return false;
-
-  mkdirSync(targetDir, { recursive: true });
-
-  let copied = false;
-  for (const entry of entries) {
-    const sourcePath = path.resolve(sourceDir, entry.name);
-    const targetPath = path.resolve(targetDir, entry.name);
-
-    if (entry.isDirectory()) {
-      mkdirSync(targetPath, { recursive: true });
-      copyDirectoryContents(sourcePath, targetPath);
-      copied = true;
-      continue;
-    }
-
-    if (entry.isSymbolicLink()) {
-      rmSync(targetPath, { recursive: true, force: true });
-      symlinkSync(readlinkSync(sourcePath), targetPath);
-      copied = true;
-      continue;
-    }
-
-    copyFileSync(sourcePath, targetPath);
-    try {
-      chmodSync(targetPath, statSync(sourcePath).mode & 0o777);
-    } catch {
-      // best effort
-    }
-    copied = true;
-  }
-
-  return copied;
-}
-
-export function copyGitHooksToWorktreeGitDir(cwd: string): CopiedGitHooksResult | null {
-  const workspace = detectGitWorkspaceInfo(cwd);
-  if (!workspace) return null;
-
-  const sourceHooksPath = workspace.hooksPath;
-  const targetHooksPath = path.resolve(workspace.gitDir, "hooks");
-
-  if (sourceHooksPath === targetHooksPath) {
-    return {
-      sourceHooksPath,
-      targetHooksPath,
-      copied: false,
-    };
-  }
-
-  return {
-    sourceHooksPath,
-    targetHooksPath,
-    copied: copyDirectoryContents(sourceHooksPath, targetHooksPath),
-  };
-}
-
-export function rebindWorkspaceCwd(input: {
-  sourceRepoRoot: string;
-  targetRepoRoot: string;
-  workspaceCwd: string;
-}): string | null {
-  const sourceRepoRoot = path.resolve(input.sourceRepoRoot);
-  const targetRepoRoot = path.resolve(input.targetRepoRoot);
-  const workspaceCwd = path.resolve(input.workspaceCwd);
-  const relative = path.relative(sourceRepoRoot, workspaceCwd);
-  if (!relative || relative === "") {
-    return targetRepoRoot;
-  }
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    return null;
-  }
-  return path.resolve(targetRepoRoot, relative);
-}
+import {
+  collectClaimedWorktreePorts,
+  copyGitHooksToWorktreeGitDir,
+  detectGitBranchName,
+  detectGitWorkspaceInfo,
+  findAvailablePort,
+  readPidFilePort,
+  readRunningPostmasterPid,
+  rebindWorkspaceCwd,
+  type CopiedGitHooksResult,
+  type GitWorkspaceInfo,
+} from "./worktree-infra.js";
+export { copyGitHooksToWorktreeGitDir, rebindWorkspaceCwd };
 
 async function rebindSeededProjectWorkspaces(input: {
   targetConnectionString: string;
