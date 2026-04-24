@@ -43,12 +43,29 @@
 
 import { logger } from "../middleware/logger.js";
 
-/** Apps we ship first-class skills for today. Purely informational. */
+/**
+ * Apps FounderOS exposes to the connect-integration UI. Having an entry
+ * here does NOT mean the app is live — the `/api/composio/status` endpoint
+ * filters this list against which apps actually have an `auth_config`
+ * provisioned (see `resolveComposioAuthConfigId`). An operator can go live
+ * with any subset of these by setting the matching env vars.
+ *
+ * To wire a new toolkit:
+ *   1. Add its slug to this list.
+ *   2. Create an auth_config in the Composio dashboard.
+ *   3. Set `COMPOSIO_AUTH_CONFIG_<SLUG>=<ac_xxx>` in Fly secrets.
+ *   4. (Optional) Add a first-class skill under `server/src/services/skills/`.
+ */
 export const COMPOSIO_CONFIGURED_APPS = [
   "slack",
   "hubspot",
   "notion",
   "linkedin",
+  "gmail",
+  "github",
+  "googlecalendar",
+  "googlesheets",
+  "googledrive",
 ] as const;
 
 export type ComposioAppName = (typeof COMPOSIO_CONFIGURED_APPS)[number] | string;

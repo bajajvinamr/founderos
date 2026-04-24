@@ -32,6 +32,7 @@ import {
   COMPOSIO_CONFIGURED_APPS,
   getComposioClient,
   isComposioEnabled,
+  resolveComposioAuthConfigId,
 } from "../services/composio-client.js";
 import { logger } from "../middleware/logger.js";
 
@@ -59,12 +60,21 @@ function getActorUserId(req: Parameters<Parameters<Router["get"]>[1]>[0]): strin
 export function composioRoutes(db: Db) {
   const router = Router();
 
-  /** GET /api/composio/status — enabled flag + list of apps we ship skills for. */
+  /**
+   * GET /api/composio/status — enabled flag + apps that are BOTH in the
+   * instance's supported list AND have an auth_config provisioned. An app
+   * missing from this list is not connectable right now, either because
+   * composio is disabled on the instance or because the operator hasn't
+   * set `COMPOSIO_AUTH_CONFIG_<APP>` for it yet.
+   */
   router.get("/composio/status", (_req, res) => {
-    res.json({
-      enabled: isComposioEnabled(),
-      configuredApps: [...COMPOSIO_CONFIGURED_APPS],
-    });
+    const enabled = isComposioEnabled();
+    const configuredApps = enabled
+      ? COMPOSIO_CONFIGURED_APPS.filter(
+          (app) => resolveComposioAuthConfigId(app) !== null,
+        )
+      : [];
+    res.json({ enabled, configuredApps });
   });
 
   /** POST /api/companies/:companyId/composio/connect */
