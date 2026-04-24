@@ -8,7 +8,6 @@
 # Tickets 004-007 will track the actual decomposition.
 server/src/services/heartbeat.ts
 server/src/services/company-portability.ts
-ui/src/pages/AgentDetail.tsx
 
 # Remaining large files revealed by the initial audit that are still over
 # the warn threshold — keep them visible but not blocking. Address over
