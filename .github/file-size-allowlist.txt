@@ -1,0 +1,22 @@
+# Grandfathered offenders — existing files exempt from the file-size gate.
+# Each entry SHOULD have a matching tracking ticket for refactor.
+#
+# When adding a new entry: include a rationale comment + ticket link.
+# When a file is refactored below the fail threshold, remove its entry.
+
+# Known offenders as of 2026-04-23 (see forward plan).
+# Tickets 004-007 will track the actual decomposition.
+server/src/services/heartbeat.ts
+server/src/services/company-portability.ts
+ui/src/pages/AgentDetail.tsx
+cli/src/commands/worktree.ts
+
+# Remaining large files revealed by the initial audit that are still over
+# the warn threshold — keep them visible but not blocking. Address over
+# time; do not bulk-refactor under this ticket.
+server/src/routes/access.ts
+server/src/routes/issues.ts
+server/src/routes/agents.ts
+server/src/services/issues.ts
+packages/plugins/examples/plugin-kitchen-sink-example/src/ui/index.tsx
+server/src/services/workspace-runtime.ts

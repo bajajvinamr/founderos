@@ -31,6 +31,7 @@ Workflows outside 22A are owned by other waves — don't edit them here.
 | `migration-check` | install | 5 min | Belt-and-suspenders: `pnpm --filter @founderos/db check:migrations` (also run via typecheck hook). |
 | `schema-drift` | install | 5 min | If any `packages/db/src/migrations/*.sql` changed, verifies each has a `_journal.json` tag and a `meta/NNNN_snapshot.json`. |
 | `bundle-size` | install | 5 min | Builds the UI, sums gzipped size of `ui/dist/assets/**/*.js`, fails if over `BUNDLE_SIZE_BUDGET_KB` (default 1536 = 1.5 MB). Uploads `ui-dist`. |
+| `file-size` | install | 3 min | Runs `scripts/ci/file-size-check.ts` on changed files (PRs) or last commit (main). Warns on `.ts/.tsx/.js/.jsx` files ≥1500 lines, fails ≥2500 lines. Grandfathered offenders live in `.github/file-size-allowlist.txt`. See `docs/tickets/003-ci-file-size-gate.md`. |
 | `ci` | all above | 1 min | Aggregator gate — required check for branch protection. |
 
 **Concurrency:** `ci-${{ workflow }}-${{ PR number || ref }}` with `cancel-in-progress: true`. New pushes to a PR cancel in-flight runs.

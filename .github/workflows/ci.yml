@@ -310,9 +310,41 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  file-size:
+    name: file-size
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history so file-size-check can diff against the base ref
+          # on PRs. Fetch-depth 0 is only ~20MB for this repo — cheap.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v3
+          key: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Enforce file-size budget
+        env:
+          # On PRs, diff against the base ref (default origin/main); on main pushes
+          # fall back to HEAD~1 so we still score new/changed files.
+          FILE_SIZE_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
+        run: node cli/node_modules/tsx/dist/cli.mjs scripts/ci/file-size-check.ts
+
   ci:
     name: ci (all checks)
-    needs: [typecheck, lint, test, migration-check, schema-drift, bundle-size]
+    needs: [typecheck, lint, test, migration-check, schema-drift, bundle-size, file-size]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 1
