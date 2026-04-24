@@ -1,6 +1,11 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-24 by Claude (forward plan locked)_
+_Last updated: 2026-04-24 by Claude (handover doc shipped)_
+
+## 2026-04-24 — handover doc
+
+- **Shipped:** `docs/HANDOVER.md` — single-page buyer-facing checklist covering (1) verified working surface, (2) Stripe / GitHub / branch-protection flips the buyer must flip, (3) three-option per-customer provisioning recommendation (recommend shared infra, Option A), (4) incident symptom → runbook map, (5) deferred tickets inherited, (6) signed checklist.
+- **Recommendation to buyer:** start on shared infra (one Fly app, `companyId`-scoped multi-tenancy). Migrate to `fly-provision.sh` per-customer only at 50+ paying.
 
 ## 2026-04-24 — client-handover hardening (this session)
 
