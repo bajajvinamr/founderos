@@ -1,24 +1,21 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import type { Db } from "@founderos/db";
 import { serverVersion } from "../version.js";
+import { healthRoutes } from "../routes/health.js";
+
+// Mock dev-server-status at module level. The previous implementation used
+// `vi.resetModules()` + dynamic `await import()` in every test, which caused
+// flakes under parallel fork execution (module cache races). Static import
+// + hoisted mock fully isolates this file's module graph.
+vi.mock("../dev-server-status.js", () => ({
+  readPersistedDevServerStatus: () => undefined,
+  toDevServerHealthStatus: () => undefined,
+}));
 
 describe("GET /health", () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it.skip("returns 200 with status ok", async () => {
-    // TODO: Flaky under parallel test execution — module isolation issue in CI
-    // See docs/CI-KNOWN-FLAKES.md for details
-    const devServerStatus = await import("../dev-server-status.js");
-    vi.spyOn(devServerStatus, "readPersistedDevServerStatus").mockReturnValue(undefined);
-    const { healthRoutes } = await import("../routes/health.js");
+  it("returns 200 with status ok when no db is provided", async () => {
     const app = express();
     app.use("/health", healthRoutes());
 
@@ -28,9 +25,6 @@ describe("GET /health", () => {
   });
 
   it("returns 200 when the database probe succeeds", async () => {
-    const devServerStatus = await import("../dev-server-status.js");
-    vi.spyOn(devServerStatus, "readPersistedDevServerStatus").mockReturnValue(undefined);
-    const { healthRoutes } = await import("../routes/health.js");
     const db = {
       execute: vi.fn().mockResolvedValue([{ "?column?": 1 }]),
     } as unknown as Db;
@@ -44,9 +38,6 @@ describe("GET /health", () => {
   });
 
   it("returns 503 when the database probe fails", async () => {
-    const devServerStatus = await import("../dev-server-status.js");
-    vi.spyOn(devServerStatus, "readPersistedDevServerStatus").mockReturnValue(undefined);
-    const { healthRoutes } = await import("../routes/health.js");
     const db = {
       execute: vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED")),
     } as unknown as Db;

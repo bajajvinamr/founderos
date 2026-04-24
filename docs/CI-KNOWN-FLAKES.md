@@ -4,18 +4,9 @@ Tests listed here fail under parallel execution but pass in isolation. These are
 
 ## Tests
 
-### 1. health.test.ts > GET /health > returns 200 with status ok
+### 1. ~~health.test.ts > GET /health > returns 200 with status ok~~ — FIXED 2026-04-24
 
-**Location:** `server/src/__tests__/health.test.ts:16`
-
-**Issue:** Module isolation problem in parallel test execution. The test uses `vi.resetModules()` in `beforeEach`, which interacts poorly with vitest's parallel module caching when multiple test files run simultaneously.
-
-**Symptom:** Fails sporadically in full test suite runs (200+ concurrent test files); always passes in isolation.
-
-**Fix options:**
-1. Remove `vi.resetModules()` and pre-import modules before test block
-2. Use `it.concurrent(false)` or `describe.sequential` to serialize this test
-3. Refactor to avoid dynamic imports in favor of proper dependency injection
+Removed `vi.resetModules()` + dynamic imports; switched to module-level `vi.mock` for `dev-server-status.js` + static imports. Un-skipped the "no db" test. 3/3 tests pass in isolation + under full-suite runs.
 
 ---
 
@@ -35,18 +26,9 @@ Tests listed here fail under parallel execution but pass in isolation. These are
 
 ---
 
-### 3. agent-instructions-routes.test.ts > GET /api/agents/:id/instructions
+### 3. ~~agent-instructions-routes.test.ts > GET /api/agents/:id/instructions~~ — NOT REPRODUCIBLE 2026-04-24
 
-**Location:** `server/src/__tests__/agent-instructions-routes.test.ts:162`
-
-**Issue:** Route handler returns `{}` (empty body, 200) instead of `{ mode: "managed", rootPath: "/tmp/agent-1", ... }` when tests contend on the embedded-PG data dir. Only observed under full parallel runs — passes in isolation.
-
-**Symptom:** Reported 1 failure on `pnpm -w run test` during 2026-04-23 retro; did not appear in the preceding run (which failed `workspace-runtime` instead). Classic shared-state symptom — different failures per run.
-
-**Fix options:**
-1. Isolate the test suite's DB fixture (its own `DATABASE_URL` / fresh PGlite instance per file)
-2. Serialize with `describe.sequential` while a proper fix is built
-3. Audit `agent-instructions` route's startup-time memoization — it may be caching the first caller's agent row across tests
+Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 2026-04-24. No DB contact (pure mock-based test). Suspected vitest workerpool scheduling race, not a test bug. Removing from quarantine. Re-add if it recurs.
 
 ---
 
