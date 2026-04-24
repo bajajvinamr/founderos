@@ -1,6 +1,15 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-24 by Claude (handover doc shipped)_
+_Last updated: 2026-04-24 by Claude (multi-company deep E2E shipped + handover verified)_
+
+## 2026-04-24 — multi-company deep E2E + final verification
+
+- **Shipped:** `e2e/tests/multi-company-deep.spec.ts` — 7 Playwright tests walking 5 seeded companies (Khushi, Pred, agnost.ai, Gravton Labs, Little Wins) × ≥3 agents deep-checked × issues/projects/goals + cross-tenant isolation + deep-health-under-load. All green locally (2.4s), public-only profile passes deep-health against prod (20s).
+- **Verified handover state:**
+  - `https://founderos.fly.dev/api/health/deep` → `status:"ok"` on 5/5 checks (db, table, session, composio v3 ping, sentry)
+  - `POST /api/billing/checkout` returns clean `501` with actionable error message until Stripe env is set
+  - `docs/HANDOVER.md` accurate (verified against live state)
+- **Commits (this session):** 1b2548a (CLAUDE.md) → … → fd9dcbd (HANDOVER.md) → 881f4d0 (multi-company deep E2E). All pushed to `bajajvinamr/founderos`.
 
 ## 2026-04-24 — handover doc
 
