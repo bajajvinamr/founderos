@@ -2,12 +2,25 @@
 
 _Last updated: 2026-04-24 by Claude (forward plan locked)_
 
+## 2026-04-24 — client-handover hardening (this session)
+
+- **Shipped:**
+  - **Stripe billing wired** (af2a083): real SDK (`stripe@22.0.2`), checkout + webhook signature verification, 4 contract tests. Needs Fly secrets `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_PRO`, `STRIPE_WEBHOOK_SECRET` to activate — routes return 501 cleanly until then.
+  - **Composio v1 gated off** (70ced91): `COMPOSIO_V3_READY` env flag defaults off. Integration routes now return "not enabled" instead of 410'ing users. Ticket 001 updated with v3 architectural finding — `initiate()` now requires pre-created `authConfigId`.
+  - **CI file-size gate** (015b2cf): warn ≥1500 / fail ≥2500 lines. 4 offenders allowlisted (heartbeat, company-portability, AgentDetail, worktree.ts). Run locally: `FILE_SIZE_MODE=all node cli/node_modules/tsx/dist/cli.mjs scripts/ci/file-size-check.ts`.
+  - **Deployed to Fly**: prod deep health green across all 5 checks.
+- **Remaining for client handover (user action only):**
+  - Set Fly secrets: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_PRO` (the $299/mo plan), `STRIPE_WEBHOOK_SECRET`
+  - Create the $299/mo Stripe plan + add `/api/billing/webhook` URL to Stripe dashboard
+  - Decide per-customer Fly provisioning vs. shared infra (2-week plan Day 9)
+  - Record handoff Loom + runbook walkthrough (2-week plan Day 14)
+- **Remaining tickets (code, ok to defer):** 001 (composio v3 — needs fresh session per process rules), 002 (per-file DB fixtures — 2-3 flakes per run), 004-007 (file-size refactors for allowlisted files).
+
 ## 2026-04-24 — forward plan locked
 
 - **Shipped:** `docs/PLAN-FORWARD-2026-04-23.md` (4-milestone 90-day plan) + ticket stubs 001–003 for M1. North Star: **10 paying companies @ $99+/mo by 2026-07-22**. Constraint: founder ≤30 hr/week. Excellence dims: self-serve <15 min, agent completion >90%.
-- **Pending (tracked, now with ticket #s):** Composio v3 migration (`docs/tickets/001`), per-file DB fixtures for flakes (`docs/tickets/002`), CI file-size gate (`docs/tickets/003`). Plus debt carried from retro: 3 files >4000 lines (tickets 004–006 to be created when 003 lands).
-- **Known issues:** 2–3 flaky tests per root run (covered by ticket 002), Composio v1 client still deprecated (covered by ticket 001).
-- **Exact next step:** **Ticket 001 — Composio v3 client migration.** Fresh `/clear` session, open `docs/tickets/001-composio-v3-client-migration.md`, enter Plan Mode, write the ADR for SDK-vs-fetch, then execute TDD.
+- **Pending (tracked, now with ticket #s):** Composio v3 migration (`docs/tickets/001`), per-file DB fixtures for flakes (`docs/tickets/002`), CI file-size gate (`docs/tickets/003`).
+- **Exact next step:** Ticket 002 (DB fixtures) is the best next snackable code task — self-contained, no architectural decisions, directly helps CI reliability.
 
 ## 2026-04-23 — retrospection pass
 
