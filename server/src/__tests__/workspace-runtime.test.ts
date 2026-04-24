@@ -1498,9 +1498,11 @@ describe("realizeExecutionWorkspace", () => {
 });
 
 describe("ensureRuntimeServicesForRun", () => {
-  it.skip("reuses shared runtime services across runs and starts a new service after release", async () => {
-    // TODO: Flaky under parallel test execution — shared state/port contention issue in CI
-    // See docs/CI-KNOWN-FLAKES.md for details
+  // retry: 2 — the triple-sequence (start, reuse, release, start-fresh) has a narrow
+  // cleanup timing window that occasionally trips under parallel-worker CPU pressure.
+  // The production code path is correct; it's the test's sequential-assert contract
+  // that's timing-sensitive. Retry catches the rare race without masking real bugs.
+  it("reuses shared runtime services across runs and starts a new service after release", { retry: 2 }, async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-runtime-workspace-"));
     const workspace = buildWorkspace(workspaceRoot);
     const serviceCommand =
