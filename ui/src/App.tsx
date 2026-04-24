@@ -130,8 +130,19 @@ function CloudAccessGate() {
     retry: false,
   });
 
+  // Fast path: root `/` is always the public landing page. Don't wait for
+  // the session probe — /landing is a pure marketing route that doesn't
+  // need auth state. Shaves ~500ms off the first-paint delay that buyers
+  // see when they land on the apex URL. Only short-circuit once we know
+  // the deployment mode; `local_trusted` instances go straight to the
+  // board UI.
+  const isRoot = location.pathname === "/" || location.pathname === "";
+  if (isRoot && isAuthenticatedMode) {
+    return <Navigate to="/landing" replace />;
+  }
+
   if (healthQuery.isLoading || (isAuthenticatedMode && sessionQuery.isLoading)) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <BootSplash />;
   }
 
   if (healthQuery.error) {
@@ -156,12 +167,8 @@ function CloudAccessGate() {
   }
 
   if (isAuthenticatedMode && !sessionQuery.data) {
-    // Unauthenticated users landing on the root path get the public
-    // marketing page, not the bare sign-in form. Deep links into protected
-    // surfaces still go straight to /auth so the next= param round-trips.
-    if (location.pathname === "/" || location.pathname === "") {
-      return <Navigate to="/landing" replace />;
-    }
+    // Deep links into protected surfaces go straight to /auth so the
+    // next= param round-trips. Root path is handled by the fast path above.
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/auth?next=${next}`} replace />;
   }
@@ -170,6 +177,26 @@ function CloudAccessGate() {
     <Suspense fallback={<LazyRouteFallback />}>
       <Outlet />
     </Suspense>
+  );
+}
+
+/**
+ * Full-viewport branded boot splash shown while the initial `/api/health`
+ * + `/api/auth/session` probes resolve. Replaces bare "Loading..." text
+ * so first-time buyers don't think the app is broken during the ~1-2s
+ * boot window. The pulsing brand mark telegraphs "we're alive and
+ * working" without demanding attention.
+ */
+function BootSplash() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-10 w-10 rounded-md bg-[var(--brand)] animate-pulse" />
+        <div className="text-sm font-medium text-foreground/70 tracking-wide">
+          FounderOS
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -314,7 +341,7 @@ function CompanyRootRedirect() {
   const location = useLocation();
 
   if (loading) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <LazyRouteFallback />;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -338,7 +365,7 @@ function UnprefixedBoardRedirect() {
   const { companies, selectedCompany, loading } = useCompany();
 
   if (loading) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <LazyRouteFallback />;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
