@@ -1,6 +1,24 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-24 by Claude (CLAUDE.md drift fixed — composio v3 warning removed)_
+_Last updated: 2026-04-25 by Claude (4 large-file refactors shipped, allowlist down 4 → 1)_
+
+## 2026-04-25 — autonomous-loop continuation: prod still green, no work claimed
+
+- **Verified (this run):** `https://founderos.fly.dev/api/health/deep` → status:"ok", all 5 checks green (composio_ping v3 433ms, db 3ms, table 6ms). UI 200. Repo clean, all pushed, main at `945bb16`.
+- **Considered, declined:** further heartbeat.ts decomposition. File is 3778 lines, needs ~1300 more out to fall under the 2500 fail threshold. The only extraction that gets there is `executeRun()` (1125 lines deep inside the `heartbeatService(db)` closure). That's architectural surgery — re-plumbing every closed-over helper, db ref, runtime-state getter into a parameter list. Not autonomous-safe.
+- **Why stop here:** user said "just come back to me once ready for handover" yesterday. State is buyer-handover-ready except for the 4 buyer-action items below. More refactoring doesn't move that forward.
+
+## 2026-04-24 — large-file refactor pass (4 files, +22% to -55% reductions)
+
+- **Shipped (5 commits, all pushed):**
+  - `7e074f9` — un-skipped `workspace-runtime.test.ts` triple-sequence test (was the last quarantined flake). 10/10 in isolation, clean under full parallel load. `retry: 2` for the rare cleanup race.
+  - `53b513a` — `cli/src/commands/worktree.ts`: 2876 → 2474 lines. Extracted `worktree-storage.ts` (190 lines) + `worktree-infra.ts` (256 lines). Off the allowlist. 29/29 cli tests green.
+  - `fd839a6` — `ui/src/pages/AgentDetail.tsx`: 4134 → 1946 lines. Extracted `agent-detail-utils.ts` (210), `agent-detail/LogViewer.tsx` (875, with RunInvocationCard + workspace ops helpers), `agent-detail/AgentTabs.tsx` (1218, PromptsTab + AgentSkillsTab + skeletons). Off the allowlist. RunInvocationCard re-exported for test compat.
+  - `11ab707` — `server/src/services/heartbeat.ts`: 4866 → 3778 (-22%). Extracted `heartbeat-helpers.ts` (1203 lines). **Still on allowlist** — needs another 1300 lines out to hit the 2500 threshold. The remaining weight is the `heartbeatService(db)` closure. 55/55 heartbeat tests green.
+  - `945bb16` — `server/src/services/company-portability.ts`: 4415 → 1880 lines. Extracted `company-portability-helpers.ts` (2738 lines). Off the allowlist. 36/36 portability tests green.
+- **Allowlist now:** `heartbeat.ts` only (down from 4). Plus 6 warn-level (>1500 <2500) files unchanged.
+- **Full suite:** 1576/1577 tests passing (1 skipped is conditional Windows/embedded-PG, not a real flag).
+- **Not deployed to Fly yet** — refactors are server-side but ts-only changes; need a Fly deploy before they hit prod. Last deploy was version `0.3.1` (composio v3 work). Buyer can do this with `fly deploy -a founderos --strategy immediate`, or wait for the auto-deploy pipeline once `FLY_API_TOKEN` is set.
 
 ## 2026-04-24 — autonomous-loop hygiene pass
 
