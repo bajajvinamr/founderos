@@ -23,7 +23,7 @@ env:
 jobs:
   install:
     name: install + cache
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       pnpm-store: ${{ steps.pnpm-store.outputs.path }}
@@ -59,7 +59,7 @@ jobs:
   typecheck:
     name: typecheck
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +86,7 @@ jobs:
   lint:
     name: lint
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +112,7 @@ jobs:
   test:
     name: test (+ coverage)
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -178,7 +178,7 @@ jobs:
   migration-check:
     name: migration-check
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -202,7 +202,7 @@ jobs:
   schema-drift:
     name: schema-drift
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -276,7 +276,7 @@ jobs:
   bundle-size:
     name: bundle-size
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -313,7 +313,7 @@ jobs:
   file-size:
     name: file-size
     needs: install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
@@ -346,7 +346,7 @@ jobs:
     name: ci (all checks)
     needs: [typecheck, lint, test, migration-check, schema-drift, bundle-size, file-size]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 1
     steps:
       - name: Aggregate results
