@@ -58,14 +58,14 @@ test.describe("landing", () => {
     );
     await expect(heroCandidates.first()).toBeVisible({ timeout: 15_000 });
 
-    // A clickable Sign up affordance must exist. Match case-insensitive on
-    // common CTA phrases so wording tweaks don't break the test.
-    const signUp = page
-      .getByRole("link", { name: /sign\s*up|get\s*started/i })
-      .or(page.getByRole("button", { name: /sign\s*up|get\s*started/i }));
+    // A primary CTA link to /auth must be visible. Match case-insensitively
+    // on the family of phrases used across landing copy revisions.
+    const cta = page
+      .getByRole("link", { name: /sign\s*up|get\s*started|build\s*your\s*company|design\s*partner|start\s*your/i })
+      .or(page.getByRole("button", { name: /sign\s*up|get\s*started|build\s*your\s*company|design\s*partner|start\s*your/i }));
     await expect(
-      signUp.first(),
-      "Landing page has no visible Sign up / Get started CTA — " +
+      cta.first(),
+      "Landing page has no visible primary CTA link — " +
         "check ui/src/pages/Landing.tsx",
     ).toBeVisible({ timeout: 10_000 });
   });

@@ -48,8 +48,10 @@ export default defineConfig({
     navigationTimeout: 20_000,
     actionTimeout: 10_000,
     // Send a stable UA so backend logs/heuristics can identify synthetic probes.
+    // Must be ASCII-only: Playwright's APIRequestContext rejects non-ASCII chars
+    // (e.g. the em dash U+2014) in HTTP header values.
     userAgent:
-      "FounderOS-E2E/23A (+https://github.com/founderos/founderos — critical-flows)",
+      "FounderOS-E2E/23A (+https://github.com/founderos/founderos - critical-flows)",
   },
   projects: [
     {
