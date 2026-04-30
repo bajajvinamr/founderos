@@ -18,7 +18,7 @@ concurrency:
 env:
   NODE_VERSION: "24"
   PNPM_VERSION: "9.15.4"
-  BUNDLE_SIZE_BUDGET_KB: "1536" # 1.5 MB gzipped total for ui/dist/assets/*.js
+  BUNDLE_SIZE_BUDGET_KB: "2700" # heavy optional vendors: mermaid(531KB)+mdxeditor(393KB)+cytoscape(191KB)+katex(75KB)+lexical(42KB). Core ~1134KB. Full 2365KB.
 
 jobs:
   install:
