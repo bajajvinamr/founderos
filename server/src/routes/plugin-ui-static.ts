@@ -117,8 +117,10 @@ export function resolvePluginUiDir(
     const resolvedPackagePath = path.resolve(packagePath);
     if (fs.existsSync(resolvedPackagePath)) {
       const uiDirFromPackagePath = path.resolve(resolvedPackagePath, entrypointsUi);
+      const relFromPackage = path.relative(resolvedPackagePath, uiDirFromPackagePath);
       if (
-        uiDirFromPackagePath.startsWith(resolvedPackagePath)
+        !relFromPackage.startsWith("..")
+        && !path.isAbsolute(relFromPackage)
         && fs.existsSync(uiDirFromPackagePath)
       ) {
         return uiDirFromPackagePath;

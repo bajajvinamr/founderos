@@ -50,8 +50,11 @@ const allIssues = await db.select().from(issues);
 const allGoals = await db.select().from(goals);
 const allProjects = await db.select().from(projects);
 
+const demoCompanyIds = new Set([agnost.id, pred.id, gravton.id]);
+const demoAgents = allAgents.filter((a) => demoCompanyIds.has(a.companyId));
+
 const agentsByCompany = new Map<string, typeof allAgents>();
-for (const a of allAgents) {
+for (const a of demoAgents) {
   const list = agentsByCompany.get(a.companyId) ?? [];
   list.push(a);
   agentsByCompany.set(a.companyId, list);
@@ -84,7 +87,7 @@ const triggers = [
   "cron.weekly_report",
 ];
 
-for (const agent of allAgents) {
+for (const agent of demoAgents) {
   const models = modelsForAgent(agent.role);
   // Seniors get 90-150 runs; specialists get 60-120
   const isExec = ["ceo", "cto", "cfo", "coo", "cmo"].some((r) => agent.role.includes(r));
@@ -131,7 +134,7 @@ const BATCH = 200;
 for (let i = 0; i < runInserts.length; i += BATCH) {
   await db.insert(heartbeatRuns).values(runInserts.slice(i, i + BATCH));
 }
-console.log(`[seed-depth] ✓ Inserted ${runInserts.length} heartbeat runs across ${allAgents.length} agents.`);
+console.log(`[seed-depth] ✓ Inserted ${runInserts.length} heartbeat runs across ${demoAgents.length} demo agents.`);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 2. Cost events — one per run, realistic token pricing
