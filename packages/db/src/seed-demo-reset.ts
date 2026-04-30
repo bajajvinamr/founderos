@@ -20,22 +20,8 @@
  * companyId first.
  */
 import { createDb } from "./client.js";
-import {
-  companies,
-  agents,
-  approvals,
-  companyMemory,
-  activityLog,
-  integrations,
-  integrationData,
-  costEvents,
-  heartbeatRuns,
-  goals,
-  projects,
-  issues,
-  budgetIncidents,
-} from "./schema/index.js";
-import { inArray } from "drizzle-orm";
+import { companies } from "./schema/index.js";
+import { inArray, sql } from "drizzle-orm";
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
@@ -76,25 +62,49 @@ if (toDelete.length === 0) {
 }
 
 const ids = toDelete.map((c) => c.id);
+
+// Defense-in-depth: IDs come from the DB but validate before sql.raw interpolation
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+for (const id of ids) {
+  if (!UUID_RE.test(id)) throw new Error(`Invalid company ID format: ${id}`);
+}
+
 console.log(
   `[seed-demo-reset] Deleting ${toDelete.length} companies: ${toDelete.map((c) => c.name).join(", ")}`,
 );
 
-// Order matters for tables whose FK lacks ON DELETE CASCADE to companies.
-// Start from leaves, walk inward.
-await db.delete(integrationData).where(inArray(integrationData.companyId, ids));
-await db.delete(integrations).where(inArray(integrations.companyId, ids));
-await db.delete(companyMemory).where(inArray(companyMemory.companyId, ids));
-await db.delete(approvals).where(inArray(approvals.companyId, ids));
-await db.delete(activityLog).where(inArray(activityLog.companyId, ids));
-await db.delete(costEvents).where(inArray(costEvents.companyId, ids));
-await db.delete(heartbeatRuns).where(inArray(heartbeatRuns.companyId, ids));
-await db.delete(budgetIncidents).where(inArray(budgetIncidents.companyId, ids));
-await db.delete(issues).where(inArray(issues.companyId, ids));
-await db.delete(projects).where(inArray(projects.companyId, ids));
-await db.delete(goals).where(inArray(goals.companyId, ids));
-await db.delete(agents).where(inArray(agents.companyId, ids));
-await db.delete(companies).where(inArray(companies.id, ids));
+// Delete all company-scoped data in leaf-first FK order.
+// Raw SQL per table so parameterized queries work (DO blocks don't support $1).
+const LEAF_TABLES = [
+  "company_memberships", "invites", "join_requests",
+  "integration_data", "integrations", "composio_connections",
+  "company_memory", "company_secrets", "company_skills", "company_logos",
+  "approval_comments", "approvals",
+  "activity_log", "cost_events", "finance_events",
+  "heartbeat_run_events", "heartbeat_runs",
+  "budget_incidents", "budget_policies",
+  "issue_read_states", "issue_approvals", "issue_attachments",
+  "issue_comments", "issue_documents", "issue_execution_decisions",
+  "issue_inbox_archives", "issue_labels", "issue_relations", "issue_work_products",
+  "issues", "inbox_dismissals", "labels",
+  "project_goals", "project_workspaces", "execution_workspaces",
+  "workspace_operations", "workspace_runtime_services", "projects",
+  "goals", "routines", "conversations", "decision_outcomes", "weekly_wraps",
+  "feedback_exports", "feedback_votes",
+  "documents", "document_revisions", "assets",
+  "agent_handoffs", "agent_reviews", "agent_api_keys",
+  "agent_config_revisions", "agent_runtime_state",
+  "agent_task_sessions", "agent_wakeup_requests",
+  "principal_permission_grants", "plugin_company_settings",
+  "agents",
+];
+
+for (const id of ids) {
+  for (const table of LEAF_TABLES) {
+    await db.execute(sql.raw(`DELETE FROM ${table} WHERE company_id = '${id}'`));
+  }
+  await db.execute(sql.raw(`DELETE FROM companies WHERE id = '${id}'`));
+}
 
 console.log(
   `[seed-demo-reset] ✓ Wiped ${toDelete.length} companies and their dependent rows.`,

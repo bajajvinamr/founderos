@@ -22,6 +22,7 @@ import {
   issues,
   activityLog,
 } from "./schema/index.js";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 const url = process.env.DATABASE_URL;
@@ -41,6 +42,7 @@ const mkCompany = async (config: {
   description: string;
   issuePrefix: string;
   budgetUsd: number;
+  brandColor?: string;
   metrics?: CompanyMetrics;
 }) => {
   const [c] = await db
@@ -51,6 +53,7 @@ const mkCompany = async (config: {
       issuePrefix: config.issuePrefix,
       status: "active",
       budgetMonthlyCents: config.budgetUsd * 100,
+      brandColor: config.brandColor ?? null,
       metrics: config.metrics ?? {},
     })
     .returning();
@@ -161,6 +164,7 @@ const agnost = await mkCompany({
     "Self-improving AI agents. Pre-seed, $250K raised. Research-lean, eval-first. Target: sign 5 paying design partners at frontier labs before the seed round.",
   issuePrefix: "AGN",
   budgetUsd: 1800,
+  brandColor: "#6366f1",
   metrics: {
     stage: "Pre-seed",
     tagline: "Pre-seed AI research · self-improving agents · $250K runway capital",
@@ -333,6 +337,7 @@ const pred = await mkCompany({
     "Live P2P football prediction market — Premier League + UEFA Champions League only. $2.5M Series Seed raised. 42K MAU, $1.8M monthly GMV, take-rate 3.2%. Skill-game regulatory framing, compliant PSP live.",
   issuePrefix: "PRD",
   budgetUsd: 9400,
+  brandColor: "#10b981",
   metrics: {
     stage: "Live · Series Seed",
     tagline: "Live football prediction market · Premier League + UCL · $2.5M funded",
@@ -534,6 +539,7 @@ const gravton = await mkCompany({
     "GEO/AEO platform — 'SEO for LLM search'. Help brands win citations inside ChatGPT, Claude, Perplexity, Gemini. Bootstrapped + raising first round. Closing 40 pilot customers (11 signed @ ~$32K avg ACV, 29 in flight).",
   issuePrefix: "GRV",
   budgetUsd: 3600,
+  brandColor: "#f59e0b",
   metrics: {
     stage: "Bootstrapped · Raising",
     tagline: "GEO/AEO category creator · 40 pilots closing · raising first round",
@@ -714,10 +720,24 @@ allIssueSeeds.push(
   { companyId: gravton.id, projectId: gravProjCategory.id, goalId: gravGoalCategory.id, title: "Weekly newsletter: 'How LLMs answered this week'", description: "Curated + commentary on 5 interesting LLM answers. Target 5k subs in Q2.", status: "in_progress", priority: "medium", assigneeAgentId: gravContent.id, createdByAgentId: gravGrowth.id },
 );
 
-// Insert all issues
+// Insert all issues with generated identifiers
+const issueCounters = new Map<string, number>([
+  [agnost.id, 0],
+  [pred.id, 0],
+  [gravton.id, 0],
+]);
+const prefixMap = new Map<string, string>([
+  [agnost.id, agnost.issuePrefix],
+  [pred.id, pred.issuePrefix],
+  [gravton.id, gravton.issuePrefix],
+]);
 for (const seed of allIssueSeeds) {
+  const n = (issueCounters.get(seed.companyId) ?? 0) + 1;
+  issueCounters.set(seed.companyId, n);
+  const prefix = prefixMap.get(seed.companyId) ?? "ISS";
   await db.insert(issues).values({
     ...seed,
+    identifier: `${prefix}-${String(n).padStart(3, "0")}`,
     startedAt: seed.status !== "backlog" && seed.status !== "todo"
       ? new Date(Date.now() - Math.random() * 4 * 86_400_000)
       : null,
@@ -725,6 +745,10 @@ for (const seed of allIssueSeeds) {
       ? new Date(Date.now() - Math.random() * 2 * 86_400_000)
       : null,
   });
+}
+// Sync issueCounter on each company so live issue creation doesn't collide
+for (const [compId, count] of issueCounters) {
+  await db.update(companies).set({ issueCounter: count }).where(eq(companies.id, compId));
 }
 
 // ──────────────────────────────────────────────────────────────────────────

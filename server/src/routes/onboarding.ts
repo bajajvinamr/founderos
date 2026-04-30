@@ -353,6 +353,11 @@ export function onboardingRoutes(db: Db) {
 
       // 6. Provision four agents with charters.
       const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
+      // Map the user's onboarding choice to the stored adapter type.
+      // "anthropic_api" uses claude_local with the stored API key injected as env.
+      // A dedicated claude_api adapter (no CLI required) is on the roadmap.
+      // "skip" also falls back to "claude_local" until the CLI is installed.
+      const adapterType = "claude_local";
       const agentIdsBySlot: Record<AgentSlot, string> = {
         cos: "",
         growth: "",
@@ -368,7 +373,7 @@ export function onboardingRoutes(db: Db) {
           role,
           title: charter.title,
           capabilities: charter.charter,
-          adapterType: "claude_local",
+          adapterType,
           adapterConfig,
           status: "idle",
           spentMonthlyCents: 0,

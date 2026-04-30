@@ -367,8 +367,13 @@ const shippedByCompany: Record<string, { title: string; desc: string; ownerKey: 
   ],
 };
 
+// Build per-company counters starting from where seed-demo.ts left off
+const depthCounters = new Map<string, number>(
+  allCompanies.map((c) => [c.id, c.issueCounter ?? 0])
+);
 let historicalIssuesInserted = 0;
 for (const [companyId, list] of Object.entries(shippedByCompany)) {
+  const company = allCompanies.find((c) => c.id === companyId);
   const companyProjects = allProjects.filter((p) => p.companyId === companyId);
   const companyGoalsLookup = Object.fromEntries(allGoals.filter((g) => g.companyId === companyId).map((g) => [g.id, g]));
   for (const s of list) {
@@ -376,6 +381,9 @@ for (const [companyId, list] of Object.entries(shippedByCompany)) {
     const goal = project?.goalId ? companyGoalsLookup[project.goalId] : null;
     const owner = agentByName[s.ownerKey];
     if (!project || !owner) continue;
+    const n = (depthCounters.get(companyId) ?? 0) + 1;
+    depthCounters.set(companyId, n);
+    const prefix = company?.issuePrefix ?? "ISS";
     const completedDaysAgo = 20 + Math.random() * 70; // 20–90 days ago
     const startedDaysAgo = completedDaysAgo + 2 + Math.random() * 12;
     await db.insert(issues).values({
@@ -388,11 +396,18 @@ for (const [companyId, list] of Object.entries(shippedByCompany)) {
       priority: s.priority,
       assigneeAgentId: owner.id,
       createdByAgentId: owner.id,
+      identifier: `${prefix}-${String(n).padStart(3, "0")}`,
       startedAt: new Date(NOW - startedDaysAgo * DAY_MS),
       completedAt: new Date(NOW - completedDaysAgo * DAY_MS),
     });
     historicalIssuesInserted++;
   }
+}
+// Sync counters only for the three demo companies — never overwrite user-created companies
+const demoIds = new Set([agnost.id, pred.id, gravton.id]);
+for (const [compId, count] of depthCounters) {
+  if (!demoIds.has(compId)) continue;
+  await db.update(companies).set({ issueCounter: count }).where(eq(companies.id, compId));
 }
 console.log(`[seed-depth] ✓ Inserted ${historicalIssuesInserted} historical shipped issues.`);
 

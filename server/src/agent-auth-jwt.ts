@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 interface JwtHeader {
   alg: string;
@@ -26,7 +26,7 @@ function parseNumber(value: string | undefined, fallback: number) {
 }
 
 function jwtConfig() {
-  const secret = process.env.FOUNDEROS_AGENT_JWT_SECRET?.trim() || process.env.BETTER_AUTH_SECRET?.trim();
+  const secret = process.env.FOUNDEROS_AGENT_JWT_SECRET?.trim();
   if (!secret) return null;
 
   return {
@@ -79,6 +79,7 @@ export function createLocalAgentJwt(agentId: string, companyId: string, adapterT
     exp: now + config.ttlSeconds,
     iss: config.issuer,
     aud: config.audience,
+    jti: randomUUID(),
   };
 
   const header = {

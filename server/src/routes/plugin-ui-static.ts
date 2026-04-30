@@ -232,9 +232,19 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
     // In Express 5 with path-to-regexp v8, named wildcards may return
     // an array of path segments or a single string.
     const rawParam = req.params.filePath;
-    const rawFilePath = Array.isArray(rawParam)
-      ? rawParam.join("/")
-      : rawParam as string | undefined;
+    const segments = Array.isArray(rawParam) ? rawParam : [rawParam as string];
+
+    // Defense-in-depth: reject any segment containing traversal sequences
+    // or null bytes before joining. The realpathSync containment check below
+    // is the primary guard; this gives a clean 400 before touching the FS.
+    for (const seg of segments) {
+      if (!seg || seg.includes("..") || seg.includes("\0")) {
+        res.status(400).json({ error: "Invalid file path" });
+        return;
+      }
+    }
+
+    const rawFilePath = segments.join("/");
 
     if (!rawFilePath || rawFilePath.length === 0) {
       res.status(400).json({ error: "File path is required" });
