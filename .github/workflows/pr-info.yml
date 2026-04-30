@@ -33,7 +33,7 @@ env:
 jobs:
   summary:
     name: PR summary
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout PR head

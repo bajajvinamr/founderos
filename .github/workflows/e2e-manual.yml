@@ -10,7 +10,7 @@ on:
 
 jobs:
   e2e:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       FOUNDEROS_E2E_SKIP_LLM: ${{ inputs.skip_llm && 'true' || 'false' }}

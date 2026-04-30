@@ -34,7 +34,7 @@ env:
 jobs:
   probe:
     name: Run public-only E2E against prod
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       status: ${{ steps.run.outputs.status }}
@@ -88,7 +88,7 @@ jobs:
     name: Manage incident issue
     needs: probe
     if: always()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Update incident state

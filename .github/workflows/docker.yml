@@ -3,7 +3,7 @@ name: Docker
 on:
   push:
     branches:
-      - "master"
+      - "main"
     tags:
       - "v*"
 
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-and-push:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
       group: docker-${{ github.ref }}
@@ -29,8 +29,8 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Docker meta
         id: meta
@@ -44,7 +44,7 @@ jobs:
             type=sha
 
       - name: Build and push
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64

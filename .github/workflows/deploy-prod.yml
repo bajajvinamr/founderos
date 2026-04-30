@@ -37,7 +37,7 @@ jobs:
   # ─── 1. Preflight: typecheck + tests. Fail fast. ─────────────────────
   preflight:
     name: Preflight (typecheck + tests)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       sha: ${{ steps.meta.outputs.sha }}
@@ -76,7 +76,7 @@ jobs:
   deploy-fly:
     name: Deploy Fly backend
     needs: preflight
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       image_digest: ${{ steps.deploy.outputs.image_digest }}
@@ -122,7 +122,7 @@ jobs:
   deploy-vercel:
     name: Deploy Vercel frontend
     needs: deploy-fly
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -149,7 +149,7 @@ jobs:
   smoke:
     name: Smoke (post-deploy)
     needs: [deploy-fly, deploy-vercel]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       status: ${{ steps.run.outputs.status }}
@@ -224,7 +224,7 @@ jobs:
     name: Rollback Fly (smoke or deep health failed)
     needs: [deploy-fly, smoke]
     if: ${{ failure() && (needs.smoke.result == 'failure') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       rolled_back: ${{ steps.rollback.outputs.rolled_back }}
@@ -300,7 +300,7 @@ jobs:
     name: Notify
     needs: [preflight, deploy-fly, deploy-vercel, smoke, rollback-on-fail]
     if: always()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Compute outcome

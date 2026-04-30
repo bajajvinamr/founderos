@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   refresh:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
