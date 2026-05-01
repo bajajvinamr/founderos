@@ -68,5 +68,6 @@
     "overrides": {
       "rollup": ">=4.59.0"
     }
-  }
+  },
+  "version": "0.2.0"
 }
