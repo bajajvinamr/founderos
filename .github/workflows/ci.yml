@@ -209,7 +209,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
       - name: Detect changed migrations
         id: changed
         shell: bash

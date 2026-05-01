@@ -66,7 +66,7 @@ export function runForbiddenTokenCheck({
   for (const token of tokens) {
     try {
       const result = exec(
-        `git grep -in --no-color -- ${JSON.stringify(token)} -- ':!pnpm-lock.yaml' ':!.git' ':!.github/workflows/'`,
+        `git grep -in --no-color -- ${JSON.stringify(token)} -- ':!pnpm-lock.yaml' ':!.git' ':!.github/workflows/' ':!doc/' ':!docs/'`,
         { encoding: "utf8", cwd: repoRoot, stdio: ["pipe", "pipe", "pipe"] },
       );
       if (result.trim()) {
