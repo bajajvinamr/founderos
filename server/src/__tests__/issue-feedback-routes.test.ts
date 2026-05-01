@@ -214,4 +214,54 @@ describe("issue feedback trace routes", () => {
 
     expect(res.status).toBe(404);
   });
+
+  it("returns 403 when a non-board actor requests feedback votes for an issue", async () => {
+    mockIssueService.getById.mockResolvedValue({
+      id: "issue-1",
+      companyId: "company-1",
+      identifier: "PAP-1",
+    });
+    const app = await createApp({
+      type: "agent",
+      agentId: "agent-1",
+      companyId: "company-1",
+      source: "agent_key",
+      runId: "run-1",
+    });
+
+    const res = await request(app).get("/api/issues/issue-1/feedback-votes");
+
+    expect(res.status).toBe(403);
+    expect(mockFeedbackService.listIssueVotesForUser).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when a feedback trace does not exist", async () => {
+    mockFeedbackService.getFeedbackTraceById.mockResolvedValue(null);
+    const app = await createApp({
+      type: "board",
+      userId: "user-1",
+      source: "session",
+      isInstanceAdmin: false,
+      companyIds: ["company-1"],
+    });
+
+    const res = await request(app).get("/api/feedback-traces/nonexistent-trace");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when a feedback trace bundle does not exist", async () => {
+    mockFeedbackService.getFeedbackTraceBundle.mockResolvedValue(null);
+    const app = await createApp({
+      type: "board",
+      userId: "user-1",
+      source: "session",
+      isInstanceAdmin: false,
+      companyIds: ["company-1"],
+    });
+
+    const res = await request(app).get("/api/feedback-traces/nonexistent-trace/bundle");
+
+    expect(res.status).toBe(404);
+  });
 });
