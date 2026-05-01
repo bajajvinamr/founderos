@@ -1,3 +1,54 @@
+/**
+ * agents.ts — 2516 lines. Single exported function agentRoutes(db).
+ * All handlers share the closure's service instances.
+ *
+ * Module boundary map for future split into sub-routers:
+ *
+ * ZONE A (~781–829): Adapter routes
+ *   GET  /companies/:companyId/adapters/:type/models
+ *   GET  /companies/:companyId/adapters/:type/detect-model
+ *   POST /companies/:companyId/adapters/:type/test-environment
+ *   → Extract target: registerAdapterRoutes(router, {svc, secretsSvc, ...})
+ *
+ * ZONE B (~830–964): Agent skills sync
+ *   GET  /agents/:id/skills
+ *   POST /agents/:id/skills/sync
+ *   → Extract target: registerAgentSkillsRoutes(router, {svc, ...})
+ *
+ * ZONE C (~965–1456): Agent read routes
+ *   GET  /companies/:companyId/agents
+ *   GET  /instance/scheduler-heartbeats
+ *   GET  /companies/:companyId/org(.svg|.png)
+ *   GET  /companies/:companyId/agent-configurations
+ *   GET  /agents/me, /agents/me/inbox-lite, /agents/me/inbox/mine
+ *   GET  /agents/:id, /agents/:id/configuration, /agents/:id/config-revisions/*
+ *   GET  /agents/:id/runtime-state, /agents/:id/task-sessions
+ *   → Extract target: registerAgentReadRoutes(router, {svc, ...})
+ *
+ * ZONE D (~1456–1962): Agent write routes
+ *   POST /companies/:companyId/agent-hires
+ *   POST /companies/:companyId/agents
+ *   PATCH /agents/:id/permissions, /agents/:id/instructions-path
+ *   GET|PATCH /agents/:id/instructions-bundle
+ *   PUT|DELETE /agents/:id/instructions-bundle/file
+ *   PATCH /agents/:id
+ *   → Extract target: registerAgentWriteRoutes(router, {svc, ...})
+ *
+ * ZONE E (~1963–2143): Agent lifecycle (pause/resume/terminate/delete/wakeup)
+ *   → Extract target: registerAgentLifecycleRoutes(router, {svc, ...})
+ *
+ * ZONE F (~2140–2516): Heartbeat / run routes
+ *   POST /agents/:id/heartbeat/invoke
+ *   GET|POST /companies/:companyId/heartbeat-runs
+ *   GET /heartbeat-runs/:runId and sub-routes
+ *   GET /issues/:issueId/live-runs + /active-run
+ *   POST /agents/:id/founder-notes
+ *   → Extract target: registerHeartbeatRoutes(router, {svc, heartbeatSvc, ...})
+ *
+ * Split effort: ~6h. Pattern: each zone becomes registerXRoutes(router, deps)
+ * called from a thin agentRoutes(db) factory that builds deps and delegates.
+ * Tracked as tech-debt; do not split without a dedicated PR.
+ */
 import { Router, type Request } from "express";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import path from "node:path";
