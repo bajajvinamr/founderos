@@ -1,3 +1,8 @@
+## [0.2.10] - 2026-05-01 21:17:58 UTC
+
+### Changed
+- refactor(routes): remove redundant actor cast in health.ts (4d6bdd0)
+
 ## [0.2.9] - 2026-05-01 21:06:24 UTC
 
 ### Fixed
