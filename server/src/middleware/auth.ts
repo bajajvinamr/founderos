@@ -18,8 +18,40 @@ interface ActorMiddlewareOptions {
   resolveSession?: (req: Request) => Promise<BetterAuthSessionResult | null>;
 }
 
+// Debounce lastUsedAt writes: at most once per 5 minutes per key ID.
+const lastUsedAtWritten = new Map<string, number>();
+const LAST_USED_AT_DEBOUNCE_MS = 5 * 60 * 1000;
+
+function shouldWriteLastUsedAt(keyId: string): boolean {
+  const now = Date.now();
+  const last = lastUsedAtWritten.get(keyId);
+  if (last !== undefined && now - last < LAST_USED_AT_DEBOUNCE_MS) return false;
+  lastUsedAtWritten.set(keyId, now);
+  return true;
+}
+
 export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHandler {
   const boardAuth = boardAuthService(db);
+
+  async function fetchBoardActorRows(userId: string) {
+    return Promise.all([
+      db
+        .select({ id: instanceUserRoles.id })
+        .from(instanceUserRoles)
+        .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({ companyId: companyMemberships.companyId })
+        .from(companyMemberships)
+        .where(
+          and(
+            eq(companyMemberships.principalType, "user"),
+            eq(companyMemberships.principalId, userId),
+            eq(companyMemberships.status, "active"),
+          ),
+        ),
+    ]);
+  }
 
   /**
    * Called when a Bearer token failed to match any agent/API key. The token
@@ -50,23 +82,7 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     if (!session?.user?.id) return false;
 
     const userId = session.user.id;
-    let [roleRow, memberships] = await Promise.all([
-      db
-        .select({ id: instanceUserRoles.id })
-        .from(instanceUserRoles)
-        .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
-        .then((rows) => rows[0] ?? null),
-      db
-        .select({ companyId: companyMemberships.companyId })
-        .from(companyMemberships)
-        .where(
-          and(
-            eq(companyMemberships.principalType, "user"),
-            eq(companyMemberships.principalId, userId),
-            eq(companyMemberships.status, "active"),
-          ),
-        ),
-    ]);
+    let [roleRow, memberships] = await fetchBoardActorRows(userId);
 
     // Auto-bootstrap for Supabase/Clerk deployments where the webhook isn't
     // wired yet: if this authenticated user has no role AND the instance has
@@ -80,11 +96,7 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
           email: session.user.email,
         });
         if (bootstrap.promotedToInstanceAdmin || bootstrap.consumedInvite) {
-          roleRow = await db
-            .select({ id: instanceUserRoles.id })
-            .from(instanceUserRoles)
-            .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
-            .then((rows) => rows[0] ?? null);
+          [roleRow] = await fetchBoardActorRows(userId);
         }
       } catch (err) {
         logger.warn({ err, userId }, "Inline post-signup bootstrap failed (non-fatal)");
@@ -124,23 +136,7 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
         }
         if (session?.user?.id) {
           const userId = session.user.id;
-          const [roleRow, memberships] = await Promise.all([
-            db
-              .select({ id: instanceUserRoles.id })
-              .from(instanceUserRoles)
-              .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
-              .then((rows) => rows[0] ?? null),
-            db
-              .select({ companyId: companyMemberships.companyId })
-              .from(companyMemberships)
-              .where(
-                and(
-                  eq(companyMemberships.principalType, "user"),
-                  eq(companyMemberships.principalId, userId),
-                  eq(companyMemberships.status, "active"),
-                ),
-              ),
-          ]);
+          const [roleRow, memberships] = await fetchBoardActorRows(userId);
           req.actor = {
             type: "board",
             userId,
@@ -236,10 +232,16 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
       return;
     }
 
-    await db
-      .update(agentApiKeys)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(agentApiKeys.id, key.id));
+    // Debounced: write lastUsedAt at most once per 5 min per key to avoid
+    // write amplification on high-frequency agent requests.
+    if (shouldWriteLastUsedAt(key.id)) {
+      setImmediate(() => {
+        db.update(agentApiKeys)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(agentApiKeys.id, key.id))
+          .catch((err: unknown) => logger.warn({ err, keyId: key.id }, "Failed to update lastUsedAt"));
+      });
+    }
 
     const agentRecord = await db
       .select()

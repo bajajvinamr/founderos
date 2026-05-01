@@ -15,10 +15,28 @@ function resolveServerLogDir(): string {
   return resolveDefaultLogsDir();
 }
 
+const SENSITIVE_KEYS = new Set([
+  "password", "passwd", "secret", "token", "apikey", "api_key",
+  "accesstoken", "access_token", "refreshtoken", "refresh_token",
+  "authorization", "auth", "credential", "credentials", "privatekey",
+  "private_key", "clientsecret", "client_secret",
+]);
+
+function redactSensitive(value: unknown, depth = 0): unknown {
+  if (depth > 6 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => redactSensitive(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = SENSITIVE_KEYS.has(k.toLowerCase()) ? "[redacted]" : redactSensitive(v, depth + 1);
+  }
+  return out;
+}
+
 const logDir = resolveServerLogDir();
 fs.mkdirSync(logDir, { recursive: true });
 
 const logFile = path.join(logDir, "server.log");
+const logLevel = process.env.LOG_LEVEL ?? "info";
 
 const sharedOpts = {
   translateTime: "SYS:HH:MM:ss",
@@ -27,7 +45,7 @@ const sharedOpts = {
 };
 
 export const logger = pino({
-  level: "debug",
+  level: logLevel,
   redact: ["req.headers.authorization"],
 }, pino.transport({
   targets: [
@@ -39,7 +57,7 @@ export const logger = pino({
     {
       target: "pino-pretty",
       options: { ...sharedOpts, colorize: false, destination: logFile, mkdir: true },
-      level: "debug",
+      level: logLevel,
     },
   ],
 }));
@@ -65,21 +83,21 @@ export const httpLogger = pinoHttp({
       if (ctx) {
         return {
           errorContext: ctx.error,
-          reqBody: ctx.reqBody,
-          reqParams: ctx.reqParams,
-          reqQuery: ctx.reqQuery,
+          reqBody: redactSensitive(ctx.reqBody),
+          reqParams: redactSensitive(ctx.reqParams),
+          reqQuery: redactSensitive(ctx.reqQuery),
         };
       }
       const props: Record<string, unknown> = {};
       const { body, params, query } = req as any;
       if (body && typeof body === "object" && Object.keys(body).length > 0) {
-        props.reqBody = body;
+        props.reqBody = redactSensitive(body);
       }
       if (params && typeof params === "object" && Object.keys(params).length > 0) {
-        props.reqParams = params;
+        props.reqParams = redactSensitive(params);
       }
       if (query && typeof query === "object" && Object.keys(query).length > 0) {
-        props.reqQuery = query;
+        props.reqQuery = redactSensitive(query);
       }
       if ((req as any).route?.path) {
         props.routePath = (req as any).route.path;
