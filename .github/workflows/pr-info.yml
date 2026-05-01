@@ -28,7 +28,10 @@ permissions:
 env:
   NODE_VERSION: "24"
   PNPM_VERSION: "9.15.4"
-  BUNDLE_SIZE_BUDGET_KB: "1536"
+  # Keep in sync with ci.yml's BUNDLE_SIZE_BUDGET_KB (canonical bundle-size gate).
+  # Drift here means this summary check fails on every PR while the canonical
+  # gate passes — see commit ae40f4a for the budget rationale.
+  BUNDLE_SIZE_BUDGET_KB: "2700"
 
 jobs:
   summary:
