@@ -1,3 +1,14 @@
+## [0.2.9] - 2026-05-01 21:06:24 UTC
+
+### Fixed
+- fix(types): remove unsafe cast in ExecutionRouteDeps by widening targetDate type (ac7928d)
+
+### Changed
+- refactor(types): add rawBody to Express.Request; export actorCanAccessCompany from authz (5db66c5)
+- refactor(routes): export ClosedWorkspace from issues-execution; import in issues-comments (c4373ab)
+- refactor(routes): have issues-feedback import query-utils directly; remove injected parse deps (32191f1)
+- refactor(routes): extract parseBooleanQuery/parseDateQuery to shared utility; fix health.ts actor cast (6f78fa6)
+
 ## [0.2.8] - 2026-05-01 20:40:51 UTC
 
 ### Changed
