@@ -1,3 +1,8 @@
+## [0.2.3] - 2026-05-01 19:31:22 UTC
+
+### Fixed
+- fix(security): Phase 1+2 — log redaction, env log level, auth query dedup, lastUsedAt debounce (1a5ed86)
+
 ## [0.2.1] - 2026-05-01 19:27:30 UTC
 
 ### Fixed
