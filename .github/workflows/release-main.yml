@@ -38,22 +38,11 @@ jobs:
         run: |
           npx tsx scripts/ci/bump-version.ts
 
-      - name: Create git tag
+      - name: Configure git identity
         if: steps.version.outputs.version != 'no-bump'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const version = '${{ steps.version.outputs.version }}';
-            const tag = `v${version}`;
-
-            github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `refs/tags/${tag}`,
-              sha: context.sha
-            });
-
-            console.log(`Created tag: ${tag}`);
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Generate CHANGELOG entry
         if: steps.version.outputs.version != 'no-bump'
@@ -105,16 +94,15 @@ jobs:
       - name: Commit CHANGELOG and package.json
         if: steps.version.outputs.version != 'no-bump'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md package.json
           git commit -m "chore(release): v${{ steps.version.outputs.version }} [skip ci]" || echo "Nothing to commit"
+          git tag -f "v${{ steps.version.outputs.version }}"
 
       - name: Push commits and tags
         if: steps.version.outputs.version != 'no-bump'
         run: |
           git push origin main
-          git push origin v${{ steps.version.outputs.version }}
+          git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Create GitHub Release
         if: steps.version.outputs.version != 'no-bump'
