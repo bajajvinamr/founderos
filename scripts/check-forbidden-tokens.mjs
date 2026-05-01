@@ -21,6 +21,16 @@ function uniqueNonEmpty(values) {
   return Array.from(new Set(values.map((value) => value?.trim() ?? "").filter(Boolean)));
 }
 
+// Generic system account names used by CI runners and containers — not PII.
+const SYSTEM_ACCOUNT_BLOCKLIST = new Set([
+  "runner",   // GitHub Actions default USER
+  "root",     // container/CI default
+  "ubuntu",   // GitHub Actions ubuntu image user
+  "user",     // generic container user
+  "github",   // some runner configs
+  "ci",       // some runner configs
+]);
+
 export function resolveDynamicForbiddenTokens(env = process.env, osModule = os) {
   const candidates = [env.USER, env.LOGNAME, env.USERNAME];
 
@@ -30,7 +40,9 @@ export function resolveDynamicForbiddenTokens(env = process.env, osModule = os) 
     // Some environments do not expose userInfo; env vars are enough fallback.
   }
 
-  return uniqueNonEmpty(candidates);
+  return uniqueNonEmpty(candidates).filter(
+    (t) => !SYSTEM_ACCOUNT_BLOCKLIST.has(t.toLowerCase()),
+  );
 }
 
 export function readForbiddenTokensFile(tokensFile) {
