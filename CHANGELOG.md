@@ -1,3 +1,8 @@
+## [0.2.1] - 2026-05-01 19:27:30 UTC
+
+### Fixed
+- fix(ci): create git tag locally before push instead of via API (c2f8f4f)
+
 ## [0.1.0] - 2026-05-01 19:25:49 UTC
 
 ### Added
