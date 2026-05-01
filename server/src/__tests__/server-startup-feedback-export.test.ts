@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createAppMock,
@@ -155,9 +155,23 @@ vi.mock("../auth/better-auth.js", () => ({
 import { startServer } from "../index.ts";
 
 describe("startServer feedback export wiring", () => {
+  const originalStrictIsolation = process.env.FOUNDEROS_STRICT_COMPANY_ISOLATION;
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BETTER_AUTH_SECRET = "test-secret";
+    // Mocked config returns deploymentMode="authenticated", which under the
+    // new startup safety guard requires this env var to boot. Matches what
+    // production sets — this test no longer exercises the unsafe default.
+    process.env.FOUNDEROS_STRICT_COMPANY_ISOLATION = "true";
+  });
+
+  afterEach(() => {
+    if (originalStrictIsolation === undefined) {
+      delete process.env.FOUNDEROS_STRICT_COMPANY_ISOLATION;
+    } else {
+      process.env.FOUNDEROS_STRICT_COMPANY_ISOLATION = originalStrictIsolation;
+    }
   });
 
   it("passes the feedback export service into createApp so pending traces flush in runtime", async () => {
