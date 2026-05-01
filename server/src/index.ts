@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { pathToFileURL } from "node:url";
 import type { Request as ExpressRequest, RequestHandler } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   createDb,
   ensurePostgresDatabase,
@@ -234,26 +234,31 @@ export async function startServer(): Promise<StartedServer> {
     }
   
     const companyRows = await db.select({ id: companies.id }).from(companies);
-    for (const company of companyRows) {
-      const membership = await db
-        .select({ id: companyMemberships.id })
+    const allCompanyIds = companyRows.map((r: { id: string }) => r.id);
+    if (allCompanyIds.length > 0) {
+      const existingMemberships = await db
+        .select({ companyId: companyMemberships.companyId })
         .from(companyMemberships)
         .where(
           and(
-            eq(companyMemberships.companyId, company.id),
+            inArray(companyMemberships.companyId, allCompanyIds),
             eq(companyMemberships.principalType, "user"),
             eq(companyMemberships.principalId, LOCAL_BOARD_USER_ID),
           ),
-        )
-        .then((rows: Array<{ id: string }>) => rows[0] ?? null);
-      if (membership) continue;
-      await db.insert(companyMemberships).values({
-        companyId: company.id,
-        principalType: "user",
-        principalId: LOCAL_BOARD_USER_ID,
-        status: "active",
-        membershipRole: "owner",
-      });
+        );
+      const existingSet = new Set(existingMemberships.map((r: { companyId: string }) => r.companyId));
+      const missing = allCompanyIds.filter((id: string) => !existingSet.has(id));
+      if (missing.length > 0) {
+        await db.insert(companyMemberships).values(
+          missing.map((companyId: string) => ({
+            companyId,
+            principalType: "user" as const,
+            principalId: LOCAL_BOARD_USER_ID,
+            status: "active" as const,
+            membershipRole: "owner" as const,
+          })),
+        );
+      }
     }
   }
   

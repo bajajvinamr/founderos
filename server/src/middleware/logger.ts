@@ -22,7 +22,7 @@ const SENSITIVE_KEYS = new Set([
   "private_key", "clientsecret", "client_secret",
 ]);
 
-function redactSensitive(value: unknown, depth = 0): unknown {
+export function redactSensitive(value: unknown, depth = 0): unknown {
   if (depth > 6 || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => redactSensitive(v, depth + 1));
   const out: Record<string, unknown> = {};
