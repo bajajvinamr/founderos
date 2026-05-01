@@ -6,19 +6,12 @@ import { validate } from "../middleware/validate.js";
 import { logActivity } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import type { ClosedWorkspace } from "./issues-execution.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 
 type Svc = ReturnType<typeof issueService>;
 type Heartbeat = ReturnType<typeof heartbeatService>;
-
-type ClosedWorkspace = {
-  closedAt: Date | null;
-  id: string;
-  mode: string;
-  name: string | null;
-  status: string;
-};
 
 export type CommentRouteDeps = {
   svc: Svc;

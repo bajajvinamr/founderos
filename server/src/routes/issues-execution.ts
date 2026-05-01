@@ -18,7 +18,7 @@ type Heartbeat = ReturnType<typeof heartbeatService>;
 type IssueApprovalsSvc = ReturnType<typeof issueApprovalService>;
 type ProjectsSvc = ReturnType<typeof projectService>;
 
-type ClosedWorkspace = {
+export type ClosedWorkspace = {
   closedAt: Date | null;
   id: string;
   mode: string;
