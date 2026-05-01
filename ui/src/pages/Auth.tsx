@@ -31,10 +31,11 @@ export function AuthPage() {
   >(null);
 
   useEffect(() => {
+    if (sessionLoading) return;
     if (session) {
       navigate(nextPath, { replace: true });
     }
-  }, [session, navigate, nextPath]);
+  }, [session, sessionLoading, navigate, nextPath]);
 
   const canSubmit =
     email.trim().length > 0 &&
