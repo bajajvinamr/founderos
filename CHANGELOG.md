@@ -1,3 +1,8 @@
+## [0.2.5] - 2026-05-01 19:43:22 UTC
+
+### Changed
+- perf(auth): batch ensureLocalTrustedBoardPrincipal membership inserts (8999fa0)
+
 ## [0.2.3] - 2026-05-01 19:31:22 UTC
 
 ### Fixed
