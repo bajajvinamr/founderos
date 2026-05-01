@@ -53,6 +53,27 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     ]);
   }
 
+  // Runs the post-signup bootstrap inline when a newly-authenticated user has
+  // no instance role yet. Idempotent — the hook checks for an existing admin.
+  async function maybeBootstrapNewUser(
+    userId: string,
+    email: string | null | undefined,
+    roleRow: { id: string } | null,
+  ): Promise<{ id: string } | null> {
+    if (roleRow || !email) return roleRow;
+    try {
+      const { runPostSignupBootstrap } = await import("../auth/post-signup-hook.js");
+      const bootstrap = await runPostSignupBootstrap(db, { userId, email });
+      if (bootstrap.promotedToInstanceAdmin || bootstrap.consumedInvite) {
+        const [refreshed] = await fetchBoardActorRows(userId);
+        return refreshed;
+      }
+    } catch (err) {
+      logger.warn({ err, userId }, "Inline post-signup bootstrap failed (non-fatal)");
+    }
+    return roleRow;
+  }
+
   /**
    * Called when a Bearer token failed to match any agent/API key. The token
    * may still be a provider session token (Supabase access token) — delegate
@@ -82,26 +103,8 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     if (!session?.user?.id) return false;
 
     const userId = session.user.id;
-    let [roleRow, memberships] = await fetchBoardActorRows(userId);
-
-    // Auto-bootstrap for Supabase/Clerk deployments where the webhook isn't
-    // wired yet: if this authenticated user has no role AND the instance has
-    // no real admin yet, run the post-signup hook inline. Idempotent — safe
-    // to call on every request; the hook checks existing admins.
-    if (!roleRow && session.user.email) {
-      try {
-        const { runPostSignupBootstrap } = await import("../auth/post-signup-hook.js");
-        const bootstrap = await runPostSignupBootstrap(db, {
-          userId,
-          email: session.user.email,
-        });
-        if (bootstrap.promotedToInstanceAdmin || bootstrap.consumedInvite) {
-          [roleRow] = await fetchBoardActorRows(userId);
-        }
-      } catch (err) {
-        logger.warn({ err, userId }, "Inline post-signup bootstrap failed (non-fatal)");
-      }
-    }
+    const [roleRowRaw, memberships] = await fetchBoardActorRows(userId);
+    const roleRow = await maybeBootstrapNewUser(userId, session.user.email, roleRowRaw);
     req.actor = {
       type: "board",
       userId,
@@ -136,7 +139,8 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
         }
         if (session?.user?.id) {
           const userId = session.user.id;
-          const [roleRow, memberships] = await fetchBoardActorRows(userId);
+          const [roleRowRaw, memberships] = await fetchBoardActorRows(userId);
+          const roleRow = await maybeBootstrapNewUser(userId, session.user.email, roleRowRaw);
           req.actor = {
             type: "board",
             userId,
