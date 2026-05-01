@@ -14,7 +14,7 @@ import {
 import { validate } from "../middleware/validate.js";
 import { logActivity } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
-import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertCompanyAccess, actorCanAccessCompany, getActorInfo } from "./authz.js";
 import { parseBooleanQuery, parseDateQuery } from "./query-utils.js";
 
 type Svc = ReturnType<typeof issueService>;
@@ -26,7 +26,6 @@ export type FeedbackRouteDeps = {
   feedback: FeedbackSvc;
   instanceSettings: InstanceSettings;
   db: Db;
-  actorCanAccessCompany: (req: Request, companyId: string) => boolean;
   feedbackExportService?: {
     flushPendingFeedbackTraces(input?: {
       companyId?: string;
@@ -43,7 +42,6 @@ export function registerFeedbackRoutes(router: Router, deps: FeedbackRouteDeps):
     feedback,
     instanceSettings,
     db,
-    actorCanAccessCompany,
     feedbackExportService,
   } = deps;
 

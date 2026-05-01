@@ -44,7 +44,7 @@ export function authWebhookRoutes(
       return;
     }
 
-    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const rawBody = req.rawBody;
     if (!rawBody) {
       // `app.ts` attaches rawBody via the express.json verify callback. If
       // it's missing the request probably wasn't JSON — reject.

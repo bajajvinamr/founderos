@@ -1956,7 +1956,7 @@ export function pluginRoutes(
     // Use the raw buffer stashed by the express.json() `verify` callback.
     // This preserves the exact bytes the provider signed, whereas
     // JSON.stringify(req.body) would re-serialize and break HMAC verification.
-    const stashedRaw = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const stashedRaw = req.rawBody;
     const rawBody = stashedRaw ? stashedRaw.toString("utf-8") : "";
     const parsedBody = req.body as unknown;
     const payload = (req.body as Record<string, unknown> | undefined) ?? {};

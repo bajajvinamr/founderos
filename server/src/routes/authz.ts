@@ -34,6 +34,13 @@ export function assertCompanyAccess(req: Request, companyId: string) {
   }
 }
 
+export function actorCanAccessCompany(req: Request, companyId: string): boolean {
+  if (req.actor.type === "none") return false;
+  if (req.actor.type === "agent") return req.actor.companyId === companyId;
+  if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return true;
+  return (req.actor.companyIds ?? []).includes(companyId);
+}
+
 export function getActorInfo(req: Request) {
   if (req.actor.type === "none") {
     throw unauthorized();

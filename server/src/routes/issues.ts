@@ -1482,7 +1482,6 @@ export function issueRoutes(
     feedback,
     instanceSettings,
     db,
-    actorCanAccessCompany,
     feedbackExportService,
   });
 

@@ -92,7 +92,7 @@ export function billingRoutes(db: Db) {
         res.status(400).json({ error: "Missing stripe-signature header" });
         return;
       }
-      const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+      const rawBody = req.rawBody;
       if (!rawBody) {
         // Without the raw body the signature can't be verified — reject hard.
         res.status(400).json({ error: "Missing raw request body" });
