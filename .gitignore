@@ -30,6 +30,8 @@ server/src/**/*.js
 server/src/**/*.js.map
 server/src/**/*.d.ts
 server/src/**/*.d.ts.map
+# Hand-authored ambient declarations are not build artifacts — keep them
+!server/src/types/*.d.ts
 tmp/
 feedback-export-*
 
