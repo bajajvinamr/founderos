@@ -1,3 +1,8 @@
+## [0.2.8] - 2026-05-01 20:40:51 UTC
+
+### Changed
+- refactor(routes): split issues.ts into 5 focused route modules (e68e1b7)
+
 ## [0.2.7] - 2026-05-01 20:33:32 UTC
 
 ### Fixed
