@@ -1,3 +1,8 @@
+## [0.2.7] - 2026-05-01 20:33:32 UTC
+
+### Fixed
+- fix(auth): run post-signup bootstrap on cookie-session path (db5c1b4)
+
 ## [0.2.5] - 2026-05-01 19:43:22 UTC
 
 ### Changed
