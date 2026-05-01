@@ -1,6 +1,22 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-04-30 by Claude (security P3 fixes + bundle-size CI gate unblocked)_
+_Last updated: 2026-05-01 by Claude (improvement loops 13–16 sweep)_
+
+## 2026-05-01 — Improvement loops 13–16 sweep
+
+- **Loop 13 (access.ts split) — DEFERRED:** Zone comment in `access.ts` already documents the split contract. Deferral is explicit in the file: "Tracked as tech-debt; do not split without a dedicated PR." Reason: 6 test files + app.ts import from `access.ts` directly, and many private helpers in Zones 1–2 are also called from Zones 3–4 and from `accessRoutes()`. Cross-cutting usage means a naive extraction creates a circular-dependency risk. Safe path: dedicated PR with full import-graph analysis. Time estimate per zone comment: ~4h.
+- **Loop 14 (agents.ts split) — DEFERRED:** Same pattern. Zone comment says "Tracked as tech-debt; do not split without a dedicated PR." Estimated ~6h. Zone boundaries documented in the file header.
+- **Loop 15 (services coverage) — COMPLETED (scan):** `@vitest/coverage-v8` not installed — full coverage report not available. Manual scan found no service file with obviously missing test coverage for exposed business logic that wasn't already tracked. High-`as any` file: `plugin-host-services.ts` (14 casts at plugin API boundary — intentional, plugin API uses `unknown` at dispatch boundary). All other `as any` casts in services are justified (Drizzle tx cast, Ajv ESM interop, readonly-array `.includes()`, 3rd-party shape mismatches).
+- **Loop 16 (final sweep) — COMPLETED:**
+  - `as any` / `as unknown as` in route files: 3 occurrences, all justified (DOMPurify window interop, OrgNode rendering lib). No fixable casts in routes.
+  - `console.log` in non-test route/service files: 0 occurrences. (3 in `index.ts`/`startup-banner.ts`/`adapters/registry.ts` are intentional startup logging.)
+  - Typecheck: clean (all packages).
+  - Lint: clean.
+  - Tests: **270 test files, 1655 passed, 1 skipped** — baseline confirmed.
+- **Next PRs recommended:**
+  1. `chore: split access.ts zones 1-2` (utils + skills → new files, 4h). Gate: no circular deps, update 6 test file imports.
+  2. `chore: split agents.ts zones A-F` (6 sub-routers, 6h). Gate: registerXxxRoutes pattern, thin factory remains.
+  3. `chore: install @vitest/coverage-v8, add coverage threshold` — unlocks loop 15 properly.
 
 ## 2026-04-30 — SOLO adversarial council review + P3 security hardening
 
