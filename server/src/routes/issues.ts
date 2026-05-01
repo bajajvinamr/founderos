@@ -66,7 +66,7 @@ import { registerExecutionRoutes, type ExecutionRouteDeps } from "./issues-execu
 import { registerFeedbackRoutes } from "./issues-feedback.js";
 import { registerCommentRoutes } from "./issues-comments.js";
 import { registerAttachmentRoutes } from "./issues-attachments.js";
-import { parseBooleanQuery, parseDateQuery } from "./query-utils.js";
+
 const updateIssueRouteSchema = updateIssueSchema.extend({
   interrupt: z.boolean().optional(),
 });
@@ -1455,9 +1455,6 @@ export function issueRoutes(
     res.json(issue);
   });
 
-
-
-
   registerDocumentRoutes(router, {
     svc,
     workProductsSvc,
@@ -1485,8 +1482,6 @@ export function issueRoutes(
     feedback,
     instanceSettings,
     db,
-    parseBooleanQuery,
-    parseDateQuery,
     actorCanAccessCompany,
     feedbackExportService,
   });
