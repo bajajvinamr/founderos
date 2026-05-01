@@ -6,6 +6,7 @@ import { Layout } from "./components/Layout";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { FounderOnboardingWizard } from "./components/onboarding/FounderOnboardingWizard";
 import { authApi } from "./api/auth";
+import { useSupabaseAuth } from "./context/SupabaseAuthContext";
 
 /**
  * Feature flag for the opinionated 6-step founder onboarding (Wave 15A).
@@ -107,6 +108,7 @@ function BootstrapPendingPage({ hasActiveInvite = false }: { hasActiveInvite?: b
 
 function CloudAccessGate() {
   const location = useLocation();
+  const { session: supabaseSession, loading: supabaseLoading } = useSupabaseAuth();
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
     queryFn: () => healthApi.get(),
@@ -130,15 +132,21 @@ function CloudAccessGate() {
     retry: false,
   });
 
-  // Fast path: root `/` is always the public landing page. Don't wait for
-  // the session probe — /landing is a pure marketing route that doesn't
-  // need auth state. Shaves ~500ms off the first-paint delay that buyers
-  // see when they land on the apex URL. Only short-circuit once we know
-  // the deployment mode; `local_trusted` instances go straight to the
-  // board UI.
+  // Fast path: unauthenticated visitors at root see the landing page without
+  // waiting for the server session probe. Shaves ~500ms off first-paint for buyers.
+  // Skip the fast path when the user already has a Supabase session — they should
+  // reach CompanyRootRedirect (which sends them to their board) rather than landing.
+  // Also skip while Supabase is still resolving so we don't flash-redirect a
+  // returning user to landing before their session is confirmed.
   const isRoot = location.pathname === "/" || location.pathname === "";
   if (isRoot && isAuthenticatedMode) {
-    return <Navigate to="/landing" replace />;
+    if (supabaseLoading) {
+      return <BootSplash />;
+    }
+    if (!supabaseSession) {
+      return <Navigate to="/landing" replace />;
+    }
+    // supabaseSession exists — fall through so CompanyRootRedirect can route to board
   }
 
   if (healthQuery.isLoading || (isAuthenticatedMode && sessionQuery.isLoading)) {
