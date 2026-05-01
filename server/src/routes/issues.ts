@@ -1489,7 +1489,7 @@ export function issueRoutes(
     assertCanManageIssueApprovalLinks,
     getClosedIssueExecutionWorkspace,
     respondClosedIssueExecutionWorkspace,
-    resolveIssueProjectAndGoal: resolveIssueProjectAndGoal as unknown as ExecutionRouteDeps["resolveIssueProjectAndGoal"],
+    resolveIssueProjectAndGoal,
   });
 
   registerFeedbackRoutes(router, {
