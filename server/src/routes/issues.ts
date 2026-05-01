@@ -66,6 +66,7 @@ import { registerExecutionRoutes, type ExecutionRouteDeps } from "./issues-execu
 import { registerFeedbackRoutes } from "./issues-feedback.js";
 import { registerCommentRoutes } from "./issues-comments.js";
 import { registerAttachmentRoutes } from "./issues-attachments.js";
+import { parseBooleanQuery, parseDateQuery } from "./query-utils.js";
 const updateIssueRouteSchema = updateIssueSchema.extend({
   interrupt: z.boolean().optional(),
 });
@@ -304,19 +305,6 @@ export function issueRoutes(
       ...attachment,
       contentPath: `/api/attachments/${attachment.id}/content`,
     };
-  }
-
-  function parseBooleanQuery(value: unknown) {
-    return value === true || value === "true" || value === "1";
-  }
-
-  function parseDateQuery(value: unknown, field: string) {
-    if (typeof value !== "string" || value.trim().length === 0) return undefined;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      throw new HttpError(400, `Invalid ${field} query value`);
-    }
-    return parsed;
   }
 
   async function runSingleFileUpload(req: Request, res: Response) {

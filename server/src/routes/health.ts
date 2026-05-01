@@ -183,7 +183,7 @@ export function healthRoutes(
     // 3. Session resolver: confirm req.actor.type is set
     const sessionStart = Date.now();
     try {
-      const actor = (req as any).actor;
+      const actor: Express.Request["actor"] | undefined = (req as unknown as { actor?: Express.Request["actor"] }).actor;
       if (!actor || !actor.type) {
         checks.push({
           name: "session_resolver",

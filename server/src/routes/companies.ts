@@ -13,6 +13,7 @@ import {
   updateCompanySchema,
 } from "@founderos/shared";
 import { badRequest, forbidden } from "../errors.js";
+import { parseBooleanQuery, parseDateQuery } from "./query-utils.js";
 import { validate } from "../middleware/validate.js";
 import {
   accessService,
@@ -34,19 +35,6 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   const access = accessService(db);
   const budgets = budgetService(db);
   const feedback = feedbackService(db);
-
-  function parseBooleanQuery(value: unknown) {
-    return value === true || value === "true" || value === "1";
-  }
-
-  function parseDateQuery(value: unknown, field: string) {
-    if (typeof value !== "string" || value.trim().length === 0) return undefined;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      throw badRequest(`Invalid ${field} query value`);
-    }
-    return parsed;
-  }
 
   function assertImportTargetAccess(
     req: Request,
