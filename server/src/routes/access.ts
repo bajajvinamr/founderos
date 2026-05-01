@@ -1,3 +1,38 @@
+/**
+ * access.ts — 2940 lines. Module boundaries documented here for future split.
+ *
+ * ZONE 1 (lines ~57–422): Token + request utilities
+ *   hashToken, createInviteToken, createClaimSecret, companyInviteExpiresAt,
+ *   tokenHashesMatch, requestBaseUrl, buildCliAuthApprovalPath,
+ *   isLoopbackHost, normalizeHostname, normalizeHeaderValue,
+ *   extractHeaderEntries, normalizeHeaderMap, tokenFromAuthorizationHeader,
+ *   parseBooleanLike, generateEd25519PrivateKeyPem.
+ *   → Extract target: server/src/routes/access-utils.ts
+ *
+ * ZONE 2 (lines ~106–214): Skills resolution helpers
+ *   readSkillMarkdown, resolveFounderOSSkillsDir, parseSkillFrontmatter,
+ *   listAvailableSkills.
+ *   → Extract target: server/src/routes/access-skills.ts (or services/skills.ts)
+ *
+ * ZONE 3 (lines ~215–1568): OpenClaw / invite-gateway domain logic
+ *   toJoinRequestResponse, buildJoinDefaultsPayloadForAccept,
+ *   mergeJoinDefaultsPayloadForReplay, canReplayOpenClawGatewayInviteAccept,
+ *   normalizeAgentDefaultsForJoin, summarizeOpenClawGatewayDefaultsForLog,
+ *   buildOnboardingDiscoveryDiagnostics, buildOnboardingConnectionCandidates,
+ *   buildInviteOnboardingManifest, buildInviteOnboardingTextDocument,
+ *   extractInviteMessage, mergeInviteDefaults, grantsFromDefaults,
+ *   agentJoinGrantsFromDefaults, resolveJoinRequestAgentManagerId.
+ *   Exported; used by 6 test files — update imports on split.
+ *   → Extract target: server/src/routes/access-invite-helpers.ts
+ *
+ * ZONE 4 (lines ~1569–2940): accessRoutes() — Express router
+ *   All router.get/post/patch/put handlers. This is the only zone that should
+ *   remain in access.ts after the split.
+ *
+ * Split effort: ~4h. Blocks: update imports in 6 test files + app.ts.
+ * Tracked as tech-debt; do not split without a dedicated PR.
+ */
+
 import {
   createHash,
   generateKeyPairSync,
