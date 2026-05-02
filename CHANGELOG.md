@@ -1,3 +1,8 @@
+## [0.2.13] - 2026-05-02 00:13:01 UTC
+
+### Fixed
+- fix(onboarding): make bootstrap atomic and retry-safe (#14) (1095639)
+
 ## [0.2.11] - 2026-05-01 23:39:08 UTC
 
 ### Fixed
