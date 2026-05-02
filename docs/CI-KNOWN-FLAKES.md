@@ -32,6 +32,41 @@ Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 20
 
 ---
 
+### 4. e2e/tests/critical-flows.spec.ts > landing > [landing] hero + sign-up CTA render — QUARANTINED 2026-05-02
+
+**Location:** `e2e/tests/critical-flows.spec.ts:41`
+
+**Issue:** Passes locally against vite-dev (port 3100 proxying React-refreshed `Landing.tsx`) but fails in CI under static mode (server serves built `ui/dist`). The CTA selector matches a broad family of phrases (`/sign\s*up|get\s*started|build\s*your\s*company|design\s*partner|start\s*your/i`) and Landing.tsx has multiple matching links (e.g. "Build your company →"), so this is most likely a hydration race or a build-time copy divergence in CI, not a real regression.
+
+**Symptom:** `Error: Landing page has no visible primary CTA link — check ui/src/pages/Landing.tsx`. Reproduced on PR #15's CI run; `pnpm exec playwright test --grep "hero + sign-up CTA render"` passes locally.
+
+**Why this was masked:** The E2E suite has been red on `main` for weeks because of an upstream ECONNREFUSED harness bug at the seed step (issue #7). Once the seed step actually ran, this stale assertion surfaced.
+
+**Re-enable when:**
+- Investigation confirms whether built ui/dist actually serves the same Landing copy as vite-dev, OR
+- The selector / wait strategy is hardened to handle the static-build hydration timing.
+
+**Tracked:** [#16](https://github.com/bajajvinamr/founderos/issues/16)
+
+---
+
+### 5. e2e/tests/critical-flows.spec.ts > onboarding > [onboarding-v2-flag] /onboarding renders the 6-step wizard (not legacy) — QUARANTINED 2026-05-02
+
+**Location:** `e2e/tests/critical-flows.spec.ts:229`
+
+**Issue:** Even after pinning `VITE_FOUNDEROS_ONBOARDING_V2=true` at CI build time (workflow `Build workspace` step env), the spec still fails to locate `[role=dialog], [data-testid*=onboarding], [data-testid*=wizard]` after clicking the "Start onboarding" / "Hire teammate" button at /onboarding. Three possible causes — see #17 for the investigation plan: (a) button doesn't render in CI's `local_trusted` profile because the seeded company-ownership graph shapes the page differently, (b) the wizard opens via a portal that bypasses the [role=dialog] selector, (c) DialogContext race so the click is a no-op.
+
+**Symptom:** `Error: /onboarding did not open a wizard dialog after clicking Start onboarding`. Reproduces every CI run; not yet repro'd locally under static-build mode.
+
+**Why this was masked:** Same root cause as entry #4 — the upstream ECONNREFUSED bug at the seed step (issue #7) prevented the spec from running at all.
+
+**Re-enable when:**
+- The actual /onboarding DOM in CI's static-build mode is captured and the wizard's stable hook is identified (likely a `data-testid` added to `FounderOnboardingWizard.tsx` plus a tightened spec locator).
+
+**Tracked:** [#17](https://github.com/bajajvinamr/founderos/issues/17)
+
+---
+
 ## Verification
 
 To verify a fix works:

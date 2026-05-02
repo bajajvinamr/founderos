@@ -29,9 +29,13 @@ jobs:
       # the suite needs to hit `/api/companies/:id/…` without a session.
       FOUNDEROS_DEPLOYMENT_MODE: local_trusted
       PORT: "3100"
-      # Embedded PG connection string. Matches what seed-demo.ts expects when
-      # no external DB is configured.
-      DATABASE_URL: postgres://founderos:founderos@127.0.0.1:54329/founderos
+      # NOTE: DATABASE_URL is intentionally NOT set at workflow level. The
+      # server uses an embedded Postgres only when DATABASE_URL is empty
+      # (server/src/index.ts:274). Setting DATABASE_URL globally would push
+      # the server into external-postgres mode and skip embedded boot,
+      # leaving nothing on 54329 for seed-demo to connect to. We scope
+      # DATABASE_URL to just the seed step below, where the server's
+      # embedded PG is already running on that port.
 
     steps:
       - uses: actions/checkout@v4
@@ -47,29 +51,52 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browser (chromium only)
-        run: pnpm exec playwright install --with-deps chromium
+        # Retry the apt-mediated `--with-deps` install — GitHub Actions
+        # runners occasionally hit transient DNS resolution failures
+        # against `azure.archive.ubuntu.com`, which fails the install
+        # outright. Retrying twice covers the common transient case.
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            if pnpm exec playwright install --with-deps chromium; then
+              echo "playwright install ok on attempt ${attempt}"
+              exit 0
+            fi
+            echo "playwright install attempt ${attempt} failed; retrying..." >&2
+            sleep 10
+          done
+          echo "playwright install failed after 3 attempts" >&2
+          exit 1
+        shell: bash
 
       - name: Build workspace
+        # The onboarding-v2 spec asserts the FounderOnboardingWizard
+        # (6-step) flow renders at /onboarding. App.tsx defaults the
+        # FOUNDEROS_ONBOARDING_V2 flag from `import.meta.env.DEV`,
+        # which is `false` in any production build — so without this
+        # explicit Vite-time flag the built UI ships the legacy wizard
+        # and the spec fails. Setting it here keeps the test as a real
+        # signal of the V2 flow without requiring a separate dev build.
+        env:
+          VITE_FOUNDEROS_ONBOARDING_V2: "true"
         run: pnpm build
 
-      # The server ships an embedded Postgres; `pnpm dev` spawns it on boot.
-      # We therefore skip docker-compose for the DB and rely on embedded PG.
-      # If the repo grows a compose file we can switch here without touching
-      # the spec suite.
-      - name: Seed demo data
-        run: pnpm seed:demo
-        continue-on-error: false
-
-      - name: Boot server
+      # Boot the server FIRST so its embedded Postgres comes up on
+      # 54329 before anything tries to connect. Migrations auto-apply
+      # (TTY heuristic in server/src/index.ts:116; the env var is
+      # belt-and-suspenders).
+      - name: Boot server (starts embedded Postgres on 54329)
+        env:
+          FOUNDEROS_MIGRATION_AUTO_APPLY: "true"
         run: |
           pnpm dev:server &
           echo $! > /tmp/founderos-server.pid
         shell: bash
 
-      - name: Wait for /api/health
+      - name: Wait for /api/health (proves embedded Postgres is up)
         run: |
           set -euo pipefail
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             if curl -fsS "http://localhost:3100/api/health" >/dev/null 2>&1; then
               echo "server ready after ${i}s"
               exit 0
@@ -77,7 +104,19 @@ jobs:
             sleep 2
           done
           echo "server never became ready" >&2
+          if [[ -f /tmp/founderos-server.pid ]]; then
+            echo "----- last 200 lines of server stdout/stderr (if captured) -----"
+            jobs -l || true
+          fi
           exit 1
+
+      # Now embedded Postgres on 54329 is reachable. Seed against it via
+      # DATABASE_URL — scoped to this step only.
+      - name: Seed demo data
+        env:
+          DATABASE_URL: postgres://founderos:founderos@127.0.0.1:54329/founderos
+        run: pnpm seed:demo
+        continue-on-error: false
 
       - name: Boot UI (vite dev)
         run: |
