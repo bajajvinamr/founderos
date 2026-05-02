@@ -70,6 +70,15 @@ jobs:
         shell: bash
 
       - name: Build workspace
+        # The onboarding-v2 spec asserts the FounderOnboardingWizard
+        # (6-step) flow renders at /onboarding. App.tsx defaults the
+        # FOUNDEROS_ONBOARDING_V2 flag from `import.meta.env.DEV`,
+        # which is `false` in any production build — so without this
+        # explicit Vite-time flag the built UI ships the legacy wizard
+        # and the spec fails. Setting it here keeps the test as a real
+        # signal of the V2 flow without requiring a separate dev build.
+        env:
+          VITE_FOUNDEROS_ONBOARDING_V2: "true"
         run: pnpm build
 
       # Boot the server FIRST so its embedded Postgres comes up on

@@ -81,6 +81,18 @@ const MIN_AGENTS_PER_COMPANY = 3;
 const MIN_PROJECTS_PER_COMPANY = 1;
 const AGENTS_TO_DEEP_CHECK_PER_COMPANY = 3;
 
+/**
+ * Skip experimental seed companies (e.g. "Little Wins") from depth
+ * coverage. The narrative seed deliberately gives them a smaller
+ * agent roster — they exist for scenario variety, not depth coverage.
+ * The marker is the `[EXPERIMENTAL DEMO]` prefix on the description
+ * field, set in packages/db/src/seed-demo-narrative.ts.
+ */
+function isExperimentalCompany(c: CompanySummary): boolean {
+  const desc = (c as CompanySummary & { description?: string }).description ?? "";
+  return desc.startsWith("[EXPERIMENTAL DEMO]");
+}
+
 async function loadAllCompanies(api: ApiHelper): Promise<CompanySummary[]> {
   const r = await api.get("/api/companies");
   expect(
@@ -218,18 +230,9 @@ test.describe("[per-company] agent + project + list-endpoint depth", () => {
     }
 
     const companies = await loadAllCompanies(api);
-    // Skip experimental seed-companies (e.g. "Little Wins") — the
-    // narrative seed deliberately gives them a smaller agent roster
-    // because they exist for scenario variety, not depth coverage.
-    // The marker is the `[EXPERIMENTAL DEMO]` prefix on the description
-    // field, set in packages/db/src/seed-demo-narrative.ts.
-    const isExperimental = (c: CompanySummary): boolean => {
-      const desc = (c as CompanySummary & { description?: string }).description ?? "";
-      return desc.startsWith("[EXPERIMENTAL DEMO]");
-    };
     // Cap at first 4 (after filtering) so the test stays under 30s on
-    // prod-tier network.
-    const subset = companies.filter((c) => !isExperimental(c)).slice(0, 4);
+    // prod-tier network. See isExperimentalCompany() for the filter rationale.
+    const subset = companies.filter((c) => !isExperimentalCompany(c)).slice(0, 4);
     expect(
       subset.length,
       "Need at least 1 non-experimental company to walk",
@@ -349,7 +352,9 @@ test.describe("[per-agent] detail, activity, skills, instructions", () => {
     }
 
     const companies = await loadAllCompanies(api);
-    const subset = companies.slice(0, 4);
+    // Same experimental filter as [deep-walk] — Little Wins ships with
+    // 2 agents intentionally, below AGENTS_TO_DEEP_CHECK_PER_COMPANY.
+    const subset = companies.filter((c) => !isExperimentalCompany(c)).slice(0, 4);
 
     // Track whether the optional routes were actually exercised (200) vs all 404.
     // If every agent 404s on skills/activity, we'd silently pass — catch that.
