@@ -226,18 +226,7 @@ test.describe("api-public", () => {
 // 7 — Onboarding v2 feature flag renders 6-step wizard
 // ────────────────────────────────────────────────────────────────────────
 test.describe("onboarding", () => {
-  // Quarantined 2026-05-02 — even with VITE_FOUNDEROS_ONBOARDING_V2=true
-  // pinned at CI build time, the spec still fails to find the wizard
-  // dialog at /onboarding. The V2 flag itself is provably set (see the
-  // build step env block in .github/workflows/e2e-ci.yml), so this is
-  // either (a) the "Start onboarding" button not rendering in CI's
-  // local_trusted profile because the seeded company ownership graph
-  // shapes the page differently than dev expectations, (b) the wizard
-  // opens via a portal the [role=dialog] selector doesn't match in the
-  // built UI, or (c) a hydration / dialog-context bootstrap race. All
-  // three need investigation that is out of scope for the harness fix.
-  // See docs/CI-KNOWN-FLAKES.md and #17.
-  test.skip("[onboarding-v2-flag] /onboarding renders the 6-step wizard (not legacy)", async ({
+  test("[onboarding-v2-flag] /onboarding renders the 6-step wizard (not legacy)", async ({
     page,
     profile,
   }) => {
