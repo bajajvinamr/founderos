@@ -29,36 +29,22 @@ import { validate } from "../middleware/validate.js";
 import { requireCompanyAccess } from "../middleware/require-company-access.js";
 import { assertBoard } from "./authz.js";
 import {
-  accessService,
-  agentService,
-  companyMemoryService,
-  companyService,
-  goalService,
   issueService,
   logActivity,
-  projectService,
-  secretService,
   validateAnthropicKey,
 } from "../services/index.js";
+import {
+  AGENT_SLOTS,
+  bootstrapCompanyOnboarding,
+  type BootstrapInput,
+} from "../services/onboarding-bootstrap.js";
 import { generateFirstDecisions } from "../services/onboarding-decisions.js";
-import type { AgentRole } from "@founderos/shared";
 
 // ---------------------------------------------------------------------------
 // Shared constants
 // ---------------------------------------------------------------------------
 
-const AGENT_SLOTS = ["cos", "growth", "content", "finance"] as const;
-type AgentSlot = (typeof AGENT_SLOTS)[number];
-
-const SLOT_TO_ROLE: Record<AgentSlot, AgentRole> = {
-  cos: "ceo",
-  growth: "cmo",
-  content: "general",
-  finance: "cfo",
-};
-
 const DEFAULT_COMPANY_NAME = "My Company";
-const ANTHROPIC_SECRET_NAME = "ANTHROPIC_API_KEY";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -133,24 +119,6 @@ function deriveCompanyNameFromVision(vision: string): string {
   // First 5 words, capped at 40 chars. Crude but deterministic.
   const words = trimmed.split(/\s+/).slice(0, 5).join(" ");
   return words.length > 40 ? words.slice(0, 40) : words;
-}
-
-function buildAgentAdapterConfig(anthropicSecretId: string | null) {
-  // When the founder picked claude_local or skip, we don't inject an API
-  // key — claude_local authenticates via the user's existing `claude` CLI
-  // session, and skip defers provider setup to the settings page.
-  if (!anthropicSecretId) {
-    return { env: {} };
-  }
-  return {
-    env: {
-      ANTHROPIC_API_KEY: {
-        type: "secret_ref" as const,
-        secretId: anthropicSecretId,
-        version: "latest" as const,
-      },
-    },
-  };
 }
 
 /**
@@ -239,20 +207,18 @@ function buildServerFirstDecisions(bottlenecks: string[]) {
 
 export function onboardingRoutes(db: Db) {
   const router = Router();
-  const companies = companyService(db);
-  const access = accessService(db);
-  const secrets = secretService(db);
-  const agents = agentService(db);
-  const goals = goalService(db);
-  const projects = projectService(db);
   const issues = issueService(db);
-  const memory = companyMemoryService(db);
 
   /**
    * POST /api/onboarding/bootstrap
    *
-   * Creates the full starter company in one call. Returns enough state
-   * for the UI to immediately navigate to the new company's dashboard.
+   * Creates the full starter company in one call. The persistent steps
+   * (company, membership, secret, goal, project, memory, agents, audit
+   * log) run inside one `db.transaction` via `bootstrapCompanyOnboarding`,
+   * so a failure on agent N does not leave behind an orphan company.
+   *
+   * The Anthropic key live-API check stays here — external network I/O
+   * has no place inside a database transaction.
    */
   router.post(
     "/onboarding/bootstrap",
@@ -267,10 +233,6 @@ export function onboardingRoutes(db: Db) {
 
       const input = req.body as z.infer<typeof bootstrapSchema>;
 
-      // 1. Validate the Anthropic key against the live API — only if the
-      //    founder chose the anthropic_api adapter. For claude_local they
-      //    auth via the local Claude Code CLI session; for skip they set
-      //    it up later. Fail fast if the wrong path is mis-configured.
       if (input.adapterChoice === "anthropic_api") {
         if (!input.anthropicKey || input.anthropicKey.length < 10) {
           throw unprocessable(
@@ -289,120 +251,22 @@ export function onboardingRoutes(db: Db) {
       const companyName =
         input.companyName?.trim() || deriveCompanyNameFromVision(input.vision);
 
-      // 2. Company row + membership.
-      const company = await companies.create({ name: companyName });
-      await access.ensureMembership(
-        company.id,
-        "user",
-        actorUserId,
-        "owner",
-        "active",
-      );
-
-      // 3. Anthropic key as a company secret — only when the founder
-      //    provided one. claude_local + skip don't need a stored key.
-      const secret =
-        input.adapterChoice === "anthropic_api" && input.anthropicKey
-          ? await secrets.create(
-              company.id,
-              {
-                name: ANTHROPIC_SECRET_NAME,
-                provider: "local_encrypted",
-                value: input.anthropicKey,
-                description: "Auto-saved during FounderOS onboarding",
-              },
-              { userId: actorUserId },
-            )
-          : null;
-
-      // 4. Company goal + onboarding project.
-      const goal = await goals.create(company.id, {
-        title: `Ship ${companyName}`,
-        description: input.vision,
-        level: "company",
-        status: "active",
-      });
-
-      const project = await projects.create(company.id, {
-        name: "Onboarding",
-        status: "in_progress",
-        goalIds: goal ? [goal.id] : [],
-      });
-
-      // 5. Founder vision → company memory.
-      await memory
-        .create(company.id, {
-          kind: "founder_note",
-          title: "Founder vision (onboarding)",
-          body: input.vision,
-          topic: "vision",
-          pinned: true,
-          source: "manual",
-        })
-        .catch(() => null);
-      await memory
-        .create(company.id, {
-          kind: "founder_note",
-          title: "Current bottlenecks (onboarding)",
-          body: `Bottlenecks: ${input.bottlenecks.join(", ")}\nTeam shape: ${input.team}`,
-          topic: "focus",
-          pinned: false,
-          source: "manual",
-        })
-        .catch(() => null);
-
-      // 6. Provision four agents with charters.
-      const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
-      // Map the user's onboarding choice to the stored adapter type.
-      // "anthropic_api" uses claude_local with the stored API key injected as env.
-      // A dedicated claude_api adapter (no CLI required) is on the roadmap.
-      // "skip" also falls back to "claude_local" until the CLI is installed.
-      const adapterType = "claude_local";
-      const agentIdsBySlot: Record<AgentSlot, string> = {
-        cos: "",
-        growth: "",
-        content: "",
-        finance: "",
+      const bootstrapInput: BootstrapInput = {
+        vision: input.vision,
+        bottlenecks: input.bottlenecks,
+        team: input.team,
+        cofounder: input.cofounder ?? null,
+        adapterChoice: input.adapterChoice,
+        anthropicKey: input.anthropicKey,
+        integrations: input.integrations ?? {},
+        charters: input.charters,
+        companyName,
       };
 
-      for (const slot of AGENT_SLOTS) {
-        const charter = input.charters[slot];
-        const role = SLOT_TO_ROLE[slot];
-        const agent = await agents.create(company.id, {
-          name: charter.name,
-          role,
-          title: charter.title,
-          capabilities: charter.charter,
-          adapterType,
-          adapterConfig,
-          status: "idle",
-          spentMonthlyCents: 0,
-          budgetMonthlyCents: 0,
-        });
-        agentIdsBySlot[slot] = agent.id;
-      }
-
-      await logActivity(db, {
-        companyId: company.id,
-        actorType: "user",
-        actorId: actorUserId,
-        action: "company.created",
-        entityType: "company",
-        entityId: company.id,
-        details: {
-          source: "founder_onboarding_v2",
-          bottlenecks: input.bottlenecks,
-          team: input.team,
-        },
+      const result = await bootstrapCompanyOnboarding(db, bootstrapInput, {
+        actorUserId,
       });
-
-      res.status(201).json({
-        companyId: company.id,
-        companyPrefix: company.issuePrefix,
-        agentIdsBySlot,
-        goalId: goal?.id ?? null,
-        projectId: project.id,
-      });
+      res.status(201).json(result);
     },
   );
 
