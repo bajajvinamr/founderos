@@ -490,6 +490,17 @@ export function App() {
           <Route path="tests/ux/runs" element={<UnprefixedBoardRedirect />} />
           <Route path="conversations" element={<UnprefixedBoardRedirect />} />
           <Route path="conversations/:convId" element={<UnprefixedBoardRedirect />} />
+          {/* Unprefixed board routes added after wave 22 — without these,
+              navigating to /hire or /weekly directly captures the slug as
+              `:companyPrefix` and the Layout renders "No company matches
+              prefix HIRE". The lib/company-routes.ts BOARD_ROUTE_ROOTS set
+              already lists these as board routes; this is the React Router
+              wiring that completes the contract. */}
+          <Route path="hire" element={<UnprefixedBoardRedirect />} />
+          <Route path="weekly" element={<UnprefixedBoardRedirect />} />
+          <Route path="decisions" element={<UnprefixedBoardRedirect />} />
+          <Route path="departments" element={<UnprefixedBoardRedirect />} />
+          <Route path="departments/:dept" element={<UnprefixedBoardRedirect />} />
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
           </Route>

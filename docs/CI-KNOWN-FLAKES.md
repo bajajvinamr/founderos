@@ -32,6 +32,24 @@ Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 20
 
 ---
 
+### 4. e2e/tests/critical-flows.spec.ts > landing > [landing] hero + sign-up CTA render — QUARANTINED 2026-05-02
+
+**Location:** `e2e/tests/critical-flows.spec.ts:41`
+
+**Issue:** Passes locally against vite-dev (port 3100 proxying React-refreshed `Landing.tsx`) but fails in CI under static mode (server serves built `ui/dist`). The CTA selector matches a broad family of phrases (`/sign\s*up|get\s*started|build\s*your\s*company|design\s*partner|start\s*your/i`) and Landing.tsx has multiple matching links (e.g. "Build your company →"), so this is most likely a hydration race or a build-time copy divergence in CI, not a real regression.
+
+**Symptom:** `Error: Landing page has no visible primary CTA link — check ui/src/pages/Landing.tsx`. Reproduced on PR #15's CI run; `pnpm exec playwright test --grep "hero + sign-up CTA render"` passes locally.
+
+**Why this was masked:** The E2E suite has been red on `main` for weeks because of an upstream ECONNREFUSED harness bug at the seed step (issue #7). Once the seed step actually ran, this stale assertion surfaced.
+
+**Re-enable when:**
+- Investigation confirms whether built ui/dist actually serves the same Landing copy as vite-dev, OR
+- The selector / wait strategy is hardened to handle the static-build hydration timing.
+
+**Tracked:** [#16](https://github.com/bajajvinamr/founderos/issues/16)
+
+---
+
 ## Verification
 
 To verify a fix works:

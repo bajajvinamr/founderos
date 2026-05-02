@@ -218,11 +218,21 @@ test.describe("[per-company] agent + project + list-endpoint depth", () => {
     }
 
     const companies = await loadAllCompanies(api);
-    // Cap at first 4 so the test stays under 30s on prod-tier network.
-    const subset = companies.slice(0, 4);
+    // Skip experimental seed-companies (e.g. "Little Wins") — the
+    // narrative seed deliberately gives them a smaller agent roster
+    // because they exist for scenario variety, not depth coverage.
+    // The marker is the `[EXPERIMENTAL DEMO]` prefix on the description
+    // field, set in packages/db/src/seed-demo-narrative.ts.
+    const isExperimental = (c: CompanySummary): boolean => {
+      const desc = (c as CompanySummary & { description?: string }).description ?? "";
+      return desc.startsWith("[EXPERIMENTAL DEMO]");
+    };
+    // Cap at first 4 (after filtering) so the test stays under 30s on
+    // prod-tier network.
+    const subset = companies.filter((c) => !isExperimental(c)).slice(0, 4);
     expect(
       subset.length,
-      "Need at least 1 company to walk",
+      "Need at least 1 non-experimental company to walk",
     ).toBeGreaterThanOrEqual(1);
 
     for (const company of subset) {
