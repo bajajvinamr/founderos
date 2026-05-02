@@ -89,7 +89,15 @@ async function createApp() {
     };
     next();
   });
-  app.use("/api", onboardingRoutes({} as any));
+  // The bootstrap orchestrator now wraps its work in db.transaction.
+  // Provide a no-op transaction stub that just runs the callback so
+  // these mock-based tests still exercise the route logic. The
+  // services themselves are mocked above (vi.mock), so no real DB is
+  // needed.
+  const fakeDb: Record<string, unknown> = {};
+  fakeDb.transaction = async (cb: (tx: unknown) => unknown) => cb(fakeDb);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  app.use("/api", onboardingRoutes(fakeDb as any));
   app.use(errorHandler);
   return app;
 }
