@@ -1,3 +1,8 @@
+## [0.2.15] - 2026-05-02 01:11:25 UTC
+
+### Fixed
+- fix(e2e): boot server before seed in critical-flows workflow (#15) (f1ce47d)
+
 ## [0.2.13] - 2026-05-02 00:13:01 UTC
 
 ### Fixed
