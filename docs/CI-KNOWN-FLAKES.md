@@ -50,6 +50,23 @@ Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 20
 
 ---
 
+### 5. e2e/tests/critical-flows.spec.ts > onboarding > [onboarding-v2-flag] /onboarding renders the 6-step wizard (not legacy) — QUARANTINED 2026-05-02
+
+**Location:** `e2e/tests/critical-flows.spec.ts:229`
+
+**Issue:** Even after pinning `VITE_FOUNDEROS_ONBOARDING_V2=true` at CI build time (workflow `Build workspace` step env), the spec still fails to locate `[role=dialog], [data-testid*=onboarding], [data-testid*=wizard]` after clicking the "Start onboarding" / "Hire teammate" button at /onboarding. Three possible causes — see #17 for the investigation plan: (a) button doesn't render in CI's `local_trusted` profile because the seeded company-ownership graph shapes the page differently, (b) the wizard opens via a portal that bypasses the [role=dialog] selector, (c) DialogContext race so the click is a no-op.
+
+**Symptom:** `Error: /onboarding did not open a wizard dialog after clicking Start onboarding`. Reproduces every CI run; not yet repro'd locally under static-build mode.
+
+**Why this was masked:** Same root cause as entry #4 — the upstream ECONNREFUSED bug at the seed step (issue #7) prevented the spec from running at all.
+
+**Re-enable when:**
+- The actual /onboarding DOM in CI's static-build mode is captured and the wizard's stable hook is identified (likely a `data-testid` added to `FounderOnboardingWizard.tsx` plus a tightened spec locator).
+
+**Tracked:** [#17](https://github.com/bajajvinamr/founderos/issues/17)
+
+---
+
 ## Verification
 
 To verify a fix works:
