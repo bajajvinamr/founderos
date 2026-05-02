@@ -225,7 +225,13 @@ export function FounderOnboardingWizard() {
     >
       <DialogPortal>
         <div className="fixed inset-0 z-50 bg-background" />
-        <div className="fixed inset-0 z-50 flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Founder onboarding wizard"
+          data-testid="onboarding-wizard"
+        >
           {/* Progress bar */}
           <div className="shrink-0 border-b border-border/60 px-6 py-3">
             <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
