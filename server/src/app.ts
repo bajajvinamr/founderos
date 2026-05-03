@@ -212,7 +212,13 @@ export async function createApp(
   });
   // Supabase webhook route — must be mounted BEFORE the better-auth wildcard
   // so /api/auth/webhook reaches our handler instead of being swallowed.
-  if (opts.authProvider === "supabase" && opts.supabaseWebhookSecret) {
+  if (opts.authProvider === "supabase") {
+    // Council 2026-05-03 P3 (Gemini) — mount unconditionally so the
+    // designed 503 fail-closed in auth-webhook.ts:52 is reachable. The
+    // previous gate-on-secret-presence dropped to the catch-all 404
+    // when SUPABASE_WEBHOOK_SECRET was unset, hiding the configuration
+    // error from operators. The route controller handles the missing-
+    // secret case explicitly.
     app.use(authWebhookRoutes(db, { webhookSecret: opts.supabaseWebhookSecret }));
   }
   if (opts.betterAuthHandler) {
