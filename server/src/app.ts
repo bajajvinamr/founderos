@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler, sentryErrorHandler } from "./middleware/index.js";
+import { httpLogger, errorHandler, sentryErrorHandler, requestIdMiddleware } from "./middleware/index.js";
+import { updateRequestContext } from "./lib/request-context.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -128,6 +129,10 @@ export async function createApp(
 ) {
   const app = express();
 
+  // Mount request-id BEFORE httpLogger so pino-http picks up `req.id`
+  // from the AsyncLocalStorage context. Mount BEFORE express.json so
+  // body-parse errors are logged with the correct correlation ID.
+  app.use(requestIdMiddleware());
   app.use(express.json({
     // Company import/export payloads can inline full portable packages.
     limit: "10mb",
@@ -155,6 +160,25 @@ export async function createApp(
       resolveSession: opts.resolveSession,
     }),
   );
+  // Once actor is resolved, copy it into the AsyncLocalStorage request
+  // context so log lines and Sentry events are auto-tagged with userId,
+  // companyId, isInstanceAdmin, etc. — without every call site needing
+  // to thread the actor through.
+  app.use((req, _res, next) => {
+    if (req.actor) {
+      updateRequestContext({
+        actor: {
+          type: req.actor.type,
+          userId: req.actor.userId,
+          companyId: req.actor.companyId,
+          isInstanceAdmin: req.actor.isInstanceAdmin,
+          source: req.actor.source,
+        },
+        routePath: (req as { route?: { path?: string } }).route?.path,
+      });
+    }
+    next();
+  });
   app.get("/api/auth/get-session", (req, res) => {
     if (req.actor.type !== "board" || !req.actor.userId) {
       res.status(401).json({ error: "Unauthorized" });

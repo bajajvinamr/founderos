@@ -345,11 +345,16 @@ function OnboardingRoutePage() {
 }
 
 function CompanyRootRedirect() {
-  const { companies, selectedCompany, loading } = useCompany();
+  const { companies, selectedCompany, loading, authError } = useCompany();
   const location = useLocation();
 
   if (loading) {
     return <LazyRouteFallback />;
+  }
+
+  // Distinguish "auth broken" from "no companies" — see CompanyContext.
+  if (authError) {
+    return <AuthBrokenStartPage error={authError} />;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -370,10 +375,14 @@ function CompanyRootRedirect() {
 
 function UnprefixedBoardRedirect() {
   const location = useLocation();
-  const { companies, selectedCompany, loading } = useCompany();
+  const { companies, selectedCompany, loading, authError } = useCompany();
 
   if (loading) {
     return <LazyRouteFallback />;
+  }
+
+  if (authError) {
+    return <AuthBrokenStartPage error={authError} />;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -394,6 +403,43 @@ function UnprefixedBoardRedirect() {
       to={`/${targetCompany.issuePrefix}${location.pathname}${location.search}${location.hash}`}
       replace
     />
+  );
+}
+
+function AuthBrokenStartPage({ error }: { error: import("./api/client").ApiError }) {
+  return (
+    <div className="mx-auto max-w-xl py-10">
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6">
+        <h1 className="text-xl font-semibold text-destructive">Session unauthorized</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          You're signed in, but the server rejected the request with{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">{error.status}</code>. This usually
+          means your session expired mid-request, your account hasn't been promoted to an instance
+          admin yet, or the API contract has drifted from the UI build.
+        </p>
+        <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>Try signing out and back in.</li>
+          <li>Ask an existing instance admin to invite or promote your account.</li>
+          <li>
+            If this persists, share the request ID below with support — engineers can grep server
+            logs and Sentry by it.
+          </li>
+        </ul>
+        {error.requestId && (
+          <div className="mt-4 rounded border border-border bg-card px-3 py-2 font-mono text-xs">
+            requestId: {error.requestId}
+          </div>
+        )}
+        <div className="mt-4 flex gap-2">
+          <Button asChild variant="default">
+            <a href="/auth?next=/">Sign in again</a>
+          </Button>
+          <Button variant="ghost" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

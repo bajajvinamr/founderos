@@ -16,6 +16,8 @@ declare global {
       };
       /** Raw request body bytes, attached by the express.json verify callback in app.ts. */
       rawBody?: Buffer;
+      /** Correlation ID for this request — set by requestIdMiddleware, echoed via x-request-id. */
+      requestId?: string;
     }
   }
 }

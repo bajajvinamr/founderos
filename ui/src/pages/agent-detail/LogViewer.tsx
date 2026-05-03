@@ -5,6 +5,7 @@ import { heartbeatsApi } from "../../api/heartbeats";
 import { instanceSettingsApi } from "../../api/instanceSettings";
 import { ApiError } from "../../api/client";
 import { queryKeys } from "../../lib/queryKeys";
+import { getApiWsHost, getApiWsProtocol } from "../../lib/api-origin";
 import { buildTranscript, getUIAdapter, onAdapterChange } from "../../adapters";
 import { RunTranscriptView, type TranscriptMode } from "../../components/transcript/RunTranscriptView";
 import { Button } from "@/components/ui/button";
@@ -587,8 +588,9 @@ export function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType
 
     const connect = () => {
       if (closed) return;
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const url = `${protocol}://${window.location.host}/api/companies/${encodeURIComponent(run.companyId)}/events/ws`;
+      const protocol = getApiWsProtocol();
+      const host = getApiWsHost();
+      const url = `${protocol}://${host}/api/companies/${encodeURIComponent(run.companyId)}/events/ws`;
       socket = new WebSocket(url);
 
       socket.onopen = () => {

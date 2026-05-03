@@ -13,7 +13,9 @@ export function debugRoutes() {
    * GET /api/debug/sentry-canary
    * Throws an intentional error so you can verify Sentry is capturing
    * server-side exceptions end-to-end. Gated to instance admins so
-   * random traffic can't spam Sentry.
+   * random traffic can't spam Sentry. The thrown error includes the
+   * requestId so you can grep both server logs AND the Sentry event by
+   * the same ID — the canonical "wire ≠ working" verification.
    */
   router.get("/debug/sentry-canary", (req, _res) => {
     assertBoard(req);
@@ -22,8 +24,11 @@ export function debugRoutes() {
       (err as { status?: number }).status = 403;
       throw err;
     }
+    const reqId = (req as { requestId?: string }).requestId ?? "unknown";
     throw new Error(
-      `Sentry canary — intentional error thrown at ${new Date().toISOString()}. If you see this in Sentry, capture is working.`,
+      `Sentry canary [requestId=${reqId}] — intentional error thrown at ${new Date().toISOString()}. ` +
+        `If you see this event in Sentry tagged with the same requestId, the capture pipeline + ` +
+        `request-context enrichment are working end-to-end.`,
     );
   });
 

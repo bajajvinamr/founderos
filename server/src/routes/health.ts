@@ -1,10 +1,11 @@
 import { Router } from "express";
 import type { Db } from "@founderos/db";
-import { and, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { heartbeatRuns, instanceUserRoles, invites, companies } from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import { readPersistedDevServerStatus, toDevServerHealthStatus } from "../dev-server-status.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
+import { LOCAL_BOARD_USER_ID } from "../auth/post-signup-hook.js";
 import { serverVersion } from "../version.js";
 
 export function healthRoutes(
@@ -43,10 +44,19 @@ export function healthRoutes(
     let bootstrapStatus: "ready" | "bootstrap_pending" = "ready";
     let bootstrapInviteActive = false;
     if (opts.deploymentMode === "authenticated") {
+      // Mirror runPostSignupBootstrap's first-user-wins rule: the synthetic
+      // local-board principal does NOT count as a human admin. Counting it
+      // here previously caused health to report "ready" while every signed-in
+      // user still got "Instance admin required" on first onboarding POST.
       const roleCount = await db
         .select({ count: count() })
         .from(instanceUserRoles)
-        .where(sql`${instanceUserRoles.role} = 'instance_admin'`)
+        .where(
+          and(
+            eq(instanceUserRoles.role, "instance_admin"),
+            ne(instanceUserRoles.userId, LOCAL_BOARD_USER_ID),
+          ),
+        )
         .then((rows) => Number(rows[0]?.count ?? 0));
       bootstrapStatus = roleCount > 0 ? "ready" : "bootstrap_pending";
 

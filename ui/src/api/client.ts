@@ -5,12 +5,22 @@ const BASE = "/api";
 export class ApiError extends Error {
   status: number;
   body: unknown;
+  /** Request correlation ID — read from the x-request-id response header
+   *  if present, falling back to body.requestId echoed by the server's
+   *  errorHandler. Surface this to users for support tickets so engineers
+   *  can grep server logs / Sentry by the same ID. */
+  requestId: string | null;
 
-  constructor(message: string, status: number, body: unknown) {
+  constructor(message: string, status: number, body: unknown, requestId: string | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
+    this.requestId =
+      requestId ??
+      (body && typeof body === "object" && "requestId" in body && typeof (body as { requestId?: unknown }).requestId === "string"
+        ? ((body as { requestId: string }).requestId)
+        : null);
   }
 }
 
@@ -42,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       (errorBody as { error?: string } | null)?.error ?? `Request failed: ${res.status}`,
       res.status,
       errorBody,
+      res.headers.get("x-request-id"),
     );
   }
   if (res.status === 204) return undefined as T;

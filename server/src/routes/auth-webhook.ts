@@ -5,13 +5,27 @@
  *
  * Supabase fires signed webhooks when user accounts change (user.created,
  * user.updated, etc.). We verify the HMAC-SHA256 signature using a shared
- * `SUPABASE_WEBHOOK_SECRET` and, on `user.created`, run the same post-signup
- * bootstrap logic better-auth uses (first-user-wins instance_admin grant +
- * pending-invite consume).
+ * `SUPABASE_WEBHOOK_SECRET` and log the event for audit, but we DO NOT
+ * grant any roles or consume invites here.
  *
- * Why not use Supabase's own "auth trigger" DB function? Because the
- * bootstrap logic lives server-side (invite service, role checks) and we
- * want one code path exercised by both adapters.
+ * --- Email-squatting note (council 2026-05-03 P2 — Gemini) ---
+ * The Supabase `user.created` webhook fires immediately on registration,
+ * BEFORE email confirmation. Granting instance_admin (or consuming an
+ * invite tied to an email) on this hook is an email-squatting vector: an
+ * attacker who registers `ceo@target.com` could claim admin without ever
+ * owning the inbox. Bootstrap is therefore deferred to the FIRST
+ * AUTHENTICATED REQUEST via `maybeBootstrapNewUser` in `middleware/auth.ts`,
+ * which only fires after Supabase has signed-in the user (i.e. after the
+ * user has proven they own the email by clicking the confirm link OR
+ * authenticated via an OAuth provider that already verified the email).
+ *
+ * Why keep the webhook at all? Three reasons:
+ *  1. Audit log: we record signup events (with verified Supabase signature)
+ *     for the admin console and analytics.
+ *  2. Rate-limit signal for abuse detection.
+ *  3. Forward-compat: future hooks (welcome email triggered post-confirm,
+ *     admin notification, etc.) can mount here without re-introducing
+ *     squatting risk.
  */
 
 import { Router, type Request, type Response } from "express";
@@ -20,7 +34,6 @@ import {
   extractSupabaseUserFromWebhook,
   verifySupabaseWebhookSignature,
 } from "../auth/supabase.js";
-import { runPostSignupBootstrap } from "../auth/post-signup-hook.js";
 import { logger } from "../middleware/logger.js";
 import { authWebhookLimiter } from "../middleware/rate-limit.js";
 
@@ -94,29 +107,23 @@ export function authWebhookRoutes(
       return;
     }
 
-    try {
-      const result = await runPostSignupBootstrap(db, {
+    // Audit-only path. Bootstrap (admin promotion + invite consume) is
+    // deferred to first authenticated request — see header comment.
+    void db; // intentionally unused; kept in signature for forward-compat (admin notification, analytics, etc.)
+    logger.info(
+      {
         userId: user.id,
         email: user.email,
-      });
-      logger.info(
-        {
-          userId: user.id,
-          email: user.email,
-          provider: user.provider,
-          promotedToInstanceAdmin: result.promotedToInstanceAdmin,
-          consumedInvite: result.consumedInvite,
-        },
-        "auth webhook: user.created handled",
-      );
-      res.status(200).json({ ok: true, result });
-    } catch (err) {
-      // Webhook must be idempotent. A failed bootstrap is logged but the
-      // webhook is still ACK'd to avoid infinite retries — the user can
-      // always be promoted manually. If we 5xx'd, Supabase would replay.
-      logger.error({ err, userId: user.id }, "auth webhook: runPostSignupBootstrap threw — acking anyway");
-      res.status(200).json({ ok: false, error: "bootstrap_failed" });
-    }
+        provider: user.provider,
+        eventType,
+      },
+      "auth webhook: user.created acknowledged (no bootstrap — deferred to first authed request)",
+    );
+    res.status(200).json({
+      ok: true,
+      action: "acknowledged",
+      note: "bootstrap deferred to first authenticated request",
+    });
   });
 
   return router;

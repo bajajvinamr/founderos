@@ -41,6 +41,7 @@ import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
 import { maybePersistWorktreeRuntimePorts } from "./worktree-config.js";
 import { initTelemetry, getTelemetryClient } from "./telemetry.js";
+import { validateEnvOrExit } from "./lib/env-validation.js";
 
 type BetterAuthSessionUser = {
   id: string;
@@ -87,6 +88,13 @@ export async function startServer(): Promise<StartedServer> {
   const sentryUp = await initServerSentry();
   if (sentryUp) logger.info("Sentry initialized");
   initTelemetry({ enabled: config.telemetryEnabled });
+  // Loud-fail env validation. In production: hard-exit if a REQUIRED gate
+  // is missing. In dev/local_trusted: warn + continue. Runs AFTER dotenv
+  // merging in loadConfig() so .env files are already loaded.
+  validateEnvOrExit({
+    strict: process.env.NODE_ENV === "production",
+    logger,
+  });
   if (process.env.FOUNDEROS_SECRETS_PROVIDER === undefined) {
     process.env.FOUNDEROS_SECRETS_PROVIDER = config.secretsProvider;
   }

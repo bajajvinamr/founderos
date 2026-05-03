@@ -4,6 +4,7 @@ import pino from "pino";
 import { pinoHttp } from "pino-http";
 import { readConfigFile } from "../config-file.js";
 import { resolveDefaultLogsDir, resolveHomeAwarePath } from "../home-paths.js";
+import { getRequestContext } from "../lib/request-context.js";
 
 function resolveServerLogDir(): string {
   const envOverride = process.env.FOUNDEROS_LOG_DIR?.trim();
@@ -47,6 +48,21 @@ const sharedOpts = {
 export const logger = pino({
   level: logLevel,
   redact: ["req.headers.authorization"],
+  // Auto-inject the active requestId / traceId / actor on every log call —
+  // including background tasks (heartbeat runs, agent execution, db queries)
+  // that aren't tied to an HTTP req. Reads from AsyncLocalStorage. Returns
+  // empty when called outside a request context (e.g. boot logs).
+  mixin() {
+    const ctx = getRequestContext();
+    if (!ctx) return {};
+    return {
+      reqId: ctx.requestId,
+      traceId: ctx.traceId,
+      ...(ctx.routePath ? { routePath: ctx.routePath } : {}),
+      ...(ctx.actor?.userId ? { actorUserId: ctx.actor.userId } : {}),
+      ...(ctx.actor?.type ? { actorType: ctx.actor.type } : {}),
+    };
+  },
 }, pino.transport({
   targets: [
     {

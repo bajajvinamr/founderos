@@ -1,13 +1,17 @@
 import type { Request, Response, NextFunction } from "express";
-import { isSentryEnabled } from "../observability/sentry.js";
+import { captureServerError, isSentryEnabled } from "../observability/sentry.js";
 
 /**
  * Sentry Express error handler middleware.
  *
  * Mount this AFTER all routes and BEFORE the final application error handler.
- * It captures exceptions to Sentry if enabled, then passes to the next handler.
+ * Captures exceptions to Sentry with full request-context enrichment
+ * (requestId, traceId, actor, route) pulled from AsyncLocalStorage by
+ * `captureServerError`, then passes to the next handler so the application
+ * `errorHandler` can still send the response.
  *
- * Sentry.init() is called in index.ts during server boot.
+ * Sentry.init() is called in index.ts during server boot; this middleware
+ * is a no-op if SENTRY_DSN was unset.
  */
 export function sentryErrorHandler(
   err: unknown,
@@ -18,16 +22,9 @@ export function sentryErrorHandler(
   if (!isSentryEnabled()) {
     return next(err);
   }
-
-  // If Sentry is enabled, try to import and use it for error capture.
-  // This is a dynamic import so we don't hard-depend on Sentry being installed.
-  void (async () => {
-    try {
-      const Sentry = await import("@sentry/node");
-      Sentry.captureException(err);
-    } catch {
-      // Module not installed or other issue — proceed to next handler
-    }
-    next(err);
-  })();
+  // captureServerError auto-merges the active request context (requestId,
+  // traceId, actor, route, url) into the Sentry scope. No need to thread
+  // them through manually here.
+  captureServerError(err);
+  next(err);
 }

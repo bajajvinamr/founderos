@@ -32,7 +32,7 @@ Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 20
 
 ---
 
-### 4. e2e/tests/critical-flows.spec.ts > landing > [landing] hero + sign-up CTA render — QUARANTINED 2026-05-02
+### 4. ~~e2e/tests/critical-flows.spec.ts > landing > [landing] hero + sign-up CTA render~~ — FIXED 2026-05-02
 
 **Location:** `e2e/tests/critical-flows.spec.ts:41`
 
@@ -46,11 +46,11 @@ Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 20
 - Investigation confirms whether built ui/dist actually serves the same Landing copy as vite-dev, OR
 - The selector / wait strategy is hardened to handle the static-build hydration timing.
 
-**Tracked:** [#16](https://github.com/bajajvinamr/founderos/issues/16)
+**Tracked:** [#16](https://github.com/bajajvinamr/founderos/issues/16) — RESOLVED. Re-enabled in Wave 23B after the static-build E2E hardening pass; route-load smoke confirms Landing.tsx mounts cleanly. Both landing assertions now green under `pnpm e2e`.
 
 ---
 
-### 5. ~~e2e/tests/critical-flows.spec.ts > onboarding > [onboarding-v2-flag]~~ — FIXED 2026-05-02
+### 5. ~~e2e/tests/critical-flows.spec.ts > onboarding > [onboarding-v2-flag] /onboarding renders the 6-step wizard (not legacy)~~ — FIXED 2026-05-02 (PR #19)
 
 Root cause: `FounderOnboardingWizard.tsx:228` rendered raw `<div>`s inside `DialogPortal` instead of using `<DialogContent>`, so the wizard never had a `role="dialog"` element — the spec's `[role=dialog], [data-testid*=onboarding], [data-testid*=wizard]` selector literally couldn't match. Added `role="dialog"`, `aria-modal="true"`, `aria-label`, and `data-testid="onboarding-wizard"` to the wizard's outer fixed-positioned container. Spec un-skipped. (Closes #17.)
 
