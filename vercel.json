@@ -8,7 +8,7 @@
     {
       "source": "/(.*)",
       "destination": "https://founderos.fly.dev/$1",
-      "permanent": true
+      "permanent": false
     }
   ]
 }
