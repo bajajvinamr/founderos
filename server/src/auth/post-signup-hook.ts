@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { instanceUserRoles } from "@founderos/db";
 import type { EmailSender } from "../services/email-sender.js";
@@ -7,7 +7,13 @@ import { instanceInviteService } from "../services/instance-invite.js";
 import { logger } from "../middleware/logger.js";
 
 const WELCOME_SUBJECT = "Welcome to FounderOS — your AI company is ready to build";
-const LOCAL_BOARD_USER_ID = "local-board";
+export const LOCAL_BOARD_USER_ID = "local-board";
+
+// Constant key for pg_advisory_xact_lock — serializes concurrent first-admin
+// bootstrap attempts. Any unique-to-this-codepath integer works; chosen
+// arbitrarily and documented here so future codepaths don't collide.
+// Reference: 2026-05-03 council P1 — first-user-wins race.
+const BOOTSTRAP_ADMIN_ADVISORY_LOCK_ID = 7234890n;
 
 export interface PostSignupBootstrapResult {
   /**
@@ -76,39 +82,71 @@ export async function runPostSignupBootstrap(
   // already has a human instance_admin (anything other than the implicit
   // local-board principal) is NOT bootstrapping — subsequent signups should
   // not auto-promote.
+  //
+  // Atomicity: the previous implementation read admin count, decided to
+  // insert, then inserted — a TOCTOU race that let two concurrent signups
+  // both observe zero admins and both promote to admin. The (user_id, role)
+  // unique index does not catch it because user_ids differ. Council 2026-05-03
+  // P1 fix: wrap in a transaction with pg advisory lock to serialize
+  // concurrent bootstrap paths. The lock is auto-released on COMMIT/ROLLBACK.
+  // If the backend doesn't support advisory locks (embedded pglite in dev),
+  // it's a no-op — pglite serializes transactions in-process anyway.
   if (!result.consumedInvite) {
     try {
-      const admins = await db
-        .select({ userId: instanceUserRoles.userId })
-        .from(instanceUserRoles)
-        .where(eq(instanceUserRoles.role, "instance_admin"));
-
-      const hasHumanAdmin = admins.some((row) => row.userId !== LOCAL_BOARD_USER_ID);
-      if (!hasHumanAdmin) {
+      result.promotedToInstanceAdmin = await db.transaction(async (tx) => {
         try {
-          await db.insert(instanceUserRoles).values({
-            userId: input.userId,
-            role: "instance_admin",
-          });
-          result.promotedToInstanceAdmin = true;
-          logger.info(
-            { userId: input.userId, email: input.email },
-            "post-signup bootstrap: promoted first user to instance_admin",
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(${BOOTSTRAP_ADMIN_ADVISORY_LOCK_ID})`,
           );
         } catch (err) {
-          // Likely a race against another signup or manual seed — the
-          // unique index on (user_id, role) makes duplicate insert safe to
-          // ignore.
-          logger.warn(
-            { err, userId: input.userId, email: input.email },
-            "post-signup bootstrap: instance_admin insert failed (race or duplicate — continuing)",
+          logger.debug(
+            { err },
+            "post-signup bootstrap: pg_advisory_xact_lock unsupported on this backend — relying on transactional re-read for correctness",
           );
         }
-      }
+
+        // Re-read inside the lock so this is the authoritative count.
+        const existingHumanAdmin = await tx
+          .select({ userId: instanceUserRoles.userId })
+          .from(instanceUserRoles)
+          .where(
+            and(
+              eq(instanceUserRoles.role, "instance_admin"),
+              ne(instanceUserRoles.userId, LOCAL_BOARD_USER_ID),
+            ),
+          )
+          .limit(1)
+          .then((rows) => rows[0] ?? null);
+
+        if (existingHumanAdmin) {
+          logger.debug(
+            { userId: input.userId, existingAdminUserId: existingHumanAdmin.userId },
+            "post-signup bootstrap: human instance_admin already exists — not promoting",
+          );
+          return false;
+        }
+
+        // No human admin yet — promote this user. ON CONFLICT handles the
+        // case where the same user re-signs in (idempotent) or where the
+        // user already has the role from another path (better-auth hook +
+        // Supabase webhook running concurrently).
+        await tx
+          .insert(instanceUserRoles)
+          .values({ userId: input.userId, role: "instance_admin" })
+          .onConflictDoNothing({
+            target: [instanceUserRoles.userId, instanceUserRoles.role],
+          });
+
+        logger.info(
+          { userId: input.userId, email: input.email },
+          "post-signup bootstrap: promoted first user to instance_admin (atomic, lock-serialized)",
+        );
+        return true;
+      });
     } catch (err) {
       logger.warn(
         { err, userId: input.userId, email: input.email },
-        "post-signup bootstrap: admin count query failed (non-fatal)",
+        "post-signup bootstrap: atomic admin promotion failed (non-fatal)",
       );
     }
   }

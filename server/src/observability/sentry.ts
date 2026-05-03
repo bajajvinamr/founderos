@@ -7,7 +7,14 @@
  *
  * Expose `captureServerError` as a thin wrapper so call sites don't need
  * to import Sentry conditionally; when disabled it's a silent passthrough.
+ *
+ * Auto-enrichment: every captured error is augmented with the active
+ * AsyncLocalStorage request context (requestId, traceId, actor, route)
+ * so Sentry events are correlatable with pino logs and the response
+ * `x-request-id` header. Callers can pass extra context via the second arg.
  */
+
+import { getRequestContext } from "../lib/request-context.js";
 
 let initialized = false;
 let captureFn: ((err: unknown, context?: Record<string, unknown>) => void) | null = null;
@@ -27,6 +34,25 @@ export async function initServerSentry(): Promise<boolean> {
     });
     captureFn = (err, context) => {
       Sentry.withScope((scope) => {
+        const ctx = getRequestContext();
+        if (ctx) {
+          scope.setTag("requestId", ctx.requestId);
+          scope.setTag("traceId", ctx.traceId);
+          if (ctx.routePath) scope.setTag("routePath", ctx.routePath);
+          if (ctx.method) scope.setTag("httpMethod", ctx.method);
+          if (ctx.actor) {
+            scope.setUser({
+              id: ctx.actor.userId,
+              segment: ctx.actor.type,
+            });
+            scope.setTag("actorType", ctx.actor.type ?? "none");
+            if (ctx.actor.companyId) scope.setTag("companyId", ctx.actor.companyId);
+            if (ctx.actor.isInstanceAdmin !== undefined) {
+              scope.setTag("isInstanceAdmin", String(ctx.actor.isInstanceAdmin));
+            }
+          }
+          scope.setExtra("url", ctx.url);
+        }
         if (context) {
           for (const [k, v] of Object.entries(context)) {
             scope.setExtra(k, v);

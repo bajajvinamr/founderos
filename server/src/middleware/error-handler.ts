@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { HttpError } from "../errors.js";
 import { trackErrorHandlerCrash } from "@founderos/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
+import { getRequestContext } from "../lib/request-context.js";
 
 export interface ErrorContext {
   error: { message: string; stack?: string; name?: string; details?: unknown; raw?: unknown };
@@ -32,6 +33,14 @@ function attachErrorContext(
   }
 }
 
+/** Echo the requestId in the JSON error body so the client can quote it
+ *  when reporting an issue, and a support engineer can grep server logs
+ *  / Sentry by the same ID. */
+function withRequestId<T extends Record<string, unknown>>(body: T): T & { requestId?: string } {
+  const reqId = getRequestContext()?.requestId;
+  return reqId ? { ...body, requestId: reqId } : body;
+}
+
 export function errorHandler(
   err: unknown,
   req: Request,
@@ -49,15 +58,15 @@ export function errorHandler(
       const tc = getTelemetryClient();
       if (tc) trackErrorHandlerCrash(tc, { errorCode: err.name });
     }
-    res.status(err.status).json({
+    res.status(err.status).json(withRequestId({
       error: err.message,
       ...(err.details ? { details: err.details } : {}),
-    });
+    }));
     return;
   }
 
   if (err instanceof ZodError) {
-    res.status(400).json({ error: "Validation error", details: err.errors });
+    res.status(400).json(withRequestId({ error: "Validation error", details: err.errors }));
     return;
   }
 
@@ -74,5 +83,5 @@ export function errorHandler(
   const tc = getTelemetryClient();
   if (tc) trackErrorHandlerCrash(tc, { errorCode: rootError.name });
 
-  res.status(500).json({ error: "Internal server error" });
+  res.status(500).json(withRequestId({ error: "Internal server error" }));
 }

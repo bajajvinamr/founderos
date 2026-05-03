@@ -22,6 +22,17 @@ interface CompanyContextValue {
   selectionSource: CompanySelectionSource;
   loading: boolean;
   error: Error | null;
+  /**
+   * Set when the backend rejected the company list with 401/403 — the
+   * Supabase session may be valid but the API contract is broken (JWKS
+   * mismatch, missing instance_admin promotion, expired token mid-flight,
+   * etc.). Distinct from `companies.length === 0` which means "you have no
+   * companies" — a legitimate empty state. Render a re-auth / contact-admin
+   * banner here, NOT an empty list.
+   *
+   * Council 2026-05-03 P1 fix — UI stops swallowing 401/403 as empty list.
+   */
+  authError: ApiError | null;
   setSelectedCompanyId: (companyId: string, options?: CompanySelectionOptions) => void;
   reloadCompanies: () => Promise<void>;
   createCompany: (data: {
@@ -42,18 +53,27 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const { data: companies = [], isLoading, error } = useQuery({
     queryKey: queryKeys.companies.all,
-    queryFn: async () => {
-      try {
-        return await companiesApi.list();
-      } catch (err) {
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-          return [];
-        }
-        throw err;
+    queryFn: () => companiesApi.list(),
+    // Don't retry on auth failures — they are a cliff, not a transient.
+    // (network/5xx still retried by react-query defaults if enabled at
+    // a higher level.)
+    retry: (failureCount, err) => {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        return false;
       }
+      return failureCount < 1;
     },
-    retry: false,
   });
+
+  // Surface 401/403 as a distinct authError so the UI can render
+  // "session broken" instead of misleading "no companies" empty-state.
+  // (The previous catch-block silently coerced both into the same UX,
+  // which produced the nondeterministic "user signed in but sees no
+  // companies" landing-page break — council 2026-05-03 P1.)
+  const authError =
+    error instanceof ApiError && (error.status === 401 || error.status === 403)
+      ? error
+      : null;
   const sidebarCompanies = useMemo(
     () => companies.filter((company) => company.status !== "archived"),
     [companies],
@@ -121,6 +141,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       selectionSource,
       loading: isLoading,
       error: error as Error | null,
+      authError,
       setSelectedCompanyId,
       reloadCompanies,
       createCompany,
@@ -132,6 +153,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       selectionSource,
       isLoading,
       error,
+      authError,
       setSelectedCompanyId,
       reloadCompanies,
       createCompany,

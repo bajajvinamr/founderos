@@ -1,33 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm install --frozen-lockfile && pnpm --filter @founderos/ui build",
-  "outputDirectory": "ui/dist",
+  "buildCommand": "echo 'Vercel deploy is now a 301 redirect — no build needed'",
+  "outputDirectory": ".vercel-empty",
   "framework": null,
-  "installCommand": "echo 'Install handled in buildCommand'",
-  "rewrites": [
+  "installCommand": "echo 'No install needed for redirect-only deploy'",
+  "redirects": [
     {
-      "source": "/api/:path*",
-      "destination": "https://founderos.fly.dev/api/:path*"
-    },
-    {
-      "source": "/((?!assets|static|favicon|icons|.well-known|manifest|sw).*)",
-      "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
-      ]
-    },
-    {
-      "source": "/manifest.webmanifest",
-      "headers": [
-        { "key": "Content-Type", "value": "application/manifest+json" },
-        { "key": "Cache-Control", "value": "public, max-age=3600" }
-      ]
+      "source": "/(.*)",
+      "destination": "https://founderos.fly.dev/$1",
+      "permanent": true
     }
   ]
 }

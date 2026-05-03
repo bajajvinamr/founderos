@@ -192,6 +192,20 @@ export function Agents() {
     setBreadcrumbs([{ label: "Team" }]);
   }, [setBreadcrumbs]);
 
+  // Count agents per provider family for the filter chips.
+  // MUST be declared before any early returns — React's hook-order rule.
+  // Prior to wave 23B this useMemo lived after the early returns below, which
+  // produced "Rendered more hooks than during the previous render" on filter
+  // tabs (/agents/active, /agents/paused, /agents/error) once data resolved.
+  const providerCounts = useMemo(() => {
+    const counts: Record<ProviderFilter, number> = { all: 0, anthropic: 0, openai: 0, google: 0, other: 0 };
+    for (const a of agents ?? []) {
+      counts.all++;
+      counts[agentProviderFamily(a.adapterType)]++;
+    }
+    return counts;
+  }, [agents]);
+
   if (!selectedCompanyId) {
     return <EmptyState icon={Users} message="Select a company to view your team." />;
   }
@@ -210,16 +224,6 @@ export function Agents() {
     providerFilter === "all"
       ? orgFilteredByStatus
       : filterOrgByProvider(orgFilteredByStatus, providerFilter, agentMap);
-
-  // Count agents per provider family for the filter chips.
-  const providerCounts = useMemo(() => {
-    const counts: Record<ProviderFilter, number> = { all: 0, anthropic: 0, openai: 0, google: 0, other: 0 };
-    for (const a of agents ?? []) {
-      counts.all++;
-      counts[agentProviderFamily(a.adapterType)]++;
-    }
-    return counts;
-  }, [agents]);
 
   const activeCount = (agents ?? []).filter((a) => a.status === "active" || a.status === "running" || a.status === "idle").length;
   const totalCount = (agents ?? []).filter((a) => a.status !== "terminated").length;
