@@ -7,6 +7,7 @@ const TEST_SECRET = "test-secret-for-oauth-state-signing";
 
 function makePayload(overrides?: Partial<OAuthStatePayload>): OAuthStatePayload {
   return {
+    userId: "user-123",
     companyId: "company-123",
     kind: "slack",
     returnUrl: "/integrations",
@@ -33,11 +34,37 @@ describe("OAuth state token", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
+      expect(result.payload.userId).toBe(payload.userId);
       expect(result.payload.companyId).toBe(payload.companyId);
       expect(result.payload.kind).toBe(payload.kind);
       expect(result.payload.returnUrl).toBe(payload.returnUrl);
       expect(result.payload.nonce).toBe(payload.nonce);
       expect(result.payload.issuedAt).toBe(payload.issuedAt);
+    }
+  });
+
+  // Regression test for council 2026-05-03 R2 P2 (Gemini): OAuth state CSRF.
+  // verifyOAuthState must reject tokens missing userId; the /callback
+  // controller in routes/oauth.ts then enforces userId equality.
+  it("[council-2026-05-03] payload without userId is malformed", () => {
+    // Hand-craft a state without userId — older signed tokens (pre-fix)
+    // never carried it, so this catches both the format check and protects
+    // against any leaked legacy state.
+    const legacyPayload = {
+      companyId: "company-attack",
+      kind: "slack",
+      returnUrl: "/integrations",
+      nonce: "abc",
+      issuedAt: Math.floor(Date.now() / 1000),
+    };
+    const encoded = Buffer.from(JSON.stringify(legacyPayload)).toString("base64url");
+    const sig = createHmac("sha256", TEST_SECRET).update(encoded).digest("base64url");
+    const token = `${encoded}.${sig}`;
+    // Same secret as the verifier — sig is valid, only userId is missing.
+    const result = verifyOAuthState(token);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("malformed");
     }
   });
 
