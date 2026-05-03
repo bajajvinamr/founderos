@@ -6,7 +6,7 @@ import type { Db } from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import type { StorageService } from "./storage/types.js";
 import { httpLogger, errorHandler, sentryErrorHandler, requestIdMiddleware } from "./middleware/index.js";
-import { updateRequestContext } from "./lib/request-context.js";
+import { updateRequestContext, runInCronContext } from "./lib/request-context.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -463,8 +463,10 @@ export async function createApp(
   weeklyWrapDeliveryCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
-      void opts.feedbackExportService?.flushPendingFeedbackTraces().catch((err) => {
-        logger.error({ err }, "Failed to flush pending feedback exports");
+      runInCronContext("feedback-export-flush", () => {
+        void opts.feedbackExportService?.flushPendingFeedbackTraces().catch((err) => {
+          logger.error({ err }, "Failed to flush pending feedback exports");
+        });
       });
     }, FEEDBACK_EXPORT_FLUSH_INTERVAL_MS)
     : null;

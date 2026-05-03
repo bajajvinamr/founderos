@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 
 export interface RequestContext {
   requestId: string;
@@ -46,4 +47,31 @@ export function updateRequestContext(patch: Partial<RequestContext>): void {
   const current = storage.getStore();
   if (!current) return;
   Object.assign(current, patch);
+}
+
+/**
+ * Wrap a cron / setInterval / setTimeout callback body in a fresh request
+ * context so logs and Sentry events from scheduled tasks carry a
+ * requestId/traceId. Without this, getRequestContext() returns undefined
+ * inside the timer callback (HTTP middleware never ran for this code path)
+ * and the pino mixin + Sentry scope-enrichment silently emit empty tags.
+ *
+ * Usage: `setInterval(() => runInCronContext("name", () => { ... }), N)`.
+ *
+ * Council 2026-05-03 P2 (Gemini) — context loss in background crons.
+ */
+export function runInCronContext<T>(
+  taskName: string,
+  fn: () => T,
+): T {
+  const requestId = `cron:${taskName}:${randomUUID()}`;
+  return storage.run(
+    {
+      requestId,
+      traceId: requestId,
+      actor: { type: "system", source: `cron:${taskName}` },
+      routePath: `cron/${taskName}`,
+    },
+    fn,
+  );
 }
