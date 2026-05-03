@@ -7,8 +7,8 @@ _Session-time behavior file. Full contributor guide lives in `AGENTS.md`._
 FounderOS: a control plane for AI-agent "companies" — founders plug in LLM agents (CoS, Growth, Content, Finance), wire integrations, and run their startup ops through an Inbox + Goals + Projects UI. Paperclip MIT fork. $4k buyer-funded.
 
 Current deploys:
-- Server: https://founderos.fly.dev (Fly region `lhr`, Managed Postgres `gjpkdonynwy0yln4`)
-- UI: https://founderos-bice.vercel.app (Vercel project `founderos`)
+- **Canonical (server + UI)**: https://founderos.fly.dev (Fly region `lhr`, Managed Postgres `gjpkdonynwy0yln4`). Fly serves the SPA under `SERVE_UI=true` via `app.use(express.static(uiDist))` (server/src/app.ts). Single-origin: API + UI + WS all on the same host, eliminating the cross-origin auth/cookie/WS-handshake failure modes from the 2026-05-03 council.
+- **Legacy redirect**: https://founderos-bice.vercel.app — pure 301 redirect to founderos.fly.dev as of 2026-05-03 (see `vercel.json`). Kept for bookmark continuity; safe to tear down once analytics confirm zero direct traffic.
 - Supabase project `ggspsiexqppduvsqvpgy` (auth + JWKS)
 
 ## Stack
@@ -50,6 +50,13 @@ Current deploys:
 - **Adapter choice on onboarding:** `claude_local` + `skip` don't need an API key. Only `anthropic_api` requires + validates a key. Server route `onboarding/bootstrap` enforces this — don't re-add a blanket key requirement.
 - **Composio client is v3.** `composio-client.ts` targets `/api/v3/tools/execute/{slug}`, `/api/v3/connected_accounts`, `/api/v3/connected_accounts/{id}`. Per-toolkit `auth_config.id` must be pre-created in the Composio dashboard and dropped into `COMPOSIO_AUTH_CONFIG_<APP>` Fly secrets (slack, gmail, github, googlecalendar, googlesheets, googledrive, notion, linkedin live on prod). `COMPOSIO_V3_READY=1` enables the routes.
 - **Test flakes:** 1/1570 tests flakes under parallel load — `workspace-runtime.test.ts` (shared HTTP services on ephemeral ports, not embedded PG). Documented in `docs/CI-KNOWN-FLAKES.md`. Not your bug if you see it red.
+- **Single-origin from 2026-05-03 onward — Fly serves both API and UI.** `vercel.json` is a 301 redirect; do NOT re-introduce a Vercel build that serves SPA content. The collapse eliminates a cluster of cross-origin failure modes (WS handshake auth dies because browsers can't attach `Authorization` to `new WebSocket()`; cookies dropped by SameSite + Safari ITP; CSP `connect-src` had to allowlist Fly; build-time `VITE_API_ORIGIN` had to be baked at deploy time). All of those are gone now — **don't add them back** by splitting UI back onto Vercel/Cloudflare/anywhere else without redoing the auth model first. Microservices was rejected in the same council pass as a worse direction.
+- **`LOCAL_BOARD_USER_ID = "local-board"` is a synthetic principal**, not a human admin. Any code that counts `instance_admin` role rows for "is the instance bootstrapped?" must exclude this row, or the system will report "ready" before the first real admin exists. See `server/src/routes/health.ts` after the 2026-05-03 fix.
+- **Onboarding adapter mismatch:** `server/src/services/onboarding-bootstrap.ts:201` hardcodes `claude_local` even when the user picks `anthropic_api`. Founder passes Anthropic key validation in `routes/onboarding.ts:291`, then gets local CLI agents that don't run on Fly. Fix the slot mapping when touching this path.
+- **`release-main.yml` is blocked by GitHub Actions billing.** The actual prod deploy path is `.github/workflows/deploy-prod.yml`. CLAUDE.md (this file) and CONTINUE.md still misname this — incident response will misroute. Treat `deploy-prod.yml` as the source of truth until billing unblocks.
+- **`/api/health/deep` is unauthenticated** and leaks DB latency, active run counts, actor state, Composio platform health, Sentry status. Gate to instance-admin or board auth before any wider deployment exposure.
+- **Billing gate is client-only.** `ui/src/components/BillingGate.tsx` polls `/api/billing/status`; no server-side enforcement on protected routes or agent loops. `subscription.ts` `findFirst()` lacks `orderBy` and webhook upserts target a `defaultRandom()` id (never conflict) — every Stripe retry creates a duplicate row. Council verdict 2026-05-03: BLOCK until middleware-level enforcement + unique index on `stripeSubscriptionId` lands.
+- **Composio cross-org leak:** `server/src/services/skills/composio-skill-bridge.ts` calls `runComposioTool({ userId, ... })` without `connectedAccountId`. Multi-org users get arbitrary connection selection — agent in Org A can post to Org B Slack. Thread `route.composioConnectionId` through every skill call site.
 
 ## Where things live
 

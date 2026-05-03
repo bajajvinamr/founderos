@@ -1,6 +1,42 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-01 by Claude (improvement loops 13–16 sweep)_
+_Last updated: 2026-05-03 by Claude (multi-domain council audit + Phase 0 fixes)_
+
+## 2026-05-03 — Multi-domain council audit + Phase 0 production fixes
+
+Five parallel adversarial councils ran (auth+landing, billing, integrations/Composio, agent runtime, deploy/ops) — Codex `gpt-5.4` + Gemini `gemini-3-pro-preview` in FULL mode for 4 of 5 (billing was PARTIAL — Codex quota exhausted across both `gpt-5.4` and the `gpt-5.3-codex` fallback). Verdict: **BLOCK across all 5 domains**. Decisions persisted to `~/.gstack/projects/founderos/decisions.md`. Run artifacts in `~/.vanta/council-runs.jsonl`.
+
+**Cross-cutting pattern (the diagnosis):** permissive defaults + client-side-only enforcement + silent failure modes throughout. Both reviewers, independently, recommended **collapsing UI deployment to Fly (single-origin)** rather than going to microservices.
+
+### Phase 0 shipped this session (uncommitted on `test/frontend-founder-critical-flows`)
+
+- **Phase 0a — observability foundation:** `lib/request-context.ts` (AsyncLocalStorage), `middleware/request-id.ts` (UUID + W3C traceparent + safe-charset input validation), `lib/env-validation.ts` (loud-fail boot validator with 7 contract tests). Pino `mixin` auto-injects `reqId/traceId/actorUserId/actorType/routePath` into every log line — including background tasks. Sentry scope auto-enriched with the same context. Error responses now echo `requestId` so users can quote it for support. `/api/debug/sentry-canary` includes the live requestId in the thrown error to verify end-to-end correlation.
+- **Phase 0b — auth fixes (council P1s):**
+  1. **Atomic first-admin-wins** (`auth/post-signup-hook.ts`): `db.transaction` + `pg_advisory_xact_lock` + read-inside-lock + `onConflictDoNothing`. Locked in by 6 new regression tests (`post-signup-hook-atomicity.test.ts`) running real concurrent transactions against embedded Postgres — 10 concurrent signups → exactly 1 admin every time.
+  2. **Email-squatting closed** (`routes/auth-webhook.ts`): `runPostSignupBootstrap` removed from the Supabase `user.created` webhook path. Bootstrap deferred to first authenticated request via `maybeBootstrapNewUser` (after email confirm). Webhook is audit-only now; signature verification + structured logging retained.
+  3. **UI surfaces 401/403 instead of empty companies** (`ui/context/CompanyContext.tsx`, `ui/api/client.ts`, `ui/App.tsx`): typed `authError: ApiError | null` channel; new `<AuthBrokenStartPage />` shows status + requestId + sign-in CTA instead of the misleading "create your first company" empty-state.
+- **Phase 0c.1 — single-origin cutover:** `vercel.json` rewritten as a 301 redirect to `https://founderos.fly.dev`. Fly already serves UI under `SERVE_UI=true` (Dockerfile builds `ui/dist`, app.ts mounts `express.static(uiDist)`). Once Vercel deploys this redirect, the cross-origin WS auth + cookie SameSite + Safari ITP failure modes all evaporate — they were the dominant cause of 4 of 6 auth-domain P1s.
+
+### Verification
+
+- `pnpm typecheck` — clean across all 5 packages.
+- Targeted tests pass: 69 existing + 7 env-validation + 6 atomicity = **82/82**.
+- Council decisions ledgered, run artifacts persisted (1 PARTIAL flagged: billing).
+
+### Buyer / operator action items
+
+1. **Deploy the new vercel.json** — Vercel will start 301-redirecting to Fly. Verify a few bookmarks resolve correctly. After ~7d of zero direct Vercel traffic, tear down the Vercel project entirely.
+2. **Set Fly secrets if missing** — boot now warns loudly for: `SUPABASE_WEBHOOK_SECRET`, `BETTER_AUTH_SECRET`, `STRIPE_SECRET_KEY`+`STRIPE_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `COMPOSIO_API_KEY`, `SENTRY_DSN`. In `NODE_ENV=production` the REQUIRED ones hard-exit. Set with `fly secrets set <KEY>=<value> -a founderos`.
+3. **Verify Sentry canary** — once deployed: `curl https://founderos.fly.dev/api/debug/sentry-canary` (must be authed as instance_admin or local_implicit). Confirm the same `requestId` appears in Sentry dashboard.
+
+### Phase 1 backlog (not yet done — separate sprint)
+
+| Domain | Headline P1/P2s outstanding |
+|---|---|
+| Billing | Unique index on `stripeSubscriptionId`; replace hardcoded `plan: "pro"`; server-side enforcement middleware on protected routes; `event.livemode` guard; `findFirst().orderBy(desc)`; `["active","trialing"]` in active-check; raw-body preservation for Stripe webhook signature verify |
+| Integrations | Thread `connectedAccountId` through `runComposioTool`; persist HubSpot OAuth `refresh_token` + `expires_at`; refresh middleware with per-integration mutex; `oauth.ts` `returnUrl` allowlist (open-redirect); `Retry-After` honoring on 429; signed Composio webhook intake |
+| Agent runtime | `executeRun.catch` must `setRunStatus("failed")`; `ownerInstanceId` + DB lease replaces `process.kill(pid, 0)` orphan reaping; bound stdout buffer (1MB cap); cost in micro-cents; idempotency unique index on heartbeat runs; boot recovery decoupled from scheduler flag; fix `onboarding-bootstrap.ts:201` (provisions `claude_local` even when user picked `anthropic_api`); pre-dispatch prompt-injection guard |
+| Ops | Pre-traffic Fly `release_command` for migrations (currently boot-time during rolling swap); CSP header on Fly response (Gemini ops P2 — confirmed missing); `/api/health/deep` admin-gate; rate-limit on auth + AI endpoints; codify deploy/rollback as `scripts/deploy.sh`/`rollback.sh`; CI schema-drift via `pnpm db:generate` + `git diff --exit-code` (not just SQL file existence) |
 
 ## 2026-05-01 — Improvement loops 13–16 sweep
 
