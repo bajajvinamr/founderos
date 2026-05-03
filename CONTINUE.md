@@ -38,6 +38,19 @@ Five parallel adversarial councils ran (auth+landing, billing, integrations/Comp
 | Agent runtime | `executeRun.catch` must `setRunStatus("failed")`; `ownerInstanceId` + DB lease replaces `process.kill(pid, 0)` orphan reaping; bound stdout buffer (1MB cap); cost in micro-cents; idempotency unique index on heartbeat runs; boot recovery decoupled from scheduler flag; fix `onboarding-bootstrap.ts:201` (provisions `claude_local` even when user picked `anthropic_api`); pre-dispatch prompt-injection guard |
 | Ops | Pre-traffic Fly `release_command` for migrations (currently boot-time during rolling swap); CSP header on Fly response (Gemini ops P2 — confirmed missing); `/api/health/deep` admin-gate; rate-limit on auth + AI endpoints; codify deploy/rollback as `scripts/deploy.sh`/`rollback.sh`; CI schema-drift via `pnpm db:generate` + `git diff --exit-code` (not just SQL file existence) |
 
+### Post-merge action item (PR #20 → main)
+
+Once PR #20 merges and Vercel rebuilds the production hostname:
+
+1. **Run `/council` (FULL mode, Codex + Gemini)** scoped to cutover validation. Five things to verify the unauthed e2e suite couldn't:
+   - `https://founderos-bice.vercel.app/<any path>` → 301 → `https://founderos.fly.dev/<same path>` (test 5 paths including `/`, `/onboarding`, `/api/health`, `/auth`, an asset like `/favicon.ico`)
+   - request-id correlation under a real authed Supabase round-trip (set `FOUNDEROS_E2E_TEST_USER_*`, run `pnpm e2e -- --grep auth-round-trip`, grab the `requestId` from the network response, grep `fly logs`)
+   - Sentry canary captured by an admin user — confirm `requestId` in dashboard matches response body
+   - Concurrent-signup stress: open ten browser tabs, sign up ten throwaway emails simultaneously, assert exactly one ends up `instance_admin` in prod DB (the embedded-PG test proves the SQL; this proves the connection pool + Drizzle txn behaves the same on Supabase prod)
+   - WS subprotocol auth under Safari ITP — same-origin should make this trivial; verify the live transcript socket actually attaches `Authorization` via subprotocol on Safari
+2. **30-day expiry** on this council schedule (decisions.md). If 2026-06-03 arrives without a council run, treat the merge as having shipped without convergence verification — surface as `STALE_DECISION` at next session start.
+3. **Vercel teardown**: after ~7d of zero direct Vercel traffic (per (1)), the Vercel project itself can be deleted. The 301 redirect is only kept alive for bookmark continuity.
+
 ## 2026-05-01 — Improvement loops 13–16 sweep
 
 - **Loop 13 (access.ts split) — DEFERRED:** Zone comment in `access.ts` already documents the split contract. Deferral is explicit in the file: "Tracked as tech-debt; do not split without a dedicated PR." Reason: 6 test files + app.ts import from `access.ts` directly, and many private helpers in Zones 1–2 are also called from Zones 3–4 and from `accessRoutes()`. Cross-cutting usage means a naive extraction creates a circular-dependency risk. Safe path: dedicated PR with full import-graph analysis. Time estimate per zone comment: ~4h.
