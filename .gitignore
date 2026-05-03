@@ -60,3 +60,7 @@ tests/release-smoke/playwright-report/
 .vercel
 .env.local
 test-results/
+
+# Generated Playwright HTML reports (Wave 23A e2e suite)
+e2e/playwright-report/
+e2e/test-results/

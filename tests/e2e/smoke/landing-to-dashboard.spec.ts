@@ -29,11 +29,17 @@ const SMOKE_NAME = "Smoke Tester";
 // ---------------------------------------------------------------------------
 
 /**
- * Check /api/auth/config to determine whether the instance requires auth.
+ * Check /api/health to determine whether the instance requires auth.
  * Returns false when the server is in local_trusted mode.
+ *
+ * Historical note: this used to read `/api/auth/config.deploymentMode` but
+ * that endpoint exposes the auth provider via a `provider` field — the
+ * actual deploymentMode lives on /api/health. The old shape silently
+ * caused the skip guard to misfire on local_trusted dev runs, where this
+ * sign-up smoke test cannot pass (no /auth page in local_trusted).
  */
 async function requiresAuth(page: Page): Promise<boolean> {
-  const res = await page.request.get("/api/auth/config");
+  const res = await page.request.get("/api/health");
   if (!res.ok()) {
     // Can't determine mode — assume authenticated.
     return true;
