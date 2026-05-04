@@ -50,6 +50,12 @@ export async function initServerSentry(): Promise<boolean> {
             if (ctx.actor.isInstanceAdmin !== undefined) {
               scope.setTag("isInstanceAdmin", String(ctx.actor.isInstanceAdmin));
             }
+            // BYO-109 — runner identity tag. Lets ops filter Sentry by
+            // tag:runnerTokenId to find every error issued by a specific
+            // token (handy when a runner upgrades and a regression slips in).
+            if (ctx.actor.runnerTokenId) {
+              scope.setTag("runnerTokenId", ctx.actor.runnerTokenId);
+            }
           }
           scope.setExtra("url", ctx.url);
         }
