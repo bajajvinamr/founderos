@@ -60,9 +60,40 @@ describe("resolveAgentAdapter", () => {
   });
 
   it("falls back from CLI to API within the same family when CLI is missing", () => {
+    // BYO-108: Anthropic has no `api` adapter (claude_api was phantom).
+    // Use OpenAI for this test so the CLI→API within-family fallback path
+    // is exercised against a real adapter mapping. The Anthropic-only-API
+    // case is now covered by the next test ("returns no_provider...").
+    const availability: ProviderAvailability = {
+      anthropic: { api: false, cli: false },
+      openai: { api: true, cli: false },
+      google: { api: false, cli: false },
+      anyConfigured: true,
+    };
+    const cliPref: AgentProviderPreference = {
+      ...reasoningPref,
+      families: ["openai"],
+      preferredExecution: "cli",
+    };
+    const result = resolveAgentAdapter({
+      preference: cliPref,
+      availability,
+      strategy: "mixed",
+    });
+    expect(result).toMatchObject({
+      adapterType: "openai_api",
+      family: "openai",
+      execution: "api",
+    });
+  });
+
+  it("BYO-108: Anthropic-only-API availability falls through to next family (no claude_api adapter)", () => {
+    // Pre-BYO-108 this returned adapterType="claude_api" — a phantom adapter
+    // that wasn't actually registered. Now the resolver skips Anthropic when
+    // CLI is unavailable and the user has only an Anthropic API key.
     const availability: ProviderAvailability = {
       anthropic: { api: true, cli: false },
-      openai: { api: false, cli: false },
+      openai: { api: true, cli: false },
       google: { api: false, cli: false },
       anyConfigured: true,
     };
@@ -72,8 +103,8 @@ describe("resolveAgentAdapter", () => {
       strategy: "mixed",
     });
     expect(result).toMatchObject({
-      adapterType: "claude_api",
-      family: "anthropic",
+      adapterType: "openai_api",
+      family: "openai",
       execution: "api",
     });
   });

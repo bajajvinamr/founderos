@@ -64,7 +64,7 @@ function isValidProviderFilter(v: string | null): v is ProviderFilter {
 
 function agentProviderFamily(adapterType: string | null | undefined): ProviderFilter {
   if (!adapterType) return "other";
-  if (adapterType === "claude_local" || adapterType === "claude_api") return "anthropic";
+  if (adapterType === "claude_local") return "anthropic";
   if (adapterType === "codex_local" || adapterType === "openai_api") return "openai";
   if (adapterType === "gemini_local") return "google";
   return "other";

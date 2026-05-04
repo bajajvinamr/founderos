@@ -76,6 +76,28 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+    get:
+      tags: [runner-tokens]
+      summary: List all tokens (active + revoked) for a company
+      description: |
+        Backs the management UI's revoke-history view. Returns active and
+        revoked tokens together; revoked rows have `revokedAt` populated and
+        `online: false`. Plaintext tokens are NEVER included.
+      operationId: listRunnerTokens
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CompanyId"
+      responses:
+        "200":
+          description: All tokens for the company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerTokenList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/companies/{companyId}/runner-tokens/{tokenId}:
     delete:
       tags: [runner-tokens]
@@ -351,6 +373,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RunnerTokenSummary"
+
+    RunnerTokenWithRevoke:
+      allOf:
+        - $ref: "#/components/schemas/RunnerTokenSummary"
+        - type: object
+          required: [revokedAt]
+          properties:
+            revokedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: Null if active; ISO timestamp if revoked.
+
+    RunnerTokenList:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunnerTokenWithRevoke"
 
     RunnerJobDescriptor:
       type: object

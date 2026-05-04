@@ -215,6 +215,40 @@ describeEmbeddedPostgres("runnerAuthMiddleware — BYO-101", () => {
     expect(afterSecond.lastSeenAt!.getTime()).toBe(firstSeenAt.getTime());
   });
 
+  it("BYO-109: ALS actor.runnerTokenId is populated for downstream Sentry/log enrichment", async () => {
+    // The pino mixin + Sentry scope auto-pull from getRequestContext().actor.
+    // For runner-originated incidents we need the tokenId in that context so
+    // log/Sentry tagging can correlate the failing request to the issuing token.
+    const company = await makeCompany("ALS Tag Co");
+    const { plaintext, row: tokenRow } = await makeToken(
+      company.id,
+      "fos_gggggggggggggggggggggggggggggggg",
+    );
+
+    const { runWithRequestContext, getRequestContext } = await import(
+      "../lib/request-context.js"
+    );
+
+    const mw = runnerAuthMiddleware(db);
+    let observedActor: { runnerTokenId?: string; companyId?: string; type?: string } | undefined;
+    await runWithRequestContext(
+      { requestId: "test-als-req", traceId: "test-als-trace" },
+      async () => {
+        const { req, res, next } = makeFakeReqRes(`Bearer ${plaintext}`);
+        const wrappedNext = () => {
+          observedActor = getRequestContext()?.actor;
+          next();
+        };
+        await mw(req, res, wrappedNext);
+      },
+    );
+
+    expect(observedActor).toBeDefined();
+    expect(observedActor?.type).toBe("runner");
+    expect(observedActor?.companyId).toBe(company.id);
+    expect(observedActor?.runnerTokenId).toBe(tokenRow.id);
+  });
+
   it("cross-company isolation — Company A's token does not resolve to Company B", async () => {
     // T2/M2.1 — bind: token resolves to ONE companyId. Even if a downstream
     // route queries with the wrong companyId, it should pull req.actor.companyId

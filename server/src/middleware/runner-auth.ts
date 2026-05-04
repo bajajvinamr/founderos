@@ -182,15 +182,20 @@ export function runnerAuthMiddleware(db: Db): RequestHandler {
     };
 
     // Enrich the active request context so the pino mixin + Sentry scope
-    // auto-tag log lines + breadcrumbs with the runner identity. If we're
-    // not running inside an existing context (test code path), open one.
+    // auto-tag log lines + breadcrumbs with the runner identity. BYO-109 —
+    // include runnerTokenId so support engineers can correlate a single
+    // failing request back to the specific token without quoting plaintext.
+    // If we're not running inside an existing context (test code path),
+    // open one.
     const existing = getRequestContext();
+    const runnerActor = {
+      type: "runner",
+      companyId: row.companyId,
+      source: "runner_token",
+      runnerTokenId: row.id,
+    } as const;
     if (existing) {
-      existing.actor = {
-        type: "runner",
-        companyId: row.companyId,
-        source: "runner_token",
-      };
+      existing.actor = { ...runnerActor };
       next();
       return;
     }
@@ -199,7 +204,7 @@ export function runnerAuthMiddleware(db: Db): RequestHandler {
       {
         requestId: req.requestId ?? row.id,
         traceId: req.requestId ?? row.id,
-        actor: { type: "runner", companyId: row.companyId, source: "runner_token" },
+        actor: { ...runnerActor },
       },
       () => next(),
     );

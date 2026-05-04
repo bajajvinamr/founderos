@@ -179,7 +179,7 @@ function preferenceFromAgent(
   const model = readModel(agent.adapterConfig);
   const adapter = agent.adapterType;
   const family =
-    adapter === "claude_local" || adapter === "claude_api"
+    adapter === "claude_local"
       ? "anthropic"
       : adapter === "codex_local" || adapter === "openai_api"
         ? "openai"

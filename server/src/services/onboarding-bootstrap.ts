@@ -198,7 +198,25 @@ export async function bootstrapCompanyOnboarding(
 
     // 5. Provision four agents with charters.
     const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
-    const adapterType = "claude_local";
+    // BYO-107 (ADR-011) — flag-aware adapter selection.
+    //
+    // Pre-flag: hardcoded "claude_local" for ALL choices. The 2026-04 P1 fix
+    //   intentionally collapsed "anthropic_api" → "claude_local" because no
+    //   "claude_api" adapter is registered (would produce broken agents). On
+    //   Fly this still doesn't actually execute (no claude CLI in container),
+    //   but at least the row shape is valid and local-dev installs work.
+    //
+    // Post-flag (FOUNDEROS_BYO_RUNNER_ENABLED=1): map ALL choices to
+    //   "byo_runner". The cloud enqueues runner_jobs rows and the founder's
+    //   local @founderos/runner picks them up — closing the 7-month-old
+    //   "agents can't actually run on hosted Fly" gap.
+    //
+    //   `anthropic_api` keeps storing the user's key as a company secret
+    //   above; the runner can read it later if a flow needs direct API calls,
+    //   but the agent execution itself is via the local claude CLI under the
+    //   founder's authed session (which they pay for via Pro).
+    const { isByoRunnerEnabled } = await import("../lib/byo-runner-flag.js");
+    const adapterType = isByoRunnerEnabled() ? "byo_runner" : "claude_local";
     const agentIdsBySlot: Record<AgentSlot, string> = {
       cos: "",
       growth: "",

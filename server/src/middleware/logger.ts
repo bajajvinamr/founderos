@@ -61,6 +61,8 @@ export const logger = pino({
       ...(ctx.routePath ? { routePath: ctx.routePath } : {}),
       ...(ctx.actor?.userId ? { actorUserId: ctx.actor.userId } : {}),
       ...(ctx.actor?.type ? { actorType: ctx.actor.type } : {}),
+      // BYO-109 — runner identity for cloud-side log correlation.
+      ...(ctx.actor?.runnerTokenId ? { actorRunnerTokenId: ctx.actor.runnerTokenId } : {}),
     };
   },
 }, pino.transport({

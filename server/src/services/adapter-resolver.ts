@@ -91,14 +91,29 @@ export function resolveAgentAdapter(input: {
     const pick = pickExecution(avail, preference.preferredExecution);
     if (!pick) continue;
 
-    const adapter = ADAPTER_MAP[family]?.[pick];
+    // BYO-108: ADAPTER_MAP is now sparse — anthropic has no `api` slot since
+    // no claude_api adapter exists. If the picked execution has no adapter
+    // for this family, try the OTHER execution within the same family before
+    // skipping to the next family. Better UX than "you have an Anthropic key
+    // but I'll run OpenAI anyway."
+    let adapter = ADAPTER_MAP[family]?.[pick];
+    let execution: "cli" | "api" = pick;
+    if (!adapter) {
+      const fallback: "cli" | "api" = pick === "cli" ? "api" : "cli";
+      const fallbackAvail = fallback === "cli" ? avail.cli : avail.api;
+      const fallbackAdapter = fallbackAvail ? ADAPTER_MAP[family]?.[fallback] : undefined;
+      if (fallbackAdapter) {
+        adapter = fallbackAdapter;
+        execution = fallback;
+      }
+    }
     if (!adapter) continue;
 
     return {
       adapterType: adapter,
       model: suggestedModel,
       family,
-      execution: pick,
+      execution,
     };
   }
 
@@ -156,13 +171,17 @@ const DEFAULT_MODELS: Record<ProviderFamily, string> = {
   other: "",
 };
 
+// BYO-108 — no `claude_api` adapter exists. Anthropic only has a `cli` slot;
+// `pickExecution` will fall back to "cli" when "api" is requested but the
+// `api` slot is undefined for the family. Same for `gemini` — `gemini_local`
+// handles both modes internally.
 const ADAPTER_MAP: Record<
   "anthropic" | "openai" | "google",
-  Record<"cli" | "api", FounderOSAdapterType>
+  Partial<Record<"cli" | "api", FounderOSAdapterType>>
 > = {
-  anthropic: { cli: "claude_local", api: "claude_api" },
+  anthropic: { cli: "claude_local" },
   openai: { cli: "codex_local", api: "openai_api" },
-  google: { cli: "gemini_local", api: "gemini_local" }, // no dedicated API adapter shipped yet; gemini_local handles both
+  google: { cli: "gemini_local" },
 };
 
 type SupportedFamily = "anthropic" | "openai" | "google";
@@ -210,7 +229,6 @@ function pickExecution(
 function familyFromAdapter(adapter: FounderOSAdapterType): ProviderFamily {
   switch (adapter) {
     case "claude_local":
-    case "claude_api":
       return "anthropic";
     case "codex_local":
     case "openai_api":

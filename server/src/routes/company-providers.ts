@@ -54,7 +54,7 @@ export function companyProviderRoutes(db: Db) {
 
     // Map adapter_type → family for the UI.
     const family = (adapter: string): "anthropic" | "openai" | "google" | "other" => {
-      if (adapter === "claude_local" || adapter === "claude_api") return "anthropic";
+      if (adapter === "claude_local") return "anthropic";
       if (adapter === "codex_local" || adapter === "openai_api") return "openai";
       if (adapter === "gemini_local") return "google";
       return "other";

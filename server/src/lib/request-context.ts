@@ -12,6 +12,13 @@ export interface RequestContext {
     companyId?: string;
     isInstanceAdmin?: boolean;
     source?: string;
+    /**
+     * BYO-109 — set by runner-auth middleware when type="runner". Surfaces
+     * in pino logs as `actorRunnerTokenId` and on Sentry events as the
+     * `runnerTokenId` tag, so a failing request can be traced back to the
+     * specific token without quoting plaintext.
+     */
+    runnerTokenId?: string;
   };
   /** Express route path once matched (e.g. "/api/companies/:id"). */
   routePath?: string;
