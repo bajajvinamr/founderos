@@ -82,6 +82,7 @@ import {
 import { trackAgentCreated } from "@founderos/shared/telemetry";
 import { validate } from "../middleware/validate.js";
 import { agentInvokeLimiter } from "../middleware/rate-limit.js";
+import { billingGate } from "../middleware/billing-gate.js";
 import {
   agentService,
   agentInstructionsService,
@@ -2139,7 +2140,7 @@ export function agentRoutes(db: Db) {
     res.json({ ok: true });
   });
 
-  router.post("/agents/:id/wakeup", agentInvokeLimiter, validate(wakeAgentSchema), async (req, res) => {
+  router.post("/agents/:id/wakeup", agentInvokeLimiter, billingGate(db), validate(wakeAgentSchema), async (req, res) => {
     const id = req.params.id as string;
     const agent = await svc.getById(id);
     if (!agent) {
@@ -2189,7 +2190,7 @@ export function agentRoutes(db: Db) {
     res.status(202).json(run);
   });
 
-  router.post("/agents/:id/heartbeat/invoke", agentInvokeLimiter, async (req, res) => {
+  router.post("/agents/:id/heartbeat/invoke", agentInvokeLimiter, billingGate(db), async (req, res) => {
     const id = req.params.id as string;
     const agent = await svc.getById(id);
     if (!agent) {
