@@ -6,6 +6,7 @@ import type { Db } from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import type { StorageService } from "./storage/types.js";
 import { httpLogger, errorHandler, sentryErrorHandler, requestIdMiddleware } from "./middleware/index.js";
+import { securityHeadersMiddleware } from "./middleware/security-headers.js";
 import { updateRequestContext, runInCronContext } from "./lib/request-context.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
@@ -136,6 +137,15 @@ export async function createApp(
   // from the AsyncLocalStorage context. Mount BEFORE express.json so
   // body-parse errors are logged with the correct correlation ID.
   app.use(requestIdMiddleware());
+  // Security baseline (CSP + X-Frame + nosniff + Referrer + HSTS) applied
+  // to every response branch — including 4xx/5xx error paths. Mount before
+  // route handlers so per-route overrides (e.g. assets.ts sandbox CSP)
+  // happen on top of, not under, the baseline.
+  app.use(
+    securityHeadersMiddleware({
+      supabaseUrl: opts.authSupabaseUrl ?? null,
+    }),
+  );
   app.use(express.json({
     // Company import/export payloads can inline full portable packages.
     limit: "10mb",
