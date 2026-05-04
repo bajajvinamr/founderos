@@ -10,7 +10,7 @@
 
 import express from "express";
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Service mocks
@@ -140,9 +140,20 @@ function makePayload(
 // ---------------------------------------------------------------------------
 
 describe("onboarding bootstrap — adapterType is always claude_local", () => {
+  let savedFlag: string | undefined;
+
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    // BYO-107: the flag-aware mapping returns "byo_runner" when set; the
+    // existing assertions cover the flag-OFF branch, so explicitly disable.
+    savedFlag = process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+  });
+
+  afterEach(() => {
+    if (savedFlag === undefined) delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
   });
 
   it("creates agents with adapterType=claude_local when adapterChoice=claude_local", async () => {
@@ -258,5 +269,72 @@ describe("onboarding bootstrap — adapterType is always claude_local", () => {
     expect(res.status).toBe(422);
     expect(res.body.error).toContain("Anthropic API key rejected");
     expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BYO-107 — flag-on path: every adapterChoice maps to byo_runner
+// ---------------------------------------------------------------------------
+
+describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_RUNNER_ENABLED=1", () => {
+  let savedFlag: string | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    savedFlag = process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    process.env.FOUNDEROS_BYO_RUNNER_ENABLED = "1";
+  });
+
+  afterEach(() => {
+    if (savedFlag === undefined) delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
+  });
+
+  it("maps adapterChoice=claude_local → byo_runner", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("claude_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+    }
+  });
+
+  it("maps adapterChoice=anthropic_api → byo_runner (key still stored as secret)", async () => {
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({ valid: true });
+    mockSecretService.create.mockResolvedValue({ id: "secret-uuid-byo" });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    expect(mockSecretService.create).toHaveBeenCalledTimes(1);
+
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+    }
+  });
+
+  it("maps adapterChoice=skip → byo_runner", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("skip"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+    }
   });
 });
