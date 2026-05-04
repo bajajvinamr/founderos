@@ -26,6 +26,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
+  activityLog,
   agents,
   authUsers,
   companies,
@@ -221,6 +222,95 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       // assertCompanyAccess gate fires first because companyIds is [] and
       // local_implicit isn't set — so this lands as 403 from there.
       expect(res.status).toBe(403);
+    });
+
+    it("BYO-105: writes runner.token.issued audit log with issuer + label + tokenPreview", async () => {
+      const company = await makeCompany("Audit Issue Co");
+      const app = adminApp("admin-user");
+
+      const issued = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "audit-target" });
+      expect(issued.status).toBe(201);
+
+      const audits = await db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.companyId, company.id));
+      const issuedRows = audits.filter((a) => a.action === "runner.token.issued");
+      expect(issuedRows).toHaveLength(1);
+      const row = issuedRows[0];
+      expect(row.actorId).toBe("admin-user");
+      expect(row.actorType).toBe("user");
+      expect(row.entityType).toBe("runner_token");
+      expect(row.entityId).toBe(issued.body.tokenId);
+      expect(row.details).toMatchObject({
+        tokenId: issued.body.tokenId,
+        label: "audit-target",
+        issuedByUserId: "admin-user",
+      });
+      expect((row.details as { tokenPreview: string }).tokenPreview).toMatch(/^fos_\w{4}…$/);
+      // Plaintext token must NEVER appear in the audit row.
+      expect(JSON.stringify(row.details)).not.toContain(issued.body.token);
+    });
+  });
+
+  // BYO-105: list endpoint
+  describe("GET /api/companies/:id/runner-tokens — list (BYO-105)", () => {
+    it("returns active + revoked tokens with summary fields", async () => {
+      const company = await makeCompany("List Co");
+      const app = adminApp("admin-user");
+
+      const a = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "active-token" });
+      const b = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "stale-token" });
+      // Revoke b so we can verify revoked tokens still appear in the list.
+      await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/${b.body.tokenId}`,
+      );
+      // Mark a recently-seen so online flag is true.
+      await db
+        .update(runnerTokens)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(runnerTokens.id, a.body.tokenId));
+
+      const res = await request(app).get(`/api/companies/${company.id}/runner-tokens`);
+      expect(res.status).toBe(200);
+      const tokens = res.body.tokens as Array<{
+        tokenId: string;
+        label: string;
+        revokedAt: string | null;
+        online: boolean;
+      }>;
+      expect(tokens).toHaveLength(2);
+      const active = tokens.find((t) => t.label === "active-token");
+      const revoked = tokens.find((t) => t.label === "stale-token");
+      expect(active?.revokedAt).toBeNull();
+      expect(active?.online).toBe(true);
+      expect(revoked?.revokedAt).toMatch(/T/); // ISO datetime
+      expect(revoked?.online).toBe(false);
+      // Plaintext token must never appear in any list response.
+      expect(JSON.stringify(res.body)).not.toContain("fos_");
+    });
+
+    it("scoped to the company — does not leak tokens from another company", async () => {
+      const companyA = await makeCompany("Scope A Co");
+      const companyB = await makeCompany("Scope B Co");
+      const app = adminApp("admin-user");
+
+      await request(app)
+        .post(`/api/companies/${companyA.id}/runner-tokens`)
+        .send({ label: "a-only" });
+      await request(app)
+        .post(`/api/companies/${companyB.id}/runner-tokens`)
+        .send({ label: "b-only" });
+
+      const res = await request(app).get(`/api/companies/${companyA.id}/runner-tokens`);
+      const tokens = res.body.tokens as Array<{ label: string }>;
+      expect(tokens.map((t) => t.label).sort()).toEqual(["a-only"]);
     });
   });
 

@@ -524,6 +524,10 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         details: {
           tokenId: row.id,
           label: row.label,
+          // BYO-105 — explicit issuer field so audit-export tools that read
+          // `details` directly (without joining activityLog.actorId) still see
+          // who minted the token. Mirrors `actorId` for self-contained rows.
+          issuedByUserId: req.actor.userId ?? null,
           // Plaintext token deliberately NOT in details — only the first 8
           // chars for ops reference. The full token is response-only.
           tokenPreview: `${plaintext.slice(0, 8)}…`,
@@ -610,6 +614,47 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         createdAt: r.createdAt.toISOString(),
         lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
         online: r.lastSeenAt ? now - r.lastSeenAt.getTime() <= RUNNER_ONLINE_WINDOW_MS : false,
+      })),
+    });
+  });
+
+  /**
+   * GET /companies/:companyId/runner-tokens — list ALL tokens (active + revoked).
+   *
+   * BYO-105 — distinct from `/runner-status` which is the realtime liveness
+   * dashboard (active-only). This endpoint backs the management UI's revoke
+   * history view: shows revoked tokens with `revokedAt` populated so an admin
+   * can audit "who issued / who revoked / when" at a glance. Plaintext tokens
+   * are NEVER included — only `tokenId`, `label`, `createdAt`, `revokedAt`,
+   * `lastSeenAt`, and the derived `online` boolean.
+   */
+  router.get("/companies/:companyId/runner-tokens", requireCompanyAccess, async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const now = Date.now();
+
+    const rows = await db
+      .select({
+        tokenId: runnerTokens.id,
+        label: runnerTokens.label,
+        createdAt: runnerTokens.createdAt,
+        lastSeenAt: runnerTokens.lastSeenAt,
+        revokedAt: runnerTokens.revokedAt,
+      })
+      .from(runnerTokens)
+      .where(eq(runnerTokens.companyId, companyId))
+      .orderBy(desc(runnerTokens.createdAt));
+
+    res.status(200).json({
+      tokens: rows.map((r) => ({
+        tokenId: r.tokenId,
+        label: r.label,
+        createdAt: r.createdAt.toISOString(),
+        lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
+        revokedAt: r.revokedAt ? r.revokedAt.toISOString() : null,
+        online:
+          r.revokedAt === null && r.lastSeenAt !== null
+            ? now - r.lastSeenAt.getTime() <= RUNNER_ONLINE_WINDOW_MS
+            : false,
       })),
     });
   });
