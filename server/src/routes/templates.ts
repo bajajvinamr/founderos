@@ -31,7 +31,6 @@ const providerStrategySchema = z.union([
     kind: z.literal("override"),
     adapterType: z.enum([
       "claude_local",
-      "claude_api",
       "codex_local",
       "openai_api",
       "gemini_local",

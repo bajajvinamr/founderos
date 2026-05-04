@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
  * map to a single consistent provider family.
  */
 function family(adapter: string): "anthropic" | "openai" | "google" | "other" {
-  if (adapter === "claude_local" || adapter === "claude_api") return "anthropic";
+  if (adapter === "claude_local") return "anthropic";
   if (adapter === "codex_local" || adapter === "openai_api") return "openai";
   if (adapter === "gemini_local") return "google";
   return "other";
@@ -22,7 +22,6 @@ function costEventProviderToFamily(provider: string): "anthropic" | "openai" | "
 describe("adapter → family mapping", () => {
   it.each([
     ["claude_local", "anthropic"],
-    ["claude_api", "anthropic"],
     ["codex_local", "openai"],
     ["openai_api", "openai"],
     ["gemini_local", "google"],
@@ -30,6 +29,10 @@ describe("adapter → family mapping", () => {
     ["opencode_local", "other"],
     ["openclaw_gateway", "other"],
     ["unknown_adapter", "other"],
+    // BYO-108: claude_api was removed from the type union and from every
+    // family function. Any DB row still carrying it (none should — bootstrap
+    // never wrote it after the 2026-04 P1 fix) now falls through to "other".
+    ["claude_api", "other"],
   ])("%s → %s", (adapter, expected) => {
     expect(family(adapter)).toBe(expected);
   });

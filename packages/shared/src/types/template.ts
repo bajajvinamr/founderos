@@ -5,17 +5,21 @@ import type { CompanyMetrics } from "./company.js";
  * Each corresponds to a package under `packages/adapters/*` on the server.
  *
  *   - claude_local  → Claude Code CLI (via user's subscription OR ANTHROPIC_API_KEY)
- *   - claude_api    → Anthropic direct API (API key required)
  *   - codex_local   → OpenAI Codex CLI (via user's subscription OR OPENAI_API_KEY)
  *   - openai_api    → OpenAI direct API (API key required)
  *   - gemini_local  → Gemini CLI (via user's subscription OR GEMINI_API_KEY)
  *   - cursor_local  → Cursor CLI (via user's subscription)
  *   - opencode_local→ OpenCode CLI
  *   - openclaw_gateway → OpenClaw gateway (remote)
+ *
+ * Note: There is NO `claude_api` adapter. Pre-BYO-108 the type referenced
+ * one but no adapter package was ever shipped — agents minted with that
+ * type were permanently non-functional. Anthropic execution always goes
+ * through `claude_local` (which itself can use ANTHROPIC_API_KEY internally
+ * if no CLI auth is present).
  */
 export type FounderOSAdapterType =
   | "claude_local"
-  | "claude_api"
   | "codex_local"
   | "openai_api"
   | "gemini_local"
