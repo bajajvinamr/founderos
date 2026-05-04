@@ -27,6 +27,7 @@ import { and, eq } from "drizzle-orm";
 import { authUsers, instanceUserRoles, type Db } from "@founderos/db";
 import { forbidden, unprocessable } from "../errors.js";
 import { validate } from "../middleware/validate.js";
+import { onboardingBootstrapLimiter } from "../middleware/rate-limit.js";
 import { requireCompanyAccess } from "../middleware/require-company-access.js";
 import { assertBoard } from "./authz.js";
 import { logger } from "../middleware/logger.js";
@@ -225,6 +226,7 @@ export function onboardingRoutes(db: Db) {
    */
   router.post(
     "/onboarding/bootstrap",
+    onboardingBootstrapLimiter,
     validate(bootstrapSchema),
     async (req, res) => {
       assertBoard(req);
