@@ -110,6 +110,72 @@ export const billingWebhookLimiter = rateLimit({
 });
 
 /**
+ * Agent invocation limiter: 30/min per authenticated user
+ *
+ * Caps the rate at which an actor can trigger Claude/Anthropic-billed work
+ * via /agents/:id/heartbeat/invoke and /agents/:id/wakeup. The limit is
+ * per-user (not per-agent) so a single founder running multiple agents
+ * shares one bucket — a runaway tight-loop in one agent can't drain
+ * a different agent's budget.
+ *
+ * Why 30/min: a healthy interactive session might fire 5-10 invocations
+ * per minute (founder iterates on prompts, observes output, retries).
+ * 30 buys 3-6× headroom while still hard-stopping a tight retry loop
+ * within seconds. Tune up or down per real telemetry — the council BLOCK
+ * was about presence-of-limit, not the exact number.
+ */
+export const agentInvokeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 invocations per minute
+  keyGenerator: (req: Request, res: Response) => {
+    return req.actor?.userId || ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    logger.warn(
+      {
+        userId: _req.actor?.userId,
+        agentId: _req.params?.id,
+        path: _req.path,
+      },
+      `Agent invocation rate limit exceeded: ${options.message}`,
+    );
+    res.status(429).json({
+      error: "Too many agent invocations",
+      message: "Slow down — agent runs cost money. Try again in a minute.",
+    });
+  },
+});
+
+/**
+ * Onboarding bootstrap limiter: 5/hr per IP
+ *
+ * Prevents mass account creation through the onboarding flow. A real
+ * founder bootstraps once — repeated bootstraps from the same IP
+ * indicate scripted abuse.
+ */
+export const onboardingBootstrapLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  keyGenerator: (req: Request, res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    logger.warn(
+      {
+        ip: _req.ip,
+        userId: _req.actor?.userId,
+        path: _req.path,
+      },
+      `Onboarding bootstrap rate limit exceeded: ${options.message}`,
+    );
+    res.status(429).json({
+      error: "Too many onboarding attempts",
+      message: "Please try again later.",
+    });
+  },
+});
+
+/**
  * BYO key validation limiter: 30/hr per authenticated user
  * Prevents spam of key validation attempts
  */
