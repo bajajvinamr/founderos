@@ -1,6 +1,53 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-04 by Claude (BYO Runner sprint — M1/M2/M3 shipped)_
+_Last updated: 2026-05-04 by Claude (post-BYO sprint — self-serve hardening, 6 PRs open)_
+
+## 2026-05-04 — Self-serve hardening sprint (6 PRs open, blocked on CI billing)
+
+Production "Instance admin required" diagnosed via /council and fixed
+with a DELETE-orphan-row patch. **Six follow-up PRs** ship the systemic
+prevention + the council backlog P1s. All six are MERGEABLE; CI runs
+queued and failing in 3s due to GitHub Actions billing block (same
+blocker as `release-main.yml`). Vercel previews are green on all six.
+
+| PR | Branch | What | Sprint item |
+|---|---|---|---|
+| **#28** | `fix/auth-mirror-and-orphan-guard` | Mirror Supabase `auth.users` into Fly `public."user"` on signup; FK with `ON DELETE CASCADE`; INNER JOIN admin counts; bootstrap-ceo recovery path | Auth |
+| **#29** | `fix/self-serve-quick-wins` | `/api/health/deep` instance-admin auth gate; `executeRun.catch` → `setRunStatus("failed")`; Fly `release_command` for pre-traffic migrations | Items 1+2 |
+| **#30** | `fix/composio-cross-org-leak` | `ComposioRouteDecision` discriminated union; require `connectedAccountId`; thread through 6 skill call sites | Composio CVE |
+| **#31** | `fix/rate-limits-ai` | `agentInvokeLimiter` (30/min/user) on `/agents/:id/wakeup` + `/heartbeat/invoke`; `onboardingBootstrapLimiter` (5/hr/IP) on `/onboarding/bootstrap` | Item 3 |
+| **#32** | `fix/csp-headers` | Restrictive CSP + X-Frame DENY + nosniff + Referrer-Policy + HSTS on every response branch (incl. 4xx/5xx). Allowlist: Supabase + Composio + Sentry + Anthropic + Stripe | Item 8 |
+| **#33** | `fix/billing-idempotency` | Migration 0073 dedupe + UNIQUE on `stripe_subscription_id`; conflict target swap; `orderBy(desc(updatedAt))` on `findFirst()`; `["active","trialing"]` healthy statuses | Item 7 (data layer) |
+
+### Sprint backlog (NOT in any open PR — separate sessions)
+
+- **Item 7 part 2 — Server-side plan-tier enforcement middleware**
+  on protected routes. The data layer (#33) is now correct; the next
+  PR adds the gate that uses it. Bigger surface — audit every route
+  that needs pro tier, write the middleware, expand tests. Recommend
+  fresh session.
+- **Hardcoded `plan: "pro"` in handleStripeWebhook**. Today FounderOS
+  sells one tier so this is a no-op; map from Stripe price id when a
+  second tier exists.
+
+### Carry-overs (still open from prior sprints)
+
+- **Task #67** — Security review for runner tokens (carry from BYO
+  sprint). `/cso` or `/codex` against #23 diff.
+- **Task #76** — Fix pre-existing `ui/src/api/approvals.test.ts:184`
+  failure on main (TypeError on undefined.get(); not introduced by
+  this sprint).
+
+### Test coverage added in this sprint
+
+| Test file | Tests | What it locks in |
+|---|---|---|
+| `post-signup-hook-atomicity.test.ts` (#28) | +4 (now 10/10) | authUsers mirror upsert; orphan-guard INNER JOIN |
+| `health-deep-runner.test.ts` (#29) | +3 (now 5/5) | `/deep` 401/403 for non-admin; admin allowed |
+| `slack-post-message.test.ts` + `composio` suite (#30) | 5/5 + 13/13 | connectedAccountId now required at TS level |
+| `rate-limit-ai.test.ts` (#31) | 5/5 | 429 with friendly body; per-user bucket isolation |
+| `security-headers.test.ts` (#32) | 7/7 | CSP composition; headers fire on 200/404/500 |
+| `subscription-idempotency.test.ts` (#33) | 7/7 | Stripe retry idempotency; newest-row precedence; trialing healthy |
 
 ## 2026-05-04 — BYO Runner sprint (ADR-011) — M1/M2/M3 merged to main, M4 manual smoke
 
