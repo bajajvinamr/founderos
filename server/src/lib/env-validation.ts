@@ -97,6 +97,17 @@ const CHECKS: EnvCheck[] = [
     enables: "Composio v3 routes (must be set to '1' explicitly to enable)",
     severity: "INFO",
   },
+  // --- runner (BYO Runner — ADR-011, 2026-05-04) ---
+  {
+    name: "FOUNDEROS_BYO_RUNNER_ENABLED",
+    keys: ["FOUNDEROS_BYO_RUNNER_ENABLED"],
+    enables: "byo_runner adapter + /api/runner/* routes + new-signup default in onboarding",
+    severity: "INFO",
+    hint:
+      "Set to '1' to enable the BYO Runner architecture (ADR-011). When unset, the runner adapter is not " +
+      "registered, /api/runner/* returns 404, and onboarding shows the legacy claude_local picker. " +
+      "Default-off until E2E green per the Sprint 0 rollout plan.",
+  },
   // --- observability ---
   {
     name: "SENTRY_DSN",
