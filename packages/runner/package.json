@@ -1,0 +1,47 @@
+{
+  "name": "@founderos/runner",
+  "version": "0.1.0",
+  "description": "FounderOS local runner — polls cloud, spawns claude CLI under your Pro session, streams events back. ADR-011.",
+  "license": "MIT",
+  "homepage": "https://github.com/founderos-ai/founderos",
+  "bugs": {
+    "url": "https://github.com/founderos-ai/founderos/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/founderos-ai/founderos",
+    "directory": "packages/runner"
+  },
+  "type": "module",
+  "bin": {
+    "founderos-runner": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}
