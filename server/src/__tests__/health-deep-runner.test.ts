@@ -47,11 +47,27 @@ describeEmbeddedPostgres("GET /health/deep — runner_metrics (BYO-110)", () => 
   let temp: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
   let savedFlag: string | undefined;
 
-  /** Mount /health with a fake actor middleware so session_resolver passes. */
-  function makeApp() {
+  /**
+   * Mount /health with a fake actor middleware so session_resolver passes.
+   *
+   * Council 2026-05-04: /deep is now gated by assertInstanceAdmin, so the
+   * actor shape must mirror what server/src/middleware/auth.ts:140 sets in
+   * local_trusted mode — `source: "local_implicit"` short-circuits the
+   * instance-admin check via routes/authz.ts:15.
+   *
+   * Pass `actorOverride` to test the auth-gate behavior with a non-admin
+   * board principal (forbidden) or a fully unauthenticated request (none).
+   */
+  function makeApp(actorOverride?: Record<string, unknown>) {
     const app = express();
     app.use((req, _res, next) => {
-      (req as unknown as { actor: { type: string } }).actor = { type: "board" };
+      (req as unknown as { actor: Record<string, unknown> }).actor =
+        actorOverride ?? {
+          type: "board",
+          userId: "local-board",
+          isInstanceAdmin: true,
+          source: "local_implicit",
+        };
       next();
     });
     app.use(
@@ -62,6 +78,20 @@ describeEmbeddedPostgres("GET /health/deep — runner_metrics (BYO-110)", () => 
         authReady: true,
         companyDeletionEnabled: true,
       }),
+    );
+    // assertInstanceAdmin throws errors with statusCode set; mirror the
+    // production error middleware shape so supertest sees the right status.
+    app.use(
+      (
+        err: Error & { statusCode?: number; status?: number },
+        _req: express.Request,
+        res: express.Response,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _next: express.NextFunction,
+      ) => {
+        const status = err.statusCode ?? err.status ?? 500;
+        res.status(status).json({ error: err.message });
+      },
     );
     return app;
   }
@@ -194,5 +224,39 @@ describeEmbeddedPostgres("GET /health/deep — runner_metrics (BYO-110)", () => 
     // Sanity: completed jobs and revoked tokens MUST NOT show up.
     expect(runner?.detail).not.toContain("completed=");
     expect(runner?.detail).not.toContain("revoked=");
+  });
+
+  // Council 2026-05-04 — /deep auth gate. Pre-fix, this endpoint was
+  // unauthenticated and leaked DB latency, table-level reachability,
+  // session-resolver state, Composio platform liveness, runner queue
+  // depth, and Sentry config to anonymous scrapers.
+  it("auth gate: 401 when no actor is set (unauthenticated)", async () => {
+    const app = makeApp({ type: "none", source: "none" });
+    const res = await request(app).get("/health/deep");
+    expect(res.status).toBe(401);
+  });
+
+  it("auth gate: 403 when actor is board but not instance_admin", async () => {
+    const app = makeApp({
+      type: "board",
+      userId: "user-without-admin",
+      isInstanceAdmin: false,
+      source: "session",
+      companyIds: [],
+    });
+    const res = await request(app).get("/health/deep");
+    expect(res.status).toBe(403);
+  });
+
+  it("auth gate: 200 when actor has instance_admin role", async () => {
+    const app = makeApp({
+      type: "board",
+      userId: "real-admin",
+      isInstanceAdmin: true,
+      source: "session",
+      companyIds: [],
+    });
+    const res = await request(app).get("/health/deep");
+    expect(res.status).toBe(200);
   });
 });

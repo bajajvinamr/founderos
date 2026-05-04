@@ -15,6 +15,7 @@ import { instanceSettingsService } from "../services/instance-settings.js";
 import { LOCAL_BOARD_USER_ID } from "../auth/post-signup-hook.js";
 import { isByoRunnerEnabled } from "../lib/byo-runner-flag.js";
 import { serverVersion } from "../version.js";
+import { assertInstanceAdmin } from "./authz.js";
 
 export function healthRoutes(
   db?: Db,
@@ -118,8 +119,18 @@ export function healthRoutes(
     });
   });
 
-  // Deep health check: exercises the full stack
+  // Deep health check: exercises the full stack.
+  //
+  // Council 2026-05-04: this endpoint exposes DB latency, table-level reachability,
+  // session-resolver internals, Composio platform liveness, runner queue depth,
+  // Sentry config — all useful for ops, all reconnaissance gold for an attacker
+  // probing an exposed instance. Gate behind instance_admin in authenticated mode.
+  // local_trusted (dev) keeps the open path via assertInstanceAdmin's
+  // local_implicit short-circuit. Fly liveness/readiness probes hit
+  // /api/healthz and /api/readyz (per fly.toml [[services.http_checks]]),
+  // not /deep — gating does not break the deploy infra.
   router.get("/deep", async (req, res) => {
+    assertInstanceAdmin(req);
     const checks: Array<{
       name: string;
       status: "ok" | "fail" | "skipped";

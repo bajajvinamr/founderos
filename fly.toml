@@ -31,7 +31,16 @@ kill_timeout = "5s"
 
 [deploy]
   strategy = "rolling"
-  # Migrations run automatically on boot via ensureMigrations() in server/src/index.ts
+  # Council 2026-05-04: migrations run via release_command on a single
+  # ephemeral VM BEFORE any rolling-deploy machine boots. This eliminates
+  # the "old container serves traffic against new schema during rollover"
+  # window — the schema is at head before either old or new machines see
+  # the new code path.
+  #
+  # ensureMigrations() in server/src/index.ts remains as a boot-time safety
+  # net: idempotent (Drizzle's migrator no-ops when up-to-date), so it
+  # adds ~50ms to cold-start without effect. Belt + suspenders.
+  release_command = "node /app/packages/db/dist/migrate.js"
 
 [env]
   NODE_ENV = "production"
