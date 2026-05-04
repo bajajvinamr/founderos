@@ -345,7 +345,7 @@ function OnboardingRoutePage() {
 }
 
 function CompanyRootRedirect() {
-  const { companies, selectedCompany, loading, authError } = useCompany();
+  const { companies, selectedCompany, loading, authError, error } = useCompany();
   const location = useLocation();
 
   if (loading) {
@@ -355,6 +355,15 @@ function CompanyRootRedirect() {
   // Distinguish "auth broken" from "no companies" — see CompanyContext.
   if (authError) {
     return <AuthBrokenStartPage error={authError} />;
+  }
+
+  // Council 2026-05-03 P1 — any non-auth error (5xx, network, parse) MUST
+  // surface as an error state BEFORE the empty-companies fallthrough.
+  // Otherwise a transient backend outage redirects every authenticated user
+  // to /onboarding, triggering mass "Create your first company" UI flows
+  // exactly when the system is most broken.
+  if (error && companies.length === 0) {
+    return <BackendErrorStartPage error={error} />;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -375,7 +384,7 @@ function CompanyRootRedirect() {
 
 function UnprefixedBoardRedirect() {
   const location = useLocation();
-  const { companies, selectedCompany, loading, authError } = useCompany();
+  const { companies, selectedCompany, loading, authError, error } = useCompany();
 
   if (loading) {
     return <LazyRouteFallback />;
@@ -383,6 +392,11 @@ function UnprefixedBoardRedirect() {
 
   if (authError) {
     return <AuthBrokenStartPage error={authError} />;
+  }
+
+  // Council 2026-05-03 P1 — see CompanyRootRedirect above. Same outage fence.
+  if (error && companies.length === 0) {
+    return <BackendErrorStartPage error={error} />;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -403,6 +417,54 @@ function UnprefixedBoardRedirect() {
       to={`/${targetCompany.issuePrefix}${location.pathname}${location.search}${location.hash}`}
       replace
     />
+  );
+}
+
+function BackendErrorStartPage({ error }: { error: Error }) {
+  // ApiError carries .status and .requestId; plain Error (network) carries
+  // neither. Treat both: surface what we know without leaking server stack.
+  const apiError =
+    "status" in error && "requestId" in error
+      ? (error as import("./api/client").ApiError)
+      : null;
+  const status = apiError?.status ?? null;
+  const requestId = apiError?.requestId ?? null;
+  return (
+    <div className="mx-auto max-w-xl py-10">
+      <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-6">
+        <h1 className="text-xl font-semibold text-amber-700 dark:text-amber-400">
+          Server unavailable
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          We couldn't reach the server to load your companies
+          {status ? (
+            <>
+              {" "}
+              (HTTP <code className="rounded bg-muted px-1 py-0.5 text-xs">{status}</code>)
+            </>
+          ) : (
+            " (network error)"
+          )}
+          . This is usually transient — the deploy might be rolling, the database might be
+          reconnecting, or your connection dropped. Your account is fine; nothing has been lost.
+        </p>
+        {requestId && (
+          <div className="mt-4 rounded border border-border bg-card px-3 py-2 font-mono text-xs">
+            requestId: {requestId}
+          </div>
+        )}
+        <div className="mt-4 flex gap-2">
+          <Button variant="default" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+          <Button asChild variant="ghost">
+            <a href="https://founderos.fly.dev/api/health" target="_blank" rel="noreferrer">
+              Check status
+            </a>
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

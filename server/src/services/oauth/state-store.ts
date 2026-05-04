@@ -11,6 +11,17 @@ import { createHmac } from "node:crypto";
 const STATE_TTL_SECONDS = 600;
 
 export type OAuthStatePayload = {
+  /**
+   * Bound to the user that initiated the OAuth flow. Council 2026-05-03
+   * P2 (Gemini R2): without this, the signed state was a transferable
+   * capability — attacker initiates flow for own companyId, sends the
+   * authorize URL to a victim admin of the target SaaS (Slack/HubSpot),
+   * victim authenticates with their provider account, and the callback
+   * upserts the victim's external account against the attacker's
+   * companyId. Now the /callback handler must verify
+   * `req.actor.userId === payload.userId` before persisting.
+   */
+  userId: string;
   companyId: string;
   kind: "slack" | "hubspot" | "linkedin" | "notion";
   returnUrl: string;
@@ -81,6 +92,7 @@ export function verifyOAuthState(state: string): VerifyOAuthStateResult {
   if (
     typeof payload !== "object" ||
     payload === null ||
+    typeof (payload as Record<string, unknown>).userId !== "string" ||
     typeof (payload as Record<string, unknown>).companyId !== "string" ||
     typeof (payload as Record<string, unknown>).kind !== "string" ||
     typeof (payload as Record<string, unknown>).returnUrl !== "string" ||

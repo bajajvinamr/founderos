@@ -20,6 +20,15 @@ vi.mock("../agent-auth-jwt.js", () => ({
   verifyLocalAgentJwt: vi.fn().mockReturnValue(null),
 }));
 
+const mockPostSignupHook = vi.hoisted(() => ({
+  runPostSignupBootstrap: vi.fn().mockResolvedValue({
+    promotedToInstanceAdmin: false,
+    consumedInvite: false,
+  }),
+}));
+
+vi.mock("../auth/post-signup-hook.js", () => mockPostSignupHook);
+
 import { actorMiddleware } from "../middleware/auth.js";
 
 // ---------------------------------------------------------------------------
@@ -129,6 +138,51 @@ describe("actorMiddleware — auth parity (cookie vs bearer-session-fallback)", 
 
     expect(next).toHaveBeenCalledOnce();
     expect(req.actor.type).toBe("none");
+  });
+
+  // Regression test for council 2026-05-03 finding [P1, Codex]:
+  // pre-fix, req.actor.companyIds was built from the PRE-bootstrap memberships
+  // snapshot. If maybeBootstrapNewUser consumed an invite (creating a
+  // membership row), the first authed request returned an empty companyIds
+  // and 403'd company-gated routes until the second request. The fix returns
+  // the POST-bootstrap snapshot from maybeBootstrapNewUser; this test asserts
+  // the call site uses it.
+  it("[council-2026-05-03] req.actor.companyIds reflects post-bootstrap state when invite consumed", async () => {
+    const resolveSession = vi.fn().mockResolvedValue(SESSION_RESULT);
+    const NEW_COMPANY_ID = "comp-uuid-from-invite";
+    // Brand-new user: pre-bootstrap snapshot has no admin row + no memberships.
+    // The bootstrap consumes an invite and creates a membership. After it
+    // returns { consumedInvite: true }, actor middleware refetches and
+    // populates the new memberships.
+    const db = makeDb([
+      [],                              // 1st instanceUserRoles → not admin
+      [],                              // 1st companyMemberships → empty
+      [],                              // refetched instanceUserRoles → still not admin
+      [{ companyId: NEW_COMPANY_ID }], // refetched companyMemberships → invite consumed
+    ]);
+    mockPostSignupHook.runPostSignupBootstrap.mockResolvedValueOnce({
+      promotedToInstanceAdmin: false,
+      consumedInvite: true,
+    });
+    const middleware = actorMiddleware(db as any, {
+      deploymentMode: "authenticated",
+      resolveSession,
+    });
+    const req = makeReq();
+    (req.header as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+    const next = vi.fn();
+    await middleware(req, makeRes(), next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.actor).toMatchObject({
+      type: "board",
+      userId: USER_ID,
+      // The load-bearing assertion — pre-fix this was [].
+      companyIds: [NEW_COMPANY_ID],
+      isInstanceAdmin: false,
+      source: "session",
+    });
+    expect(mockPostSignupHook.runPostSignupBootstrap).toHaveBeenCalledOnce();
   });
 
   it("session resolves isInstanceAdmin=true when instanceUserRoles row exists", async () => {

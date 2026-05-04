@@ -86,11 +86,20 @@ export async function runPostSignupBootstrap(
   // Atomicity: the previous implementation read admin count, decided to
   // insert, then inserted — a TOCTOU race that let two concurrent signups
   // both observe zero admins and both promote to admin. The (user_id, role)
-  // unique index does not catch it because user_ids differ. Council 2026-05-03
-  // P1 fix: wrap in a transaction with pg advisory lock to serialize
-  // concurrent bootstrap paths. The lock is auto-released on COMMIT/ROLLBACK.
-  // If the backend doesn't support advisory locks (embedded pglite in dev),
-  // it's a no-op — pglite serializes transactions in-process anyway.
+  // unique index does not catch it because user_ids differ.
+  //
+  // Council 2026-05-03 P1 fix: pg_advisory_xact_lock serializes concurrent
+  // bootstrap paths in a transaction; auto-released on COMMIT/ROLLBACK.
+  //
+  // Council 2026-05-03 P2 follow-up: the previous implementation caught lock
+  // failures and "relied on the transactional re-read for correctness" —
+  // that's WRONG. Under READ COMMITTED isolation (Postgres default),
+  // concurrent transactions both see the no-admin state in the re-read
+  // because the other txn's INSERT isn't visible until COMMIT. Without the
+  // lock actually firing, two admin rows get created. So:
+  //   - Production: rethrow on lock failure. Better to fail closed than race.
+  //   - Dev / embedded pglite: log + continue. pglite serializes transactions
+  //     at the process level, so the race can't materialize regardless.
   if (!result.consumedInvite) {
     try {
       result.promotedToInstanceAdmin = await db.transaction(async (tx) => {
@@ -99,9 +108,17 @@ export async function runPostSignupBootstrap(
             sql`SELECT pg_advisory_xact_lock(${BOOTSTRAP_ADMIN_ADVISORY_LOCK_ID})`,
           );
         } catch (err) {
+          if (process.env.NODE_ENV === "production") {
+            // Don't downgrade silently — the race is real on a real DB.
+            logger.error(
+              { err },
+              "post-signup bootstrap: pg_advisory_xact_lock failed in production — refusing to promote without serialization",
+            );
+            throw err;
+          }
           logger.debug(
             { err },
-            "post-signup bootstrap: pg_advisory_xact_lock unsupported on this backend — relying on transactional re-read for correctness",
+            "post-signup bootstrap: pg_advisory_xact_lock unsupported on this backend (dev/test) — pglite serializes transactions in-process, race cannot materialize",
           );
         }
 

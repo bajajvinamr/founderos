@@ -55,23 +55,37 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
 
   // Runs the post-signup bootstrap inline when a newly-authenticated user has
   // no instance role yet. Idempotent — the hook checks for an existing admin.
+  //
+  // Returns the post-bootstrap snapshot (roleRow + memberships) so call sites
+  // build req.actor from refreshed state. Pre-2026-05-03 council fix this only
+  // returned roleRow, which caused req.actor.companyIds to be built from the
+  // stale pre-bootstrap memberships array — first authed request after invite
+  // consumption returned [] companies and 403'd company-gated routes until the
+  // second request. Always returning the full snapshot eliminates the
+  // call-site footgun.
   async function maybeBootstrapNewUser(
     userId: string,
     email: string | null | undefined,
-    roleRow: { id: string } | null,
-  ): Promise<{ id: string } | null> {
-    if (roleRow || !email) return roleRow;
+    initial: {
+      roleRow: { id: string } | null;
+      memberships: Array<{ companyId: string }>;
+    },
+  ): Promise<{
+    roleRow: { id: string } | null;
+    memberships: Array<{ companyId: string }>;
+  }> {
+    if (initial.roleRow || !email) return initial;
     try {
       const { runPostSignupBootstrap } = await import("../auth/post-signup-hook.js");
       const bootstrap = await runPostSignupBootstrap(db, { userId, email });
       if (bootstrap.promotedToInstanceAdmin || bootstrap.consumedInvite) {
-        const [refreshed] = await fetchBoardActorRows(userId);
-        return refreshed;
+        const [roleRow, memberships] = await fetchBoardActorRows(userId);
+        return { roleRow, memberships };
       }
     } catch (err) {
       logger.warn({ err, userId }, "Inline post-signup bootstrap failed (non-fatal)");
     }
-    return roleRow;
+    return initial;
   }
 
   /**
@@ -103,8 +117,11 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     if (!session?.user?.id) return false;
 
     const userId = session.user.id;
-    const [roleRowRaw, memberships] = await fetchBoardActorRows(userId);
-    const roleRow = await maybeBootstrapNewUser(userId, session.user.email, roleRowRaw);
+    const [roleRowRaw, membershipsRaw] = await fetchBoardActorRows(userId);
+    const { roleRow, memberships } = await maybeBootstrapNewUser(userId, session.user.email, {
+      roleRow: roleRowRaw,
+      memberships: membershipsRaw,
+    });
     req.actor = {
       type: "board",
       userId,
@@ -139,8 +156,11 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
         }
         if (session?.user?.id) {
           const userId = session.user.id;
-          const [roleRowRaw, memberships] = await fetchBoardActorRows(userId);
-          const roleRow = await maybeBootstrapNewUser(userId, session.user.email, roleRowRaw);
+          const [roleRowRaw, membershipsRaw] = await fetchBoardActorRows(userId);
+          const { roleRow, memberships } = await maybeBootstrapNewUser(userId, session.user.email, {
+            roleRow: roleRowRaw,
+            memberships: membershipsRaw,
+          });
           req.actor = {
             type: "board",
             userId,

@@ -56,6 +56,23 @@ export function oauthRoutes(db: Db) {
       return;
     }
 
+    // Council 2026-05-03 P2 (Gemini R2) — bind userId to OAuth state.
+    // Without this, the signed state was a transferable capability:
+    // attacker initiates flow for own companyId, gets a valid state,
+    // tricks victim admin into clicking the authorize URL, victim
+    // authenticates with their provider account, callback links the
+    // victim's external account against the attacker's companyId.
+    // Now /callback enforces req.actor.userId === payload.userId before
+    // upserting the integration row.
+    const initiatorUserId = req.actor.userId;
+    if (!initiatorUserId) {
+      // No userId on the actor → not a board/session principal. Refuse to
+      // sign a state we can't validate later. Local-trusted has a userId
+      // ("local-board") so this only fires for unauthenticated/agent flows.
+      res.status(401).json({ error: "oauth_requires_user_session" });
+      return;
+    }
+
     const provider = getOAuthProvider(kind);
 
     if (!provider.isConfigured()) {
@@ -70,7 +87,14 @@ export function oauthRoutes(db: Db) {
     const nonce = randomBytes(16).toString("hex");
     const issuedAt = Math.floor(Date.now() / 1000);
 
-    const state = signOAuthState({ companyId, kind, returnUrl, nonce, issuedAt });
+    const state = signOAuthState({
+      userId: initiatorUserId,
+      companyId,
+      kind,
+      returnUrl,
+      nonce,
+      issuedAt,
+    });
 
     const redirectUri = `${getPublicUrl()}/api/oauth/${kind}/callback`;
     const authorizeUrl = provider.buildAuthorizeUrl({
@@ -109,7 +133,24 @@ export function oauthRoutes(db: Db) {
       return;
     }
 
-    const { companyId, returnUrl } = stateResult.payload;
+    const { userId: stateUserId, companyId, returnUrl } = stateResult.payload;
+
+    // Council 2026-05-03 P2 (Gemini R2) — enforce that the user completing
+    // the callback is the same one that initiated the flow. Without this
+    // check, a leaked authorize URL is a transferable capability: attacker
+    // hands the URL to a victim admin of the target SaaS, victim
+    // authenticates with their provider account, callback would otherwise
+    // upsert the victim's external account against the attacker's
+    // companyId.
+    const callbackUserId = req.actor.userId;
+    if (!callbackUserId || callbackUserId !== stateUserId) {
+      logger.warn(
+        { kind, stateUserId, callbackUserId, companyId },
+        "oauth callback: user mismatch — refusing to upsert integration",
+      );
+      res.redirect(302, `${returnUrl}?oauth_error=user_mismatch`);
+      return;
+    }
 
     if (!code) {
       res.redirect(302, `${returnUrl}?oauth_error=missing_code`);

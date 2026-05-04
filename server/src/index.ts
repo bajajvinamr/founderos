@@ -27,6 +27,7 @@ import detectPort from "detect-port";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
+import { runInCronContext } from "./lib/request-context.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import {
   feedbackService,
@@ -693,36 +694,48 @@ export async function startServer(): Promise<StartedServer> {
         logger.error({ err }, "startup heartbeat recovery failed");
       });
     setInterval(() => {
-      void heartbeat
-        .tickTimers(new Date())
-        .then((result) => {
-          if (result.enqueued > 0) {
-            logger.info({ ...result }, "heartbeat timer tick enqueued runs");
-          }
-        })
-        .catch((err) => {
-          logger.error({ err }, "heartbeat timer tick failed");
-        });
+      // Council 2026-05-03 P2 — wrap each scheduler tick body in a fresh
+      // ALS context so logs and Sentry events from heartbeat/routine
+      // bookkeeping carry a requestId/traceId. Without this the pino mixin
+      // and Sentry scope-enrichment silently emitted empty correlation
+      // tags for every scheduled run, breaking incident-triage on the
+      // background path.
+      runInCronContext("heartbeat-tick", () => {
+        void heartbeat
+          .tickTimers(new Date())
+          .then((result) => {
+            if (result.enqueued > 0) {
+              logger.info({ ...result }, "heartbeat timer tick enqueued runs");
+            }
+          })
+          .catch((err) => {
+            logger.error({ err }, "heartbeat timer tick failed");
+          });
+      });
 
-      void routines
-        .tickScheduledTriggers(new Date())
-        .then((result) => {
-          if (result.triggered > 0) {
-            logger.info({ ...result }, "routine scheduler tick enqueued runs");
-          }
-        })
-        .catch((err) => {
-          logger.error({ err }, "routine scheduler tick failed");
-        });
-  
-      // Periodically reap orphaned runs (5-min staleness threshold) and make sure
-      // persisted queued work is still being driven forward.
-      void heartbeat
-        .reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 })
-        .then(() => heartbeat.resumeQueuedRuns())
-        .catch((err) => {
-          logger.error({ err }, "periodic heartbeat recovery failed");
-        });
+      runInCronContext("routine-scheduler-tick", () => {
+        void routines
+          .tickScheduledTriggers(new Date())
+          .then((result) => {
+            if (result.triggered > 0) {
+              logger.info({ ...result }, "routine scheduler tick enqueued runs");
+            }
+          })
+          .catch((err) => {
+            logger.error({ err }, "routine scheduler tick failed");
+          });
+      });
+
+      runInCronContext("heartbeat-reap-orphans", () => {
+        // Periodically reap orphaned runs (5-min staleness threshold) and
+        // drive persisted queued work forward.
+        void heartbeat
+          .reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 })
+          .then(() => heartbeat.resumeQueuedRuns())
+          .catch((err) => {
+            logger.error({ err }, "periodic heartbeat recovery failed");
+          });
+      });
     }, config.heartbeatSchedulerIntervalMs);
   }
   
@@ -775,7 +788,9 @@ export async function startServer(): Promise<StartedServer> {
       "Automatic database backups enabled",
     );
     setInterval(() => {
-      void runScheduledBackup();
+      runInCronContext("database-backup", () => {
+        void runScheduledBackup();
+      });
     }, backupIntervalMs);
   }
   

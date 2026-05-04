@@ -50,10 +50,16 @@ const CHECKS: EnvCheck[] = [
   {
     name: "BETTER_AUTH_SECRET",
     keys: ["BETTER_AUTH_SECRET"],
-    enables: "Better-Auth session encryption (only when authProvider=better-auth)",
-    severity: "WARN",
+    enables:
+      "OAuth state signing (Slack/HubSpot/LinkedIn/Notion) AND Better-Auth session encryption",
+    severity: "REQUIRED_IN_PROD",
     hint:
-      "Required only when FOUNDEROS_AUTH_PROVIDER=better-auth. The Fly deploy uses supabase — this can stay unset there.",
+      "Despite the name, this secret is also load-bearing for OAuth state signing in EVERY auth provider — see " +
+      "server/src/services/oauth/state-store.ts:23 which throws if unset. signOAuthState() is called " +
+      "unconditionally in routes/oauth.ts whenever a user starts an integration connect flow. Council " +
+      "2026-05-03 P2 (Codex): pre-fix this was misclassified as Better-Auth-only WARN, so prod could boot " +
+      "and then throw at the first integration OAuth attempt. Now load-bearing in prod for any deploy that " +
+      "exposes the integrations UI.",
   },
   // --- billing (loud warn — billing is BLOCK per 2026-05-03 council, but live keys deferred) ---
   {
