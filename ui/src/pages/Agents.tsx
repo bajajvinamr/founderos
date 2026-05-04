@@ -23,6 +23,8 @@ import { issuesApi } from "../api/issues";
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
 import { AgentProviderBadge } from "../components/AgentProviderBadge";
 import { AgentIcon } from "../components/AgentIconPicker";
+import { RunnerStatusPill } from "../components/RunnerStatusPill";
+import { RunnerInstallDialog } from "../components/RunnerInstallDialog";
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -206,6 +208,12 @@ export function Agents() {
     return counts;
   }, [agents]);
 
+  const hasByoRunner = useMemo(
+    () => (agents ?? []).some((a) => a.adapterType === "byo_runner"),
+    [agents],
+  );
+  const [runnerDialogOpen, setRunnerDialogOpen] = useState(false);
+
   if (!selectedCompanyId) {
     return <EmptyState icon={Users} message="Select a company to view your team." />;
   }
@@ -242,11 +250,19 @@ export function Agents() {
               ? "No teammates yet"
               : `${totalCount} ${totalCount === 1 ? "teammate" : "teammates"} on the roster`}
           </h1>
-          {totalCount > 0 && (
-            <span className="text-[12px] text-muted-foreground tabular-nums">
-              {activeCount} ready · {totalCount - activeCount} off
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {hasByoRunner && selectedCompanyId && (
+              <RunnerStatusPill
+                companyId={selectedCompanyId}
+                onClick={() => setRunnerDialogOpen(true)}
+              />
+            )}
+            {totalCount > 0 && (
+              <span className="text-[12px] text-muted-foreground tabular-nums">
+                {activeCount} ready · {totalCount - activeCount} off
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -497,6 +513,14 @@ export function Agents() {
         <p className="text-sm text-muted-foreground text-center py-8">
           No organizational hierarchy defined.
         </p>
+      )}
+
+      {selectedCompanyId && (
+        <RunnerInstallDialog
+          open={runnerDialogOpen}
+          onOpenChange={setRunnerDialogOpen}
+          companyId={selectedCompanyId}
+        />
       )}
     </div>
   );
