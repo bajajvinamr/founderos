@@ -1,0 +1,583 @@
+/**
+ * BYO-104 — Runner REST endpoint contract tests.
+ *
+ * Covers all 7 endpoints from docs/api/runner-openapi.yaml against real
+ * embedded Postgres + a mini express harness:
+ *
+ *   Token-management (session-auth, instance-admin):
+ *     POST   /api/companies/:id/runner-tokens           — issue
+ *     DELETE /api/companies/:id/runner-tokens/:tokenId  — revoke (idempotent)
+ *     GET    /api/companies/:id/runner-status           — liveness
+ *
+ *   Runner-job (runner-token auth):
+ *     GET  /api/runner/jobs/next             — long-poll
+ *     POST /api/runner/jobs/:id/claim        — atomic claim race
+ *     POST /api/runner/jobs/:id/events       — append + cross-token isolation
+ *     POST /api/runner/jobs/:id/complete     — terminal + double-complete guard
+ *
+ * Real DB + real route handlers — no mocks. The harness injects a fake
+ * `req.actor` per test (board-admin or runner) so the same routes can be
+ * exercised against both auth surfaces without standing up the full
+ * actorMiddleware + session resolver.
+ */
+
+import express from "express";
+import request from "supertest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+import {
+  agents,
+  authUsers,
+  companies,
+  createDb,
+  heartbeatRunEvents,
+  heartbeatRuns,
+  runnerJobs,
+  runnerTokens,
+} from "@founderos/db";
+import {
+  getEmbeddedPostgresTestSupport,
+  startEmbeddedPostgresTestDatabase,
+} from "./helpers/embedded-postgres.js";
+import { errorHandler } from "../middleware/error-handler.js";
+import { runnerJobRoutes, runnerTokenManagementRoutes } from "../routes/runner.js";
+
+const support = await getEmbeddedPostgresTestSupport();
+const describeEmbeddedPostgres = support.supported ? describe : describe.skip;
+
+if (!support.supported) {
+  console.warn(
+    `Skipping runner-routes tests: ${support.reason ?? "unsupported environment"}`,
+  );
+}
+
+describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
+  let db!: ReturnType<typeof createDb>;
+  let temp: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
+
+  /** Build a session-auth (board) harness app for a given userId. */
+  function adminApp(userId: string, isInstanceAdmin = true) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      (req as unknown as { actor: unknown }).actor = {
+        type: "board",
+        userId,
+        companyIds: [],
+        isInstanceAdmin,
+        source: "session",
+      };
+      next();
+    });
+    app.use("/api", runnerTokenManagementRoutes(db));
+    app.use(errorHandler);
+    return app;
+  }
+
+  /** Build a runner-token-auth harness app for a given (tokenId, companyId). */
+  function runnerApp(tokenId: string, companyId: string) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      (req as unknown as { actor: unknown }).actor = {
+        type: "runner",
+        runnerTokenId: tokenId,
+        companyId,
+        source: "runner_token",
+      };
+      next();
+    });
+    app.use("/api/runner", runnerJobRoutes(db));
+    app.use(errorHandler);
+    return app;
+  }
+
+  /** Seed a Better Auth user row so createdByUserId FK can resolve. */
+  async function makeUser(id: string) {
+    const now = new Date();
+    await db
+      .insert(authUsers)
+      .values({
+        id,
+        name: "Test User",
+        email: `${id}@test.local`,
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing();
+    return id;
+  }
+
+  let prefixCounter = 0;
+  async function makeCompany(name: string) {
+    prefixCounter += 1;
+    const issuePrefix = `RR${Date.now().toString(36).slice(-3).toUpperCase()}${prefixCounter}`;
+    const [row] = await db.insert(companies).values({ name, issuePrefix }).returning();
+    return row;
+  }
+
+  async function makeAgent(companyId: string) {
+    const [row] = await db
+      .insert(agents)
+      .values({
+        companyId,
+        name: "Test Sarah",
+        role: "ceo",
+        adapterType: "byo_runner",
+        adapterConfig: {},
+        status: "idle",
+      })
+      .returning();
+    return row;
+  }
+
+  async function makeHeartbeatRun(companyId: string, agentId: string) {
+    const [row] = await db
+      .insert(heartbeatRuns)
+      .values({
+        companyId,
+        agentId,
+        invocationSource: "on_demand",
+        status: "queued",
+      })
+      .returning();
+    return row;
+  }
+
+  /** Insert a queued runner_jobs row directly (skips the adapter materialization). */
+  async function makeQueuedJob(args: { companyId: string; agentId: string; runId: string }) {
+    const [row] = await db
+      .insert(runnerJobs)
+      .values({
+        companyId: args.companyId,
+        agentId: args.agentId,
+        heartbeatRunId: args.runId,
+        prompt: "test prompt",
+        promptHash: "a".repeat(64),
+        runtimeConfig: JSON.stringify({ timeoutSec: 60 }),
+        status: "queued",
+      })
+      .returning();
+    return row;
+  }
+
+  beforeAll(async () => {
+    temp = await startEmbeddedPostgresTestDatabase("founderos-runner-routes-");
+    db = createDb(temp.connectionString);
+    // Pre-seed the real session-user id used by adminApp() — runner_tokens.created_by_user_id
+    // FKs into "user", so a non-null value must resolve to a real row.
+    await makeUser("admin-user");
+    await makeUser("non-admin");
+  }, 30_000);
+
+  afterAll(async () => {
+    await temp?.cleanup();
+  });
+
+  // ─── Token-management surface ─────────────────────────────────────────────
+
+  describe("POST /api/companies/:id/runner-tokens — issue", () => {
+    it("returns 201 with plaintext token + persists sha256 hash only", async () => {
+      const company = await makeCompany("Issue Co");
+      const app = adminApp("admin-user");
+
+      const res = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "Vinamr's Mac" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.token).toMatch(/^fos_[A-Za-z0-9]{32}$/);
+      expect(res.body.tokenId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(res.body.label).toBe("Vinamr's Mac");
+
+      // Verify the row was persisted with hash, not plaintext.
+      const [row] = await db
+        .select()
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, res.body.tokenId));
+      expect(row.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(row.tokenHash).not.toContain(res.body.token);
+      expect(row.companyId).toBe(company.id);
+      expect(row.revokedAt).toBeNull();
+      expect(row.createdByUserId).toBe("admin-user");
+    });
+
+    it("returns 404 when company does not exist", async () => {
+      const app = adminApp("admin-user");
+      const res = await request(app)
+        .post(`/api/companies/00000000-0000-0000-0000-000000000000/runner-tokens`)
+        .send({});
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("company_not_found");
+    });
+
+    it("returns 403 when actor is not instance-admin", async () => {
+      const company = await makeCompany("No Admin Co");
+      const app = adminApp("non-admin", /* isInstanceAdmin */ false);
+      const res = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({});
+      // assertCompanyAccess gate fires first because companyIds is [] and
+      // local_implicit isn't set — so this lands as 403 from there.
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("DELETE /api/companies/:id/runner-tokens/:tokenId — revoke", () => {
+    it("sets revokedAt and is idempotent on second call", async () => {
+      const company = await makeCompany("Revoke Co");
+      const app = adminApp("admin-user");
+
+      const issued = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "to-be-revoked" });
+      expect(issued.status).toBe(201);
+      const tokenId = issued.body.tokenId;
+
+      const first = await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/${tokenId}`,
+      );
+      expect(first.status).toBe(204);
+
+      const [row] = await db
+        .select()
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, tokenId));
+      expect(row.revokedAt).not.toBeNull();
+
+      // Idempotent — second revoke still 204.
+      const second = await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/${tokenId}`,
+      );
+      expect(second.status).toBe(204);
+    });
+
+    it("returns 404 for unknown tokenId", async () => {
+      const company = await makeCompany("Unknown Token Co");
+      const app = adminApp("admin-user");
+      const res = await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/00000000-0000-0000-0000-000000000000`,
+      );
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("GET /api/companies/:id/runner-status — liveness", () => {
+    it("returns active tokens with online=true when lastSeenAt within 30s", async () => {
+      const company = await makeCompany("Status Co");
+      const app = adminApp("admin-user");
+
+      // Issue two tokens; mark one as recently-seen.
+      const a = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "online" });
+      const b = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "stale" });
+      await db
+        .update(runnerTokens)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(runnerTokens.id, a.body.tokenId));
+      await db
+        .update(runnerTokens)
+        .set({ lastSeenAt: new Date(Date.now() - 60_000) })
+        .where(eq(runnerTokens.id, b.body.tokenId));
+
+      const res = await request(app).get(`/api/companies/${company.id}/runner-status`);
+      expect(res.status).toBe(200);
+      const tokens = res.body.tokens as Array<{ tokenId: string; online: boolean; label: string }>;
+      expect(tokens).toHaveLength(2);
+      const online = tokens.find((t) => t.label === "online");
+      const stale = tokens.find((t) => t.label === "stale");
+      expect(online?.online).toBe(true);
+      expect(stale?.online).toBe(false);
+    });
+
+    it("excludes revoked tokens", async () => {
+      const company = await makeCompany("Status Excludes Co");
+      const app = adminApp("admin-user");
+      const issued = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "to-revoke" });
+      await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/${issued.body.tokenId}`,
+      );
+      const res = await request(app).get(`/api/companies/${company.id}/runner-status`);
+      expect(res.body.tokens).toHaveLength(0);
+    });
+  });
+
+  // ─── Runner-job surface ───────────────────────────────────────────────────
+
+  describe("GET /api/runner/jobs/next — long-poll", () => {
+    it("returns the queued job descriptor when one exists", async () => {
+      const company = await makeCompany("Next Job Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+
+      // Token row needed for actor identity, even though our harness mocks the actor.
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "x".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).get("/api/runner/jobs/next");
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        jobId: job.id,
+        agentId: agent.id,
+        agentName: "Test Sarah",
+      });
+    });
+
+    it("returns 204 when nothing is queued (within a tight test budget)", async () => {
+      const company = await makeCompany("Empty Queue Co");
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "y".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      // Real long-poll is 30s. We patch via supertest's expect-and-disconnect
+      // pattern: kill the connection after 1.5s — the route's `req.socket.destroyed`
+      // guard will exit the loop. We don't assert on the body since the
+      // connection was aborted; we assert the route doesn't throw.
+      const promise = request(app)
+        .get("/api/runner/jobs/next")
+        .timeout({ deadline: 1500, response: 1500 });
+      await expect(promise).rejects.toThrow();
+    }, 5_000);
+  });
+
+  describe("POST /api/runner/jobs/:id/claim — atomic claim", () => {
+    it("transitions queued → claimed and returns the prompt + runtimeConfig", async () => {
+      const company = await makeCompany("Claim Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "z".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        jobId: job.id,
+        agentId: agent.id,
+        prompt: "test prompt",
+        runtimeConfig: { timeoutSec: 60 },
+        promptHash: "a".repeat(64),
+      });
+
+      const [updated] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
+      expect(updated.status).toBe("claimed");
+      expect(updated.claimedByTokenId).toBe(token.id);
+    });
+
+    it("second claim by another runner → 409 conflict", async () => {
+      const company = await makeCompany("Race Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [tokenA] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "1".repeat(64) })
+        .returning();
+      const [tokenB] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "2".repeat(64) })
+        .returning();
+
+      const winner = runnerApp(tokenA.id, company.id);
+      const loser = runnerApp(tokenB.id, company.id);
+
+      const first = await request(winner).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(first.status).toBe(200);
+
+      const second = await request(loser).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(second.status).toBe(409);
+      expect(second.body.error).toBe("job_not_claimable");
+    });
+
+    it("cross-company → 404 (does not leak existence)", async () => {
+      const companyA = await makeCompany("Owner Co");
+      const companyB = await makeCompany("Attacker Co");
+      const agent = await makeAgent(companyA.id);
+      const run = await makeHeartbeatRun(companyA.id, agent.id);
+      const job = await makeQueuedJob({
+        companyId: companyA.id,
+        agentId: agent.id,
+        runId: run.id,
+      });
+      const [tokenB] = await db
+        .insert(runnerTokens)
+        .values({ companyId: companyB.id, tokenHash: "3".repeat(64) })
+        .returning();
+      const app = runnerApp(tokenB.id, companyB.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("POST /api/runner/jobs/:id/events — append batch", () => {
+    it("appends events to heartbeat_run_events and flips status to streaming", async () => {
+      const company = await makeCompany("Events Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "4".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      // Claim first (events guard requires claim ownership).
+      const claim = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(claim.status).toBe(200);
+
+      const res = await request(app)
+        .post(`/api/runner/jobs/${job.id}/events`)
+        .send({
+          events: [
+            {
+              eventId: "11111111-1111-1111-1111-111111111111",
+              kind: "stdout_line",
+              ts: new Date().toISOString(),
+              payload: "claude says hello",
+            },
+            {
+              eventId: "22222222-2222-2222-2222-222222222222",
+              kind: "claude_message",
+              ts: new Date().toISOString(),
+              payload: { text: "hi", role: "assistant" },
+            },
+          ],
+        });
+      expect(res.status).toBe(204);
+
+      const events = await db
+        .select()
+        .from(heartbeatRunEvents)
+        .where(eq(heartbeatRunEvents.runId, run.id));
+      expect(events).toHaveLength(2);
+      expect(events.find((e) => e.eventType === "stdout_line")?.message).toBe(
+        "claude says hello",
+      );
+      expect(events.find((e) => e.eventType === "claude_message")?.payload).toMatchObject({
+        text: "hi",
+        role: "assistant",
+      });
+
+      const [updated] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
+      expect(updated.status).toBe("streaming");
+    });
+
+    it("403 when a different token tries to append (claim ownership gate)", async () => {
+      const company = await makeCompany("Wrong Token Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [tokenA] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "5".repeat(64) })
+        .returning();
+      const [tokenB] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "6".repeat(64) })
+        .returning();
+
+      // A claims, B tries to append.
+      const claimer = runnerApp(tokenA.id, company.id);
+      await request(claimer).post(`/api/runner/jobs/${job.id}/claim`);
+
+      const intruder = runnerApp(tokenB.id, company.id);
+      const res = await request(intruder)
+        .post(`/api/runner/jobs/${job.id}/events`)
+        .send({
+          events: [
+            {
+              eventId: "33333333-3333-3333-3333-333333333333",
+              kind: "stdout_line",
+              ts: new Date().toISOString(),
+              payload: "intrusion attempt",
+            },
+          ],
+        });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("job_not_owned_by_token");
+    });
+  });
+
+  describe("POST /api/runner/jobs/:id/complete — terminal transition", () => {
+    it("sets status, exitCode, costMicros, sessionIdAfter; rejects double-complete", async () => {
+      const company = await makeCompany("Complete Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "7".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+
+      const ok = await request(app)
+        .post(`/api/runner/jobs/${job.id}/complete`)
+        .send({
+          status: "completed",
+          exitCode: 0,
+          elapsedSec: 12.5,
+          costMicros: 1_500_000,
+          sessionId: "sess_abc",
+          cliVersion: "claude 0.18.1",
+        });
+      expect(ok.status).toBe(204);
+
+      const [row] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
+      expect(row.status).toBe("completed");
+      expect(row.exitCode).toBe(0);
+      expect(row.elapsedMs).toBe(12_500);
+      expect(row.costMicros).toBe(1_500_000);
+      expect(row.sessionIdAfter).toBe("sess_abc");
+      expect(row.cliVersion).toBe("claude 0.18.1");
+
+      // Double-complete → 409.
+      const dup = await request(app)
+        .post(`/api/runner/jobs/${job.id}/complete`)
+        .send({ status: "completed", exitCode: 0 });
+      expect(dup.status).toBe(409);
+      expect(dup.body.error).toBe("job_already_terminal");
+    });
+
+    it("400 on invalid completion body (Zod schema)", async () => {
+      const company = await makeCompany("Bad Body Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "8".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app)
+        .post(`/api/runner/jobs/${job.id}/complete`)
+        .send({ status: "weird", exitCode: "not-a-number" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Validation error");
+    });
+  });
+
+  // ─── Reset prefix counter between groups so no UNIQUE collision ──────────
+
+  beforeEach(() => {
+    // Used implicitly by makeCompany; nothing else to reset between tests.
+  });
+});

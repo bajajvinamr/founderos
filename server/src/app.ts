@@ -54,6 +54,9 @@ import { adapterRoutes } from "./routes/adapters.js";
 import { byoKeyRoutes } from "./routes/byo-key.js";
 import { digestRoutes } from "./routes/digest.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
+import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
+import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
+import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { authWebhookRoutes } from "./routes/auth-webhook.js";
@@ -226,6 +229,14 @@ export async function createApp(
   }
   app.use(llmRoutes(db));
 
+  // Runner-token surface — outside the session-auth `api` Router so it doesn't
+  // pick up boardMutationGuard or session resolution. Behind its own bearer
+  // auth middleware (BYO-101). Gated by FOUNDEROS_BYO_RUNNER_ENABLED so it
+  // returns 404 (default not-found) until the flag flips on. ADR-011.
+  if (isByoRunnerEnabled()) {
+    app.use("/api/runner", runnerAuthMiddleware(db), runnerJobRoutes(db));
+  }
+
   // Mount API routes
   const api = Router();
   api.use(boardMutationGuard());
@@ -372,6 +383,12 @@ export async function createApp(
   );
   api.use(adapterRoutes());
   api.use(byoKeyRoutes(db));
+  // Token-management surface — issuance, revoke, status. Gated by the same
+  // flag as the runner-job surface so a half-flipped deploy can't expose
+  // token issuance without the runner endpoints existing.
+  if (isByoRunnerEnabled()) {
+    api.use(runnerTokenManagementRoutes(db));
+  }
   api.use(digestRoutes(db, { publicUrl: process.env.FOUNDEROS_PUBLIC_URL }));
   api.use(onboardingRoutes(db));
   api.use(
