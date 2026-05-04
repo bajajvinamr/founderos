@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { and, eq, gt, isNull } from "drizzle-orm";
-import { createDb, instanceUserRoles, invites } from "@founderos/db";
+import { createDb, instanceUserRoles, invites, authUsers } from "@founderos/db";
 import { inferBindModeFromHost } from "@founderos/shared";
 import { loadFounderOSEnvFile } from "../config/env.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
@@ -86,9 +86,14 @@ export async function bootstrapCeoInvite(opts: {
     };
   };
   try {
+    // Council 2026-05-04: INNER JOIN authUsers so an orphan instance_admin
+    // row (user_id pointing at a user that was deleted or never mirrored)
+    // doesn't trigger the "already has an admin" guard. Without this, the
+    // CLI silently no-ops in exactly the failure mode it's meant to recover.
     const existingAdminCount = await db
-      .select()
+      .select({ id: instanceUserRoles.id })
       .from(instanceUserRoles)
+      .innerJoin(authUsers, eq(instanceUserRoles.userId, authUsers.id))
       .where(eq(instanceUserRoles.role, "instance_admin"))
       .then((rows) => rows.length);
 
