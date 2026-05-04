@@ -85,6 +85,7 @@ import { buildExternalAdapters } from "./plugin-loader.js";
 import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+import { createByoRunnerAdapter as byoRunnerCreate } from "./byo-runner/index.js";
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
@@ -277,6 +278,17 @@ const externalAdaptersReady: Promise<void> = (async () => {
  */
 export function waitForExternalAdapters(): Promise<void> {
   return externalAdaptersReady;
+}
+
+/**
+ * BYO Runner registration (ADR-011, BYO-103). Conditional on
+ * FOUNDEROS_BYO_RUNNER_ENABLED. Called from app.ts at startup so the
+ * adapter sees the production Db handle.
+ *
+ * Idempotent — safe to call from tests that flip the flag in setup.
+ */
+export function registerByoRunnerAdapter(db: import("@founderos/db").Db): void {
+  registerServerAdapter(byoRunnerCreate(db));
 }
 
 export function registerServerAdapter(adapter: ServerAdapterModule): void {

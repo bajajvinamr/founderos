@@ -797,8 +797,19 @@ export async function startServer(): Promise<StartedServer> {
   // Wait for external adapters to finish loading before accepting requests.
   // Without this, adapter type validation (assertKnownAdapterType) would
   // reject valid external adapter types during the startup loading window.
-  const { waitForExternalAdapters } = await import("./adapters/registry.js");
+  const { waitForExternalAdapters, registerByoRunnerAdapter } = await import(
+    "./adapters/registry.js"
+  );
   await waitForExternalAdapters();
+
+  // BYO Runner (ADR-011, BYO-103): conditional registration. The adapter
+  // type is in BUILTIN_ADAPTER_TYPES so existing rows validate, but the
+  // execute() path is only mounted when the flag is on.
+  const { isByoRunnerEnabled } = await import("./lib/byo-runner-flag.js");
+  if (isByoRunnerEnabled()) {
+    registerByoRunnerAdapter(db);
+    logger.info("[byo-runner] adapter registered (FOUNDEROS_BYO_RUNNER_ENABLED=1)");
+  }
 
   await new Promise<void>((resolveListen, rejectListen) => {
     const onError = (err: Error) => {

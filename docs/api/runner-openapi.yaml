@@ -1,0 +1,506 @@
+openapi: 3.0.3
+info:
+  title: FounderOS Runner API
+  version: 1.0.0
+  description: |
+    Endpoints used by `@founderos/runner` (the local-execution thin runner) to
+    poll for work, stream agent execution events, and report completion.
+
+    Two auth schemes:
+      - `sessionAuth`  — admin/owner web session (cookie-based) for token
+        management endpoints.
+      - `runnerToken`  — `Authorization: Bearer fos_<32-char>` for runner-side
+        endpoints. Token lifecycle: issued via POST /companies/:id/runner-tokens,
+        hashed at rest (sha256), revoked via DELETE.
+
+    All error responses follow the FounderOS envelope: `{ error: string,
+    requestId: string }`. The same `requestId` appears in the
+    `x-request-id` response header and in server logs.
+
+    See ADR-011 for the architectural rationale.
+  contact:
+    name: FounderOS
+    url: https://founderos.fly.dev
+
+servers:
+  - url: https://founderos.fly.dev
+    description: Production
+  - url: http://localhost:3100
+    description: Local dev (PGlite)
+
+tags:
+  - name: runner-tokens
+    description: Token issuance and revocation (session-auth, admin-only)
+  - name: runner-jobs
+    description: Job lifecycle (runner-token auth)
+  - name: runner-status
+    description: Liveness for the dashboard
+
+paths:
+  /api/companies/{companyId}/runner-tokens:
+    post:
+      tags: [runner-tokens]
+      summary: Issue a new runner token
+      description: |
+        Generates a `fos_<32-char>` bearer token, hashes it server-side (sha256),
+        and returns the plaintext value EXACTLY ONCE. The token is scoped to a
+        single company; presenting it on `/api/runner/jobs/*` resolves to that
+        company. Revoke via DELETE.
+
+        Audit log: `runner.token.issued` row written before response.
+      operationId: issueRunnerToken
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CompanyId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                  maxLength: 64
+                  description: Human-readable label for the token (shown in UI)
+                  example: "Vinamr's MacBook"
+      responses:
+        "201":
+          description: Token created; plaintext shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuedRunnerToken"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/companies/{companyId}/runner-tokens/{tokenId}:
+    delete:
+      tags: [runner-tokens]
+      summary: Revoke a runner token
+      description: |
+        Sets `revokedAt = now()`. Subsequent uses of the token return 401.
+        Audit log: `runner.token.revoked`.
+      operationId: revokeRunnerToken
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CompanyId"
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204": { description: Revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/companies/{companyId}/runner-status:
+    get:
+      tags: [runner-status]
+      summary: Liveness for the company's runners
+      description: |
+        Returns last-seen timestamps per active token. Used by the dashboard
+        to render the green/yellow/red liveness dot.
+      operationId: getRunnerStatus
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CompanyId"
+      responses:
+        "200":
+          description: Per-token liveness array
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerStatus"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runner/jobs/next:
+    get:
+      tags: [runner-jobs]
+      summary: Long-poll for the next claimable job
+      description: |
+        Server holds the connection up to 30s waiting for a job. Returns 200
+        with the job descriptor on a hit, 204 No Content on timeout. Updates
+        `runner_tokens.lastSeenAt` on every poll for liveness tracking.
+
+        The job is NOT claimed by this call — runner must POST /claim next.
+        This separation lets the cloud surface jobs to multiple runners
+        without committing them; the runner with the lowest network latency
+        wins the claim race.
+      operationId: getNextRunnerJob
+      security:
+        - runnerToken: []
+      responses:
+        "200":
+          description: Job available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerJobDescriptor"
+        "204": { description: No job within 30s; runner should re-poll }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/runner/jobs/{jobId}/claim:
+    post:
+      tags: [runner-jobs]
+      summary: Atomic claim of a queued job
+      description: |
+        Atomic UPDATE: `SET status='claimed', claimedByTokenId=?, claimedAt=now()
+        WHERE id=? AND status='queued'`. Returns 409 if another runner won the
+        race or the job was cancelled. On success, returns the full job
+        payload including the prompt, sessionId hint, and runtime config.
+
+        Audit log: `runner.job.claimed`.
+      operationId: claimRunnerJob
+      security:
+        - runnerToken: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Claimed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerJobPayload"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Race lost or job not in claimable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/runner/jobs/{jobId}/events:
+    post:
+      tags: [runner-jobs]
+      summary: Append stream-JSON events from claude execution
+      description: |
+        Append-only event log for a claimed job. Idempotent on `eventId`
+        (runner-generated UUID). Server-side `seq` is monotonically increasing
+        per job. Rejects events for jobs not claimed by the presenting token.
+
+        Batching: runner SHOULD batch events with a 50ms window or 32-event cap
+        to avoid per-line HTTP overhead.
+      operationId: appendRunnerJobEvents
+      security:
+        - runnerToken: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunnerEventBatch"
+      responses:
+        "204": { description: Events accepted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Job not claimed by this token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Job already in terminal state (completed/failed/cancelled)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/runner/jobs/{jobId}/complete:
+    post:
+      tags: [runner-jobs]
+      summary: Mark job completed/failed
+      description: |
+        Terminal state transition. Persists exit code, cost (in micros), and
+        optional session ID (for `--resume` continuity on next heartbeat).
+        Rejects double-completion. On success, the heartbeat scheduler reads
+        the events and finalizes the run record.
+
+        Audit log: `runner.job.completed` (success) or `runner.job.failed`.
+      operationId: completeRunnerJob
+      security:
+        - runnerToken: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunnerJobCompletion"
+      responses:
+        "204": { description: Completion recorded }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Job not claimed by this token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Job already completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: founderos.session
+      description: |
+        Session cookie set by the auth flow. Resolves to a userId; access
+        is gated by company-scoped permissions (instance_admin or owner).
+    runnerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: fos_<32-char>
+      description: |
+        Long-lived bearer token issued by POST /companies/:id/runner-tokens.
+        Hashed at rest (sha256). Constant-time compare on lookup.
+
+  parameters:
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: string
+          example: invalid_runner_token
+        requestId:
+          type: string
+          example: 6f9619ff-8b86-4c45-bbf2-7c09b6f5e2a1
+
+    IssuedRunnerToken:
+      type: object
+      required: [tokenId, token, label, createdAt]
+      properties:
+        tokenId:
+          type: string
+          format: uuid
+          description: Stable identifier for the token (used in revoke + audit logs)
+        token:
+          type: string
+          pattern: "^fos_[A-Za-z0-9]{32}$"
+          description: Plaintext token. SHOWN ONCE. Never logged. Server stores sha256 hash.
+          example: fos_8x7y6z5w4v3u2t1s0r9q8p7o6n5m4l3k
+        label:
+          type: string
+          example: "Vinamr's MacBook"
+        createdAt:
+          type: string
+          format: date-time
+
+    RunnerTokenSummary:
+      type: object
+      required: [tokenId, label, createdAt, lastSeenAt, online]
+      properties:
+        tokenId:
+          type: string
+          format: uuid
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+        online:
+          type: boolean
+          description: True if lastSeenAt within 30s
+
+    RunnerStatus:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunnerTokenSummary"
+
+    RunnerJobDescriptor:
+      type: object
+      description: Lightweight payload for the long-poll. Does NOT include the prompt — runner must claim to fetch it.
+      required: [jobId, agentId, agentName, createdAt]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        agentId:
+          type: string
+          format: uuid
+        agentName:
+          type: string
+          example: Sarah
+        createdAt:
+          type: string
+          format: date-time
+
+    RunnerJobPayload:
+      type: object
+      description: Full job payload returned on successful claim. Contains the prompt and runtime config the runner needs to spawn claude.
+      required: [jobId, agentId, prompt, runtimeConfig]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        agentId:
+          type: string
+          format: uuid
+        agentName:
+          type: string
+        prompt:
+          type: string
+          description: Fully rendered prompt (template + bootstrap + wake)
+        sessionId:
+          type: string
+          nullable: true
+          description: For --resume; null on first run for an agent
+        runtimeConfig:
+          type: object
+          properties:
+            model:
+              type: string
+              nullable: true
+              example: claude-opus-4-7
+            maxTurns:
+              type: integer
+              nullable: true
+              minimum: 1
+            timeoutSec:
+              type: integer
+              minimum: 1
+              maximum: 3600
+              default: 600
+            instructionsFileContent:
+              type: string
+              nullable: true
+              description: |
+                Base64-encoded contents of the agent instructions file. Runner
+                materializes to a temp file and passes via
+                --append-system-prompt-file.
+        promptHash:
+          type: string
+          description: sha256 of prompt; runner echoes back in events for tamper detection
+        addDirs:
+          type: array
+          items: { type: string }
+          description: Cloud-suggested --add-dir entries (runner may filter)
+
+    RunnerEventBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items:
+            $ref: "#/components/schemas/RunnerEvent"
+
+    RunnerEvent:
+      type: object
+      required: [eventId, kind, ts]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Runner-generated UUID for idempotency
+        kind:
+          type: string
+          enum: [stdout_line, stderr_line, claude_message, claude_tool_use, claude_tool_result, claude_result]
+        ts:
+          type: string
+          format: date-time
+        payload:
+          oneOf:
+            - type: object   # claude_message / tool_use / etc — passes through stream-json
+            - type: string   # stdout_line / stderr_line raw text
+
+    RunnerJobCompletion:
+      type: object
+      required: [status, exitCode]
+      properties:
+        status:
+          type: string
+          enum: [completed, failed, cancelled]
+        exitCode:
+          type: integer
+          description: Process exit code; 0 for success
+        signal:
+          type: string
+          nullable: true
+          example: SIGTERM
+        elapsedSec:
+          type: number
+          minimum: 0
+        costMicros:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Cost in micro-USD (1e-6 USD), parsed from claude stream-json result.cost
+        sessionId:
+          type: string
+          nullable: true
+          description: claude --resume identifier for next heartbeat
+        cliVersion:
+          type: string
+          description: Output of `claude --version` at runner startup
+        errorMessage:
+          type: string
+          nullable: true
+          description: Surfaced to UI on status=failed
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid auth
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated but not permitted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
