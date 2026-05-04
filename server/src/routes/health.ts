@@ -1,11 +1,19 @@
 import { Router } from "express";
 import type { Db } from "@founderos/db";
 import { and, count, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
-import { heartbeatRuns, instanceUserRoles, invites, companies } from "@founderos/db";
+import {
+  heartbeatRuns,
+  instanceUserRoles,
+  invites,
+  companies,
+  runnerJobs,
+  runnerTokens,
+} from "@founderos/db";
 import type { DeploymentExposure, DeploymentMode } from "@founderos/shared";
 import { readPersistedDevServerStatus, toDevServerHealthStatus } from "../dev-server-status.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { LOCAL_BOARD_USER_ID } from "../auth/post-signup-hook.js";
+import { isByoRunnerEnabled } from "../lib/byo-runner-flag.js";
 import { serverVersion } from "../version.js";
 
 export function healthRoutes(
@@ -282,7 +290,89 @@ export function healthRoutes(
       });
     }
 
-    // 5. Sentry wired: check DSN is non-empty
+    // 5. Runner metrics — BYO-110. Aggregate counts only (no per-token detail)
+    //    so the unauthenticated surface doesn't leak per-tenant info beyond
+    //    what /deep already exposes. Skipped entirely when the BYO runner
+    //    flag is off.
+    if (isByoRunnerEnabled()) {
+      const runnerStart = Date.now();
+      try {
+        if (!db) {
+          checks.push({
+            name: "runner_metrics",
+            status: "skipped",
+            latencyMs: 0,
+            detail: "no db instance",
+          });
+        } else {
+          // Single round-trip: aggregate-by-status for jobs + active/online
+          // counts for tokens. The status sub-counts use SQL filter clauses
+          // so we only hit the table once each.
+          const [jobAgg] = (await Promise.race([
+            db.execute(sql<{
+              queued: number;
+              claimed: number;
+              streaming: number;
+            }>`
+              SELECT
+                COALESCE(SUM(CASE WHEN ${runnerJobs.status} = 'queued'    THEN 1 ELSE 0 END), 0)::int AS queued,
+                COALESCE(SUM(CASE WHEN ${runnerJobs.status} = 'claimed'   THEN 1 ELSE 0 END), 0)::int AS claimed,
+                COALESCE(SUM(CASE WHEN ${runnerJobs.status} = 'streaming' THEN 1 ELSE 0 END), 0)::int AS streaming
+              FROM ${runnerJobs}
+            `),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("runner metrics timeout")), 500),
+            ),
+          ])) as unknown as Array<{ queued: number; claimed: number; streaming: number }>;
+
+          // Online window matches the auth middleware's lastSeenAt debounce
+          // (30 s). Tokens lookup is independent — a runner with no jobs to
+          // process still polls /jobs/next and counts as online. Pass the
+          // ISO string explicitly: drizzle's `sql` template doesn't coerce
+          // Date through the embedded-postgres (pglite) driver, even though
+          // the production driver does — keeps the same code path green in
+          // both test and prod.
+          const onlineSinceIso = new Date(Date.now() - 30_000).toISOString();
+          const [tokenAgg] = (await db.execute(sql<{
+            active: number;
+            online: number;
+          }>`
+            SELECT
+              COALESCE(SUM(CASE WHEN ${runnerTokens.revokedAt} IS NULL THEN 1 ELSE 0 END), 0)::int AS active,
+              COALESCE(SUM(CASE WHEN ${runnerTokens.revokedAt} IS NULL
+                                  AND ${runnerTokens.lastSeenAt} >= ${onlineSinceIso}::timestamptz
+                                THEN 1 ELSE 0 END), 0)::int AS online
+            FROM ${runnerTokens}
+          `)) as unknown as Array<{ active: number; online: number }>;
+
+          checks.push({
+            name: "runner_metrics",
+            status: "ok",
+            latencyMs: Date.now() - runnerStart,
+            detail: `jobs:queued=${jobAgg.queued},claimed=${jobAgg.claimed},streaming=${jobAgg.streaming}; tokens:active=${tokenAgg.active},online=${tokenAgg.online}`,
+          });
+        }
+      } catch (error) {
+        checks.push({
+          name: "runner_metrics",
+          status: "fail",
+          latencyMs: Date.now() - runnerStart,
+          detail: error instanceof Error ? error.message : "unknown error",
+        });
+        // Don't downgrade overall — runner metrics are observability, not
+        // a load-bearing capability. Failing tells ops to look but doesn't
+        // imply the API is degraded for end users.
+      }
+    } else {
+      checks.push({
+        name: "runner_metrics",
+        status: "skipped",
+        latencyMs: 0,
+        detail: "FOUNDEROS_BYO_RUNNER_ENABLED not set",
+      });
+    }
+
+    // 6. Sentry wired: check DSN is non-empty
     const sentryStart = Date.now();
     if (process.env.SENTRY_DSN) {
       checks.push({
