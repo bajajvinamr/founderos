@@ -1,10 +1,68 @@
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+/**
+ * Hard-fail the build if Supabase env vars are missing OR look like the
+ * placeholder sentinel that bricked production on 2026-05-04.
+ *
+ * Belt + suspenders alongside the runtime guard in `src/lib/supabase.ts`:
+ *  - Runtime guard catches the case where someone bypasses the build (rare).
+ *  - Build-time guard catches every CI/Docker/local build before anything
+ *    ships. The cost of a build failure is "you see the error in your
+ *    terminal." The cost of a silent placeholder bundle in prod is what
+ *    we just lived through.
+ *
+ * Skip in test/dev to keep `pnpm test` and `pnpm dev` flowing without
+ * hard-coded creds. Production builds (`vite build`) and `mode === "production"`
+ * are where the gate fires.
+ */
+function supabaseConfigGuard(): PluginOption {
+  return {
+    name: "founderos:supabase-config-guard",
+    apply: "build",
+    config(_userConfig, env) {
+      if (env.mode !== "production") return;
+      const url = (process.env.VITE_SUPABASE_URL ?? "").trim();
+      const anonKey = (process.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
+      const errors: string[] = [];
+      if (!url) errors.push("VITE_SUPABASE_URL is not set");
+      if (!anonKey) errors.push("VITE_SUPABASE_ANON_KEY is not set");
+      if (url.includes("placeholder.supabase.co")) {
+        errors.push(`VITE_SUPABASE_URL is the literal placeholder "${url}"`);
+      }
+      if (anonKey === "placeholder-anon-key" || anonKey.startsWith("placeholder")) {
+        errors.push("VITE_SUPABASE_ANON_KEY is the literal placeholder string");
+      }
+      if (errors.length > 0) {
+        const msg = [
+          "",
+          "─────────────────────────────────────────────────────────",
+          "  FounderOS UI build halted: bad Supabase config",
+          "─────────────────────────────────────────────────────────",
+          ...errors.map((e) => `  • ${e}`),
+          "",
+          "  Production builds MUST embed real Supabase credentials at",
+          "  build time. The Fly Dockerfile passes them as build args:",
+          "",
+          "     fly deploy --build-arg VITE_SUPABASE_URL=... \\",
+          "                --build-arg VITE_SUPABASE_ANON_KEY=...",
+          "",
+          "  Local production builds need them in the shell env or .env.production.",
+          "  See docs/runbooks/supabase-config.md for the exact procedure.",
+          "─────────────────────────────────────────────────────────",
+        ].join("\n");
+        // Throwing here aborts the Vite build with a clear message. Any
+        // CI/Docker layer that runs `vite build` will exit non-zero.
+        throw new Error(msg);
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [supabaseConfigGuard(), react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

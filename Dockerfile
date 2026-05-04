@@ -38,6 +38,35 @@ FROM base AS build
 WORKDIR /app
 COPY --from=deps /app /app
 COPY . .
+
+# Vite reads `import.meta.env.VITE_*` at build time and inlines the values into
+# the JS bundle. These ARGs come from `fly deploy --build-arg ...` (see
+# .github/workflows/deploy-prod.yml or the manual command in
+# docs/runbooks/supabase-config.md). Setting them as ENV makes them visible to
+# the `pnpm --filter @founderos/ui build` process spawned below.
+#
+# Why every VITE_ var is listed explicitly: ARG values are NOT inherited as ENV
+# unless we assign them. If you add a new VITE_* env, add an ARG+ENV pair here
+# AND wire it through the deploy command — otherwise it'll be empty in the
+# bundle and the runtime guard in src/lib/supabase.ts will scream.
+#
+# `vite.config.ts` has a build-time guard that hard-fails the build if the
+# Supabase ARGs are missing or look like the placeholder sentinel. So a
+# Dockerfile build with no --build-arg won't silently ship a broken bundle —
+# it'll exit non-zero with a clear error message.
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_SENTRY_DSN
+ARG VITE_SENTRY_TRACES_SAMPLE_RATE
+ARG VITE_BUILD_GIT_SHA
+ARG VITE_BUILD_TIME
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+ENV VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
+ENV VITE_SENTRY_TRACES_SAMPLE_RATE=${VITE_SENTRY_TRACES_SAMPLE_RATE}
+ENV VITE_BUILD_GIT_SHA=${VITE_BUILD_GIT_SHA}
+ENV VITE_BUILD_TIME=${VITE_BUILD_TIME}
+
 RUN pnpm --filter @founderos/ui build
 RUN pnpm --filter @founderos/plugin-sdk build
 RUN pnpm --filter @founderos/server build

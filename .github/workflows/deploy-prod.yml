@@ -99,8 +99,27 @@ jobs:
         timeout-minutes: 15
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          # VITE_* values are baked into the SPA bundle at build time. They
+          # are NOT secrets in the Fly-secrets sense — the anon key is safe
+          # to ship in a public client per Supabase RLS design — but we still
+          # source them from GitHub Secrets so they don't litter the repo.
+          # If either is missing, the vite build-time guard hard-fails with
+          # an explicit error message (see ui/vite.config.ts).
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: |
-          flyctl deploy --app "$FLY_APP" --ha=false --remote-only
+          if [[ -z "$VITE_SUPABASE_URL" || -z "$VITE_SUPABASE_ANON_KEY" ]]; then
+            echo "::error::VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY missing in GitHub secrets — refusing to deploy a broken bundle"
+            exit 1
+          fi
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          flyctl deploy --app "$FLY_APP" --ha=false --remote-only \
+            --build-arg "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" \
+            --build-arg "VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}" \
+            --build-arg "VITE_SENTRY_DSN=${VITE_SENTRY_DSN}" \
+            --build-arg "VITE_BUILD_GIT_SHA=${GITHUB_SHA}" \
+            --build-arg "VITE_BUILD_TIME=${BUILD_TIME}"
           digest="$(flyctl image show --app "$FLY_APP" --json | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d[0].get("Digest","") if isinstance(d,list) else d.get("Digest",""))' || echo "")"
           version="$(flyctl releases list --app "$FLY_APP" --json | python3 -c 'import json,sys;r=json.load(sys.stdin);print(r[0]["Version"] if r else "")' || echo "")"
           echo "image_digest=${digest}" >> "$GITHUB_OUTPUT"
@@ -171,6 +190,24 @@ jobs:
             echo "status=pass" >> "$GITHUB_OUTPUT"
           else
             echo "status=fail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Verify SPA bundle has no placeholder.supabase.co
+        id: bundle-check
+        timeout-minutes: 2
+        run: |
+          # Catches the 2026-05-04 incident class: deployed bundle that still
+          # contains the literal placeholder Supabase URL because VITE_* build
+          # args weren't passed. Fail the deploy (and trigger rollback) if any
+          # JS asset on the live origin contains the sentinel string.
+          set +e
+          chmod +x scripts/ci/check-deployed-supabase.sh
+          scripts/ci/check-deployed-supabase.sh "$FLY_URL"
+          rc=$?
+          set -e
+          if [[ "$rc" -ne 0 ]]; then
+            echo "::error::Deployed bundle contains placeholder.supabase.co — auth WILL be broken in prod"
             exit 1
           fi
 
