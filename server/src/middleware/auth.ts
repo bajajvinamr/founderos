@@ -66,6 +66,7 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
   async function maybeBootstrapNewUser(
     userId: string,
     email: string | null | undefined,
+    name: string | null | undefined,
     initial: {
       roleRow: { id: string } | null;
       memberships: Array<{ companyId: string }>;
@@ -77,7 +78,7 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     if (initial.roleRow || !email) return initial;
     try {
       const { runPostSignupBootstrap } = await import("../auth/post-signup-hook.js");
-      const bootstrap = await runPostSignupBootstrap(db, { userId, email });
+      const bootstrap = await runPostSignupBootstrap(db, { userId, email, name });
       if (bootstrap.promotedToInstanceAdmin || bootstrap.consumedInvite) {
         const [roleRow, memberships] = await fetchBoardActorRows(userId);
         return { roleRow, memberships };
@@ -118,10 +119,15 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
 
     const userId = session.user.id;
     const [roleRowRaw, membershipsRaw] = await fetchBoardActorRows(userId);
-    const { roleRow, memberships } = await maybeBootstrapNewUser(userId, session.user.email, {
-      roleRow: roleRowRaw,
-      memberships: membershipsRaw,
-    });
+    const { roleRow, memberships } = await maybeBootstrapNewUser(
+      userId,
+      session.user.email,
+      session.user.name,
+      {
+        roleRow: roleRowRaw,
+        memberships: membershipsRaw,
+      },
+    );
     req.actor = {
       type: "board",
       userId,
@@ -157,10 +163,15 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
         if (session?.user?.id) {
           const userId = session.user.id;
           const [roleRowRaw, membershipsRaw] = await fetchBoardActorRows(userId);
-          const { roleRow, memberships } = await maybeBootstrapNewUser(userId, session.user.email, {
-            roleRow: roleRowRaw,
-            memberships: membershipsRaw,
-          });
+          const { roleRow, memberships } = await maybeBootstrapNewUser(
+            userId,
+            session.user.email,
+            session.user.name,
+            {
+              roleRow: roleRowRaw,
+              memberships: membershipsRaw,
+            },
+          );
           req.actor = {
             type: "board",
             userId,

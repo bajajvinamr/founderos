@@ -1,6 +1,6 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
-import { instanceUserRoles } from "@founderos/db";
+import { instanceUserRoles, authUsers } from "@founderos/db";
 import type { EmailSender } from "../services/email-sender.js";
 import { buildWelcomeEmailText, buildWelcomeEmailHtml } from "../services/email-templates.js";
 import { instanceInviteService } from "../services/instance-invite.js";
@@ -48,12 +48,42 @@ export interface PostSignupBootstrapResult {
  */
 export async function runPostSignupBootstrap(
   db: Db,
-  input: { userId: string; email: string },
+  input: { userId: string; email: string; name?: string | null },
 ): Promise<PostSignupBootstrapResult> {
   const result: PostSignupBootstrapResult = {
     promotedToInstanceAdmin: false,
     consumedInvite: null,
   };
+
+  // Mirror Supabase auth identity into the local public."user" table.
+  // Council 2026-05-04: pre-fix, signups went through Supabase JWT-only and
+  // never landed in "user", so any code path that read by user.id (welcome
+  // emails, weekly wraps, daily digests, board API key auth) silently saw
+  // an empty mirror. Idempotent via onConflictDoNothing — first-write-wins
+  // so subsequent JWT name changes don't clobber an explicit profile edit.
+  if (input.email && input.email.length > 0) {
+    try {
+      const now = new Date();
+      const fallbackName =
+        (input.name ?? "").trim() || input.email.split("@")[0] || "FounderOS User";
+      await db
+        .insert(authUsers)
+        .values({
+          id: input.userId,
+          name: fallbackName,
+          email: input.email,
+          emailVerified: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: authUsers.id });
+    } catch (err) {
+      logger.warn(
+        { err, userId: input.userId, email: input.email },
+        "post-signup bootstrap: authUsers mirror upsert failed (non-fatal)",
+      );
+    }
+  }
 
   const invites = instanceInviteService(db);
 
@@ -123,9 +153,16 @@ export async function runPostSignupBootstrap(
         }
 
         // Re-read inside the lock so this is the authoritative count.
+        // Council 2026-05-04: INNER JOIN authUsers so orphan role rows
+        // (user_id pointing at a deleted/never-mirrored user) DON'T count
+        // as existing admins. Pre-fix, a single stale orphan row blocked
+        // every founder forever — the entire production-bricking bug.
+        // Belt-and-suspenders alongside the FK + ON DELETE CASCADE on
+        // instance_user_roles.user_id added in the same PR.
         const existingHumanAdmin = await tx
           .select({ userId: instanceUserRoles.userId })
           .from(instanceUserRoles)
+          .innerJoin(authUsers, eq(instanceUserRoles.userId, authUsers.id))
           .where(
             and(
               eq(instanceUserRoles.role, "instance_admin"),

@@ -68,6 +68,8 @@ Current deploys:
 
 - **`runner_tokens.lastSeenAt` is what powers the pill liveness, not a heartbeat row.** The runner-auth middleware updates `lastSeenAt = now()` on every authenticated request. "Online" = `lastSeenAt < 30s ago`. Don't add an explicit heartbeat endpoint; long-poll traffic IS the heartbeat.
 
+- **Two-database split: Supabase = auth identity, Fly Postgres = app data.** Supabase manages `auth.users` (JWT issuer, OAuth providers, email confirmation). Fly Managed Postgres holds `public."user"` (the app-side mirror) plus everything else. The two are NOT the same DB — `auth.users` is unreachable from Fly MPG. The bridge is `runPostSignupBootstrap` in `server/src/auth/post-signup-hook.ts`, which upserts into `public."user"` on the first authenticated request before granting roles. Pre-2026-05-04, the upsert was missing — Supabase signups never mirrored into `public."user"`, and an orphan `instance_user_roles` row bricked production onboarding. The mirror upsert + FK + ON DELETE CASCADE on `instance_user_roles.user_id` is the structural fix; see `docs/adr/` if you need to revisit. Anything that joins on `public."user"` (board API key auth, weekly wraps, daily digests, welcome emails) depends on this mirror existing — don't bypass it.
+
 ## Where things live
 
 - ADRs: `docs/adr/` (10 entries as of 2026-04-23)

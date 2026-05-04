@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, ne } from "drizzle-orm";
 import {
+  authUsers,
   createDb,
   instanceUserRoles,
 } from "@founderos/db";
@@ -48,7 +49,10 @@ describeEmbeddedPostgres("runPostSignupBootstrap — first-admin-wins atomicity"
   afterEach(async () => {
     // Strip every admin row between cases — including the synthetic local
     // principal — so each test starts from a clean "no admin yet" state.
+    // Role rows go first so the FK on instance_user_roles.user_id doesn't
+    // block the authUsers wipe.
     await db.delete(instanceUserRoles);
+    await db.delete(authUsers);
   });
 
   afterAll(async () => {
@@ -116,6 +120,18 @@ describeEmbeddedPostgres("runPostSignupBootstrap — first-admin-wins atomicity"
 
   it("LOCAL_BOARD_USER_ID is not counted as a human admin", async () => {
     // Seed the synthetic principal — represents local_trusted board access.
+    // ensureLocalTrustedBoardPrincipal in server/src/index.ts seeds both
+    // the authUsers and instanceUserRoles rows; replicate that here so the
+    // FK on instance_user_roles.user_id is satisfied.
+    const now = new Date();
+    await db.insert(authUsers).values({
+      id: LOCAL_BOARD_USER_ID,
+      name: "Board",
+      email: "local@founderos.local",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     await db.insert(instanceUserRoles).values({
       userId: LOCAL_BOARD_USER_ID,
       role: "instance_admin",
@@ -140,5 +156,102 @@ describeEmbeddedPostgres("runPostSignupBootstrap — first-admin-wins atomicity"
     const r2 = await runPostSignupBootstrap(db, { userId: "founder", email: "f@example.com" });
     expect(r2.promotedToInstanceAdmin).toBe(false);
     expect(await countHumanAdmins()).toBe(1);
+  });
+
+  // Council 2026-05-04 — auth-mirror PR.
+  //
+  // Pre-fix, Supabase signups never landed in public."user" — every code
+  // path that joined on authUsers (welcome emails, weekly wraps, board API
+  // key lookup) silently saw an empty mirror. Bootstrap now upserts the
+  // user row as its first step so the rest of the app has identity to
+  // join against.
+  it("mirror upsert: first signup creates a public.\"user\" row from JWT identity", async () => {
+    await runPostSignupBootstrap(db, {
+      userId: "founder-mirror-1",
+      email: "founder@example.com",
+      name: "Founder Mirror",
+    });
+
+    const userRow = await db
+      .select({
+        id: authUsers.id,
+        email: authUsers.email,
+        name: authUsers.name,
+      })
+      .from(authUsers)
+      .where(eq(authUsers.id, "founder-mirror-1"))
+      .then((rows) => rows[0] ?? null);
+
+    expect(userRow).not.toBeNull();
+    expect(userRow?.email).toBe("founder@example.com");
+    expect(userRow?.name).toBe("Founder Mirror");
+  });
+
+  it("mirror upsert: missing name falls back to email local-part", async () => {
+    await runPostSignupBootstrap(db, {
+      userId: "founder-mirror-2",
+      email: "noname@example.com",
+    });
+
+    const userRow = await db
+      .select({ name: authUsers.name })
+      .from(authUsers)
+      .where(eq(authUsers.id, "founder-mirror-2"))
+      .then((rows) => rows[0] ?? null);
+
+    expect(userRow?.name).toBe("noname");
+  });
+
+  it("mirror upsert: re-running does NOT clobber an explicit name set later", async () => {
+    // First signup with a JWT-derived name.
+    await runPostSignupBootstrap(db, {
+      userId: "founder-mirror-3",
+      email: "later@example.com",
+      name: "JWT Default",
+    });
+
+    // User goes to their profile and sets a custom name.
+    await db
+      .update(authUsers)
+      .set({ name: "User Picked This" })
+      .where(eq(authUsers.id, "founder-mirror-3"));
+
+    // Replay (e.g., second login fires the bootstrap path again).
+    await runPostSignupBootstrap(db, {
+      userId: "founder-mirror-3",
+      email: "later@example.com",
+      name: "JWT Default",
+    });
+
+    const userRow = await db
+      .select({ name: authUsers.name })
+      .from(authUsers)
+      .where(eq(authUsers.id, "founder-mirror-3"))
+      .then((rows) => rows[0] ?? null);
+
+    // onConflictDoNothing means the user-picked name survives.
+    expect(userRow?.name).toBe("User Picked This");
+  });
+
+  it("FK cascade: deleting a user row wipes their role row automatically", async () => {
+    await runPostSignupBootstrap(db, {
+      userId: "founder-cascade",
+      email: "cascade@example.com",
+    });
+    expect(await countHumanAdmins()).toBe(1);
+
+    // Simulate a user being removed from the auth source. Pre-fix, the
+    // role row would survive as an orphan and brick first-user-wins
+    // promotion for everyone after. Post-fix, the FK wipes it cleanly.
+    await db.delete(authUsers).where(eq(authUsers.id, "founder-cascade"));
+
+    expect(await countHumanAdmins()).toBe(0);
+
+    // The next founder can now be promoted because no orphan blocks them.
+    const result = await runPostSignupBootstrap(db, {
+      userId: "next-founder",
+      email: "next@example.com",
+    });
+    expect(result.promotedToInstanceAdmin).toBe(true);
   });
 });
