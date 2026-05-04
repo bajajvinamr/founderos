@@ -1,6 +1,71 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-03 by Claude (multi-domain council audit + Phase 0 fixes)_
+_Last updated: 2026-05-04 by Claude (BYO Runner sprint — M1/M2/M3 shipped)_
+
+## 2026-05-04 — BYO Runner sprint (ADR-011) — M1/M2/M3 merged to main, M4 manual smoke
+
+The 7-month-old "Fly can't run AI agents because the CLIs aren't in the
+container" gap is closed. Cloud control plane stays on Fly+Supabase;
+agent execution moves to a thin npm package the founder runs locally.
+
+### Merged
+
+- **#23 — Sprint 1 BE** (`ab9ad05`): BYO-101→110. Token auth middleware,
+  `runner_tokens` + `runner_jobs` migrations, `byo_runner` adapter family,
+  REST endpoints (`/api/runner/jobs/*` + `/api/companies/:id/runner-tokens`),
+  onboarding flag-aware adapter selection, ALS-propagated runner identity
+  through pino + Sentry, deep health check for runner metrics. 22 files
+  changed, 1963 / -30 lines.
+- **#24 — M2 runner package** (`90d2c52`): `@founderos/runner` npm package.
+  Long-poll → claim → spawn `claude --print --output-format stream-json` →
+  events flush (50ms / 32 evt) → complete. Pure unit tests (32 passing)
+  cover everything below the CLI boundary.
+- **#25 — M3 UI** (`2886c79`): `RunnerStatusPill` (10s liveness poll) +
+  `RunnerInstallDialog` (issue / list / revoke; plaintext shown ONCE
+  with copy banner + ready-to-paste install snippet) wired into the
+  Agents page. 16 component tests passing.
+
+### M4 — Manual smoke (this is the ship gate, not a CI run)
+
+Real `claude` CLI smoke is documented at `docs/runbooks/byo-runner-smoke.md`.
+Why manual: the runner spawns the founder's authed `claude` CLI, which
+GH-hosted runners don't have. The unit tests in `packages/runner/` cover
+everything below the CLI boundary; this smoke covers the boundary itself.
+
+A successful smoke is the ship gate: 5 steps, ~10 minutes, end-to-end
+issue → install → online → run a job → revoke.
+
+### Buyer / operator action items (M4 → ship)
+
+1. **Run the smoke** against `https://founderos.fly.dev` with
+   `FOUNDEROS_BYO_RUNNER_ENABLED=1` set on Fly. Follow
+   `docs/runbooks/byo-runner-smoke.md`. If green, you've shipped.
+2. **Publish `@founderos/runner` to npm** — currently the package builds
+   locally and the install snippet in the dialog assumes `npm i -g
+   @founderos/runner` works. The first publish is human-only because
+   `npm publish` requires the founder's npm credentials. After the first
+   publish, set up an npm `automation` token + a release workflow to
+   bump on commits that touch `packages/runner/**`.
+3. **Security review (#67)** — pending. The token surface (issuance,
+   sha256 storage, timing-safe compare, revoke idempotency, audit
+   details with issuer/revoker IDs) wants a fresh-eyes pass before
+   wide rollout. `/cso` or `/codex` against the diff of #23 is the
+   right cadence.
+4. **Flip the flag.** `FOUNDEROS_BYO_RUNNER_ENABLED=1` is what makes
+   `onboarding-bootstrap.ts` provision `byo_runner` instead of
+   `claude_local`. Flip to `0` for instant rollback — existing tokens
+   remain valid (revoke-by-token-id is the per-user kill switch).
+
+### Deferred (not blocking ship)
+
+- Onboarding wizard integration of the install dialog. The Agents page
+  surface is the simpler validation target; wizard integration becomes
+  a follow-up after the first founders use it.
+- Per-agent install hint near `AgentProviderBadge` for byo_runner rows.
+- E2E test in CI that spawns a fake `claude` binary (a stub that prints
+  fixed stream-json) and runs the full loop. The pure-unit tests in
+  `packages/runner/src/__tests__/spawn-pure.test.ts` cover the parsing;
+  a fake-binary integration test is the next layer.
 
 ## 2026-05-03 — Multi-domain council audit + Phase 0 production fixes
 

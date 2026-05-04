@@ -62,6 +62,12 @@ Current deploys:
 - **`vercel.json` redirect changes only activate on the next push to the Vercel-configured production branch.** Editing the file on a feature branch and pushing the PR does NOT change the production hostname's behavior — Vercel preview deployments use the file from the PR snapshot but the production domain keeps serving the previous main's config until merge. If you ship a redirect cutover, expect a window where `https://<vercel-host>/...` is still serving the old SPA until the next main push fires the rebuild.
 - **`server/src/lib/request-context.ts` runs ALL request-scoped code under `runWithRequestContext`.** Any background task spawned from a request handler (queue jobs, fire-and-forget promises, setTimeout callbacks) inherits the ALS context automatically — but a background task scheduled at boot (cron schedulers, plugin coordinator) runs OUTSIDE any request context. If you `getRequestContext()` from a cron tick, it returns `undefined`. Inject explicit `actor: { type: 'system' }` for background-originated work or the Sentry scope tags will be empty.
 
+- **BYO Runner adapter (`byo_runner`) is a no-op spawn — execution happens in the runner package, not the server.** `server/src/services/adapter-resolver.ts` returns the byo_runner family from the same map as `claude_local` / `anthropic_api` but the resolved adapter only enqueues into `runner_jobs`; the local `claude` CLI is invoked by `@founderos/runner` running on the founder's laptop. If you add a code path that assumes "the adapter spawns the binary" (run logs, exec timing, exit-code interpretation), it must branch on `byo_runner` or it'll see all jobs as instantly returning. The full smoke is documented at `docs/runbooks/byo-runner-smoke.md`.
+
+- **Runner tokens (`fos_<32 alnum>`) are sha256-hashed at rest — DB stores hash only.** Plaintext is shown in the UI exactly once via `RunnerInstallDialog`. Server-side: `crypto.timingSafeEqual` compare in `runner-auth.ts`; do NOT add a code path that reconstructs plaintext from the DB. If a founder loses a token, issue a new one and revoke the old.
+
+- **`runner_tokens.lastSeenAt` is what powers the pill liveness, not a heartbeat row.** The runner-auth middleware updates `lastSeenAt = now()` on every authenticated request. "Online" = `lastSeenAt < 30s ago`. Don't add an explicit heartbeat endpoint; long-poll traffic IS the heartbeat.
+
 ## Where things live
 
 - ADRs: `docs/adr/` (10 entries as of 2026-04-23)
