@@ -32,14 +32,23 @@ export interface ComposioRouteContext {
   appName: "slack" | "hubspot" | "notion" | "linkedin" | string;
 }
 
-export interface ComposioRouteDecision {
-  /** True iff we should execute via Composio. */
-  shouldUse: boolean;
-  /** The active Composio connection id, if any. */
-  composioConnectionId: string | null;
-  /** True iff Composio is enabled globally (regardless of a connection). */
-  composioEnabled: boolean;
-}
+/**
+ * Discriminated union so callers get type-narrowing for free:
+ *
+ *   if (route.shouldUse) {
+ *     // route.composioConnectionId: string  (guaranteed non-null)
+ *   }
+ *
+ * Pre-2026-05-04, this was a single shape with `composioConnectionId: string | null`,
+ * which let call sites forget to pass the id to runComposioTool. The Composio
+ * v3 client picks an arbitrary connection when the user has the same app
+ * connected in multiple orgs — agent in Org A could post to Org B Slack.
+ * Encoding the invariant in the type forces every call site to provide the
+ * org-scoped connection id.
+ */
+export type ComposioRouteDecision =
+  | { shouldUse: true; composioConnectionId: string; composioEnabled: boolean }
+  | { shouldUse: false; composioConnectionId: string | null; composioEnabled: boolean };
 
 export async function evaluateComposioRoute(
   ctx: ComposioRouteContext,
@@ -76,9 +85,17 @@ export async function evaluateComposioRoute(
  * Invoke a Composio tool via the singleton client. Returns the raw
  * `ComposioExecuteResult` so each skill can shape it into its own typed
  * result. Never throws — errors become `{ ok: false, reason }`.
+ *
+ * Council 2026-05-04: `connectedAccountId` is REQUIRED. Composio v3
+ * `executeTool({ userId })` without it picks an arbitrary connection
+ * when the user has the same app connected in multiple orgs — that's
+ * the cross-org privilege escalation CVE. Always pass the
+ * org-scoped connection id from `evaluateComposioRoute`'s `shouldUse: true`
+ * branch (the type narrowing guarantees it's a string at the call site).
  */
 export async function runComposioTool(params: {
   userId: string;
+  connectedAccountId: string;
   toolName: string;
   input: Record<string, unknown>;
 }): Promise<ComposioExecuteResult> {
@@ -92,6 +109,7 @@ export async function runComposioTool(params: {
   }
   return client.executeTool({
     userId: params.userId,
+    connectedAccountId: params.connectedAccountId,
     toolName: params.toolName,
     params: params.input,
   });
