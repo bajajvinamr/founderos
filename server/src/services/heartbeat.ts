@@ -1568,8 +1568,28 @@ export function heartbeatService(db: Db) {
       if (claimedRuns.length === 0) return [];
 
       for (const claimedRun of claimedRuns) {
-        void executeRun(claimedRun.id).catch((err) => {
+        void executeRun(claimedRun.id).catch(async (err) => {
           logger.error({ err, runId: claimedRun.id }, "queued heartbeat execution failed");
+          // Council 2026-05-04: ensure the run is marked failed on uncaught
+          // executor errors. Pre-fix, an exception in executeRun BEFORE its
+          // internal try-block (e.g., transient DB error during getRun /
+          // claimQueuedRun at lines 1580–1591) only emitted a log line — the
+          // run stayed in 'queued'/'running' status forever, surfacing to
+          // founders as an agent stuck "running" with no resolution. Wrap
+          // setRunStatus in its own catch so a double-fault doesn't escape
+          // the void-promise boundary as an unhandled rejection.
+          try {
+            await setRunStatus(claimedRun.id, "failed", {
+              error: err instanceof Error ? err.message : "uncaught executor error",
+              errorCode: "executor_uncaught",
+              finishedAt: new Date(),
+            });
+          } catch (statusErr) {
+            logger.error(
+              { statusErr, runId: claimedRun.id },
+              "failed to mark run failed after uncaught executor error (double fault)",
+            );
+          }
         });
       }
       return claimedRuns;
