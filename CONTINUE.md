@@ -1,41 +1,88 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-04 by Claude (post-BYO sprint — self-serve hardening)_
+_Last updated: 2026-05-04 by Claude (self-serve hardening sprint — 7 PRs merged)_
 
-## 2026-05-04 — Self-serve hardening sprint (3 PRs open, blocked on CI billing)
+## 2026-05-04 — Self-serve hardening sprint — ALL 7 PRs MERGED
 
-Production "Instance admin required" diagnosed via /council and fixed with
-a DELETE-orphan-row patch. Three follow-up PRs ship the systemic prevention
-+ council backlog P1s. All three are MERGEABLE; CI runs are queued and
-failing in 3s due to the GitHub Actions billing block (same blocker as
-`release-main.yml`). Vercel previews are green on all three.
+The 2026-05-03 council BLOCK across five domains (auth, billing,
+integrations, agent runtime, deploy/ops) shipped its remediation as
+seven atomic PRs landed in sequence on `main` between 19:45–19:53 UTC
+on 2026-05-04. Production "Instance admin required" was diagnosed via
+/council and fixed first with a DELETE-orphan-row patch on prod;
+PR #28 is the systemic prevention.
 
-| PR | Branch | What | Status |
-|---|---|---|---|
-| **#28** | `fix/auth-mirror-and-orphan-guard` | Mirror Supabase `auth.users` into Fly `public."user"` on signup; FK with `ON DELETE CASCADE`; INNER JOIN admin counts; bootstrap-ceo recovery path documented | Awaiting CI billing fix |
-| **#29** | `fix/self-serve-quick-wins` | `/api/health/deep` instance-admin auth gate; `executeRun.catch` → `setRunStatus("failed")`; Fly `release_command` for pre-traffic migrations | Awaiting CI billing fix |
-| **#30** | `fix/composio-cross-org-leak` | `ComposioRouteDecision` discriminated union; require `connectedAccountId` in `runComposioTool`; thread `route.composioConnectionId` through 6 skill call sites (slack, notion x2, hubspot x3) — closes cross-org privilege escalation | Awaiting CI billing fix |
+| PR | Commit | What |
+|---|---|---|
+| **#28** | `54cee94` | Mirror Supabase `auth.users` into Fly `public."user"` on signup; FK with `ON DELETE CASCADE`; INNER JOIN admin counts; `pnpm founderos auth bootstrap-ceo` recovery CLI |
+| **#29** | `6c00e21` | `/api/health/deep` instance-admin auth gate; `executeRun.catch` → `setRunStatus("failed")`; Fly `release_command` for pre-traffic migrations |
+| **#30** | `3cf54a2` | `ComposioRouteDecision` discriminated union; `connectedAccountId` required in `runComposioTool`; threaded through 6 skill call sites — closes cross-org leak |
+| **#31** | `caa8ef3` | `agentInvokeLimiter` (30/min/user) on `/agents/:id/wakeup` + `/heartbeat/invoke`; `onboardingBootstrapLimiter` (5/hr/IP) on `/onboarding/bootstrap` |
+| **#32** | `3b5e208` | Baseline CSP + X-Frame DENY + nosniff + Referrer-Policy + HSTS on every response branch (200/4xx/5xx); allowlist for Supabase + Composio + Sentry + Anthropic + Stripe |
+| **#33** | `40c009d` | Migration 0074 dedupe + UNIQUE on `stripe_subscription_id`; conflict target swap; `orderBy(desc(updatedAt))`; `["active","trialing"]` healthy statuses |
+| **#35** | `0c4c8db` | Server-side `billingGate` middleware on LLM-cost endpoints; soft-default OFF via `FOUNDEROS_BILLING_GATE_ENABLED=1`; bypasses for local_implicit + instance_admin; fail-CLOSED on lookup error |
 
-### Sprint backlog (not yet started)
+CI on each PR was structurally red (GitHub Actions billing block, same
+blocker as `release-main.yml`), but Vercel previews were green and
+local typecheck + targeted tests passed on every branch. Merging
+proceeded with explicit user authorization once that was verified.
 
-- **Item 3 — Rate limits on auth + AI endpoints** (~30 min). Express
-  `express-rate-limit` on `/api/auth/*` and `/api/agents/*/run` with
-  per-IP and per-user buckets.
-- **Item 7 — Server-side billing gate + idempotent Stripe webhook**
-  (1-2 days, recommend separate session). Unique index on
-  `stripeSubscriptionId`, middleware-level enforcement of plan tier on
-  protected routes, ordering on `subscription.findFirst()`.
-- **Item 8 — CSP scaffold** (~0.5 day). `_headers` equivalent on Fly
-  (express middleware) with `connect-src` allowlist for Composio, Sentry,
-  Supabase, Anthropic, Stripe — restrictive default.
+### Test coverage added (locked into main)
+
+| Suite | Tests | Locks in |
+|---|---|---|
+| `post-signup-hook-atomicity.test.ts` | +4 | authUsers mirror upsert; orphan-guard INNER JOIN |
+| `health-deep-runner.test.ts` | +3 (5/5 total) | `/deep` 401/403 for non-admin; admin allowed |
+| `slack-post-message.test.ts` + composio suite | 5/5 + 13/13 | `connectedAccountId` required at TS level |
+| `rate-limit-ai.test.ts` | 5/5 | 429 with friendly body; per-user bucket isolation |
+| `security-headers.test.ts` | 7/7 | CSP composition; headers fire on 200/404/500 |
+| `subscription-idempotency.test.ts` | 7/7 | Stripe retry idempotency; newest-row precedence; trialing healthy |
+| `billing-gate.test.ts` | 9/9 | Flag-off pass-through; flag-on inactive→402; bypass matrix; fail-CLOSED on error |
+
+### Post-merge ops checklist
+
+1. **Deploy** — push to `main` triggers `release-main.yml` once GitHub
+   Actions billing unblocks. Until then: manual `fly deploy --strategy immediate`.
+2. **Migration 0073 + 0074 fire on boot** via the new `release_command`
+   from PR #29. Verify with `fly logs -a founderos | grep -E "drizzle|migrate"`
+   showing both ran cleanly.
+3. **Verify auth-mirror in prod** — psql to Fly Postgres, run:
+   `SELECT count(*) FROM public."user"` (should equal active Supabase
+   confirmed users) and `SELECT count(*) FROM instance_user_roles iur LEFT JOIN public."user" u ON iur.user_id = u.id WHERE u.id IS NULL` (must be 0 — orphan rows are eliminated by the FK CASCADE).
+4. **Verify Stripe idempotency** — replay a recent
+   `customer.subscription.updated` event from the Stripe dashboard,
+   confirm exactly one row appears in `instance_subscription` for the
+   subscription id.
+5. **Wait 1-2 days** for clean Stripe webhook telemetry, then flip the
+   billing gate: `fly secrets set FOUNDEROS_BILLING_GATE_ENABLED=1`.
+   Boot log will show `Billing gate ENABLED — LLM-cost endpoints will
+   402 for inactive subs`.
+6. **Verify CSP in prod** — open https://founderos.fly.dev/, watch
+   the network tab for any CSP violations. If violations appear, pin
+   the offending host in `middleware/security-headers.ts` (do NOT
+   relax to report-only — that re-triggers the council BLOCK).
+
+### Sprint backlog (still open)
+
+- **Server-side plan-tier nuance** — current gate covers
+  `wakeup` + `heartbeat/invoke`. Other LLM-touching surfaces (e.g.
+  agent recursive sub-runs that go via internal services rather
+  than HTTP) are NOT yet gated. Audit needed when post-deploy
+  telemetry shows usage patterns.
+- **`BillingGate.tsx` UI fails OPEN on `/api/billing/status` errors**
+  (see `setStatus({ active: true })` in catch). Server gate is the
+  real boundary now, but the UI should at least surface the error.
+  ~30 min.
+- **Hardcoded `plan: "pro"`** in `handleStripeWebhook` — when a second
+  tier exists, map from Stripe price id. Not blocking; today FounderOS
+  sells one tier.
 
 ### Carry-overs (still open)
 
-- **Task #67** — Security review for runner tokens (carry from BYO sprint).
-  `/cso` or `/codex` against #23 diff.
+- **Task #67** — Security review for runner tokens (carry from BYO
+  sprint). `/cso` or `/codex` against #23 diff.
 - **Task #76** — Fix pre-existing `ui/src/api/approvals.test.ts:184`
-  failure on main (TypeError on undefined.get(); not introduced by this
-  sprint).
+  failure on main (TypeError on undefined.get(); not introduced by
+  this sprint).
 
 
 
