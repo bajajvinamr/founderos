@@ -20,6 +20,14 @@ kill_timeout = "5s"
 
 [build]
   dockerfile = "Dockerfile"
+  # Vite SPA needs VITE_* values at build time. The deploy-prod.yml workflow
+  # passes them via `flyctl deploy --build-arg ...`. For manual deploys see
+  # docs/runbooks/supabase-config.md — the deploy is a one-liner with the
+  # required arg flags.
+  #
+  # Do NOT put VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY into [build.args]
+  # below — that would commit values into the repo. They live in GitHub
+  # secrets / your shell env / 1Password.
 
 [deploy]
   strategy = "rolling"
