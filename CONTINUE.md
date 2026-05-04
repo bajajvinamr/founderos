@@ -1,6 +1,43 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-04 by Claude (BYO Runner sprint — M1/M2/M3 shipped)_
+_Last updated: 2026-05-04 by Claude (post-BYO sprint — self-serve hardening)_
+
+## 2026-05-04 — Self-serve hardening sprint (3 PRs open, blocked on CI billing)
+
+Production "Instance admin required" diagnosed via /council and fixed with
+a DELETE-orphan-row patch. Three follow-up PRs ship the systemic prevention
++ council backlog P1s. All three are MERGEABLE; CI runs are queued and
+failing in 3s due to the GitHub Actions billing block (same blocker as
+`release-main.yml`). Vercel previews are green on all three.
+
+| PR | Branch | What | Status |
+|---|---|---|---|
+| **#28** | `fix/auth-mirror-and-orphan-guard` | Mirror Supabase `auth.users` into Fly `public."user"` on signup; FK with `ON DELETE CASCADE`; INNER JOIN admin counts; bootstrap-ceo recovery path documented | Awaiting CI billing fix |
+| **#29** | `fix/self-serve-quick-wins` | `/api/health/deep` instance-admin auth gate; `executeRun.catch` → `setRunStatus("failed")`; Fly `release_command` for pre-traffic migrations | Awaiting CI billing fix |
+| **#30** | `fix/composio-cross-org-leak` | `ComposioRouteDecision` discriminated union; require `connectedAccountId` in `runComposioTool`; thread `route.composioConnectionId` through 6 skill call sites (slack, notion x2, hubspot x3) — closes cross-org privilege escalation | Awaiting CI billing fix |
+
+### Sprint backlog (not yet started)
+
+- **Item 3 — Rate limits on auth + AI endpoints** (~30 min). Express
+  `express-rate-limit` on `/api/auth/*` and `/api/agents/*/run` with
+  per-IP and per-user buckets.
+- **Item 7 — Server-side billing gate + idempotent Stripe webhook**
+  (1-2 days, recommend separate session). Unique index on
+  `stripeSubscriptionId`, middleware-level enforcement of plan tier on
+  protected routes, ordering on `subscription.findFirst()`.
+- **Item 8 — CSP scaffold** (~0.5 day). `_headers` equivalent on Fly
+  (express middleware) with `connect-src` allowlist for Composio, Sentry,
+  Supabase, Anthropic, Stripe — restrictive default.
+
+### Carry-overs (still open)
+
+- **Task #67** — Security review for runner tokens (carry from BYO sprint).
+  `/cso` or `/codex` against #23 diff.
+- **Task #76** — Fix pre-existing `ui/src/api/approvals.test.ts:184`
+  failure on main (TypeError on undefined.get(); not introduced by this
+  sprint).
+
+
 
 ## 2026-05-04 — BYO Runner sprint (ADR-011) — M1/M2/M3 merged to main, M4 manual smoke
 

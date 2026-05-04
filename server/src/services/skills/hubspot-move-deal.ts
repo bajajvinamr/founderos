@@ -110,6 +110,7 @@ export async function executeHubspotMoveDeal(
     if (route.shouldUse) {
       const composioOutcome = await runComposioTool({
         userId,
+        connectedAccountId: route.composioConnectionId,
         toolName: "hubspot_update_deal",
         input: {
           dealId: input.dealId,

@@ -155,6 +155,7 @@ export async function executeSlackPostMessage(
     if (route.shouldUse) {
       const composioOutcome = await runComposioTool({
         userId,
+        connectedAccountId: route.composioConnectionId,
         toolName: "slack_send_message",
         input: { channel: input.channelId, text: input.text },
       });

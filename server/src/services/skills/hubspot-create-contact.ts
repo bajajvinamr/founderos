@@ -148,6 +148,7 @@ export async function executeHubspotCreateContact(
     if (route.shouldUse) {
       const composioOutcome = await runComposioTool({
         userId,
+        connectedAccountId: route.composioConnectionId,
         toolName: "hubspot_create_contact",
         input: {
           email: input.email,

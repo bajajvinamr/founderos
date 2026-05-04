@@ -110,6 +110,7 @@ export async function executeNotionCreatePage(
     if (route.shouldUse) {
       const composioOutcome = await runComposioTool({
         userId,
+        connectedAccountId: route.composioConnectionId,
         toolName: "notion_create_page",
         input: {
           parent_page_id: input.parentPageId,

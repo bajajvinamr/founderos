@@ -103,6 +103,7 @@ export async function executeNotionAppendBlock(
     if (route.shouldUse) {
       const composioOutcome = await runComposioTool({
         userId,
+        connectedAccountId: route.composioConnectionId,
         toolName: "notion_append_block_children",
         input: { block_id: input.pageId, text: input.text },
       });

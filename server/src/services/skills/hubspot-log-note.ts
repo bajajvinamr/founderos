@@ -110,6 +110,7 @@ export async function executeHubspotLogNote(
     if (route.shouldUse) {
       const composioOutcome = await runComposioTool({
         userId,
+        connectedAccountId: route.composioConnectionId,
         toolName: "hubspot_create_note",
         input: { contactId: input.contactId, body: input.body },
       });
