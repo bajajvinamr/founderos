@@ -351,6 +351,44 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       );
       expect(res.status).toBe(404);
     });
+
+    it("BYO-106: writes runner.token.revoked audit log with revoker + preserves label", async () => {
+      const company = await makeCompany("Audit Revoke Co");
+      const app = adminApp("admin-user");
+
+      const issued = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "labelled-and-revoked" });
+      expect(issued.status).toBe(201);
+      const tokenId = issued.body.tokenId;
+
+      const del = await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/${tokenId}`,
+      );
+      expect(del.status).toBe(204);
+
+      // Audit-log row carries revoker identity.
+      const audits = await db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.companyId, company.id));
+      const revokedRows = audits.filter((a) => a.action === "runner.token.revoked");
+      expect(revokedRows).toHaveLength(1);
+      expect(revokedRows[0].details).toMatchObject({
+        tokenId,
+        label: "labelled-and-revoked",
+        revokedByUserId: "admin-user",
+      });
+
+      // Management UI history view: the row's label is NOT cleared on revoke
+      // — operators need to see "what did this token do?" for revoked rows.
+      const [row] = await db
+        .select({ label: runnerTokens.label, revokedAt: runnerTokens.revokedAt })
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, tokenId));
+      expect(row.label).toBe("labelled-and-revoked");
+      expect(row.revokedAt).not.toBeNull();
+    });
   });
 
   describe("GET /api/companies/:id/runner-status — liveness", () => {

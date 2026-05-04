@@ -581,7 +581,14 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         action: "runner.token.revoked",
         entityType: "runner_token",
         entityId: tokenId,
-        details: { tokenId, label: target.label },
+        details: {
+          tokenId,
+          label: target.label,
+          // BYO-106 — explicit revoker field. Pairs with issuedByUserId in
+          // runner.token.issued so the audit-export "who issued / who
+          // revoked / when" pivot is self-contained per row.
+          revokedByUserId: req.actor.userId ?? null,
+        },
       });
 
       res.status(204).end();
