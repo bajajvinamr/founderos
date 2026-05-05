@@ -43,6 +43,7 @@ import { createDecisionFollowupCron } from "./services/decision-followup-cron.js
 import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
 import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
 import { billingRoutes } from "./routes/billing.js";
+import { stripeBackfillRoutes } from "./routes/stripe-backfill.js";
 import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
 import { composioRoutes } from "./routes/composio.js";
 import { debugRoutes } from "./routes/debug.js";
@@ -332,6 +333,7 @@ export async function createApp(
   api.use(composioRoutes(db));
   api.use(debugRoutes());
   api.use("/billing", billingRoutes(db));
+  api.use(stripeBackfillRoutes());
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
   const pluginRegistry = pluginRegistryService(db);
