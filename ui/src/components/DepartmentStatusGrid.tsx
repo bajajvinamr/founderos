@@ -1,93 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
-import { agentsApi } from "../api/agents";
-import { approvalsApi } from "../api/approvals";
+import { departmentStatusApi, type DepartmentId } from "../api/department-status";
 import { queryKeys } from "../lib/queryKeys";
-import { DEPARTMENTS, agentsInDepartment, departmentForRole } from "../lib/departments";
-import { DepartmentStatusCard, type DepartmentHealth } from "./DepartmentStatusCard";
-import type { Agent, Approval } from "@founderos/shared";
-
-const STALE_ACTIVITY_MS = 24 * 60 * 60 * 1000; // 24h
-const APPROVAL_RED_THRESHOLD = 5;
+import { DEPARTMENTS, getDepartmentById } from "../lib/departments";
+import { DepartmentStatusCard } from "./DepartmentStatusCard";
 
 interface DepartmentStatusGridProps {
   companyId: string;
 }
 
-export interface DepartmentRollup {
-  departmentId: string;
-  agentCount: number;
-  unresolvedApprovals: number;
-  lastActivityAt: Date | null;
-  health: DepartmentHealth;
-}
-
-/**
- * Pure rollup logic — exported for unit testing without mounting React.
- *
- * Health rules:
- *   red    = any agent in `error` status OR unresolvedApprovals > 5
- *   yellow = lastActivityAt missing or > 24h ago (and dept is configured)
- *   grey   = agentCount === 0 (department not staffed)
- *   green  = else
- */
-export function computeDepartmentRollup(
-  departmentId: string,
-  agents: Agent[],
-  approvals: Approval[],
-): DepartmentRollup {
-  const deptAgents = agentsInDepartment(departmentId, agents);
-  const agentCount = deptAgents.length;
-
-  const agentIdSet = new Set(deptAgents.map((a) => a.id));
-  const deptApprovals = approvals.filter(
-    (a) => a.requestedByAgentId !== null && agentIdSet.has(a.requestedByAgentId),
-  );
-  const unresolvedApprovals = deptApprovals.length;
-
-  const lastActivityAt = deptAgents
-    .map((a) => a.lastHeartbeatAt)
-    .filter((d): d is Date => d !== null)
-    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
-
-  let health: DepartmentHealth;
-  const hasError = deptAgents.some((a) => a.status === "error");
-  if (agentCount === 0) {
-    health = "grey";
-  } else if (hasError || unresolvedApprovals > APPROVAL_RED_THRESHOLD) {
-    health = "red";
-  } else if (
-    lastActivityAt === null ||
-    Date.now() - lastActivityAt.getTime() > STALE_ACTIVITY_MS
-  ) {
-    health = "yellow";
-  } else {
-    health = "green";
-  }
-
-  return {
-    departmentId,
-    agentCount,
-    unresolvedApprovals,
-    lastActivityAt,
-    health,
-  };
-}
+// The endpoint returns the five "insight departments" — these are the slugs
+// that map to the live rollup. The UI's broader DEPARTMENTS list (which
+// includes engineering + ops) is filtered down to this set; we don't render
+// cards for departments without a server rollup.
+const REPORTED_DEPARTMENT_IDS: DepartmentId[] = [
+  "chief-of-staff",
+  "growth",
+  "content",
+  "crm",
+  "finance",
+];
 
 export function DepartmentStatusGrid({ companyId }: DepartmentStatusGridProps) {
-  const { data: agents = [] } = useQuery({
-    queryKey: queryKeys.agents.list(companyId),
-    queryFn: () => agentsApi.list(companyId),
+  const { data } = useQuery({
+    queryKey: queryKeys.departments.status(companyId),
+    queryFn: () => departmentStatusApi.get(companyId),
     enabled: !!companyId,
+    // Department status is a derived rollup — refresh frequently enough
+    // that errored agents and approval surges don't sit stale on the
+    // Dashboard, but not so often we hammer the server. 30s matches the
+    // dashboard polling cadence.
+    refetchInterval: 30_000,
   });
-
-  const { data: approvals = [] } = useQuery({
-    queryKey: queryKeys.approvals.list(companyId, "pending"),
-    queryFn: () => approvalsApi.list(companyId, "pending"),
-    enabled: !!companyId,
-  });
-
-  // Suppress unused import warning when departmentForRole stays unused after future tweaks.
-  void departmentForRole;
 
   return (
     <section aria-label="Department status">
@@ -96,25 +39,39 @@ export function DepartmentStatusGrid({ companyId }: DepartmentStatusGridProps) {
           Department Status
         </h3>
         <p className="text-xs text-muted-foreground tabular-nums">
-          {DEPARTMENTS.length} departments
+          {REPORTED_DEPARTMENT_IDS.length} departments
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-        {DEPARTMENTS.map((dept) => {
-          const rollup = computeDepartmentRollup(dept.id, agents, approvals);
+        {REPORTED_DEPARTMENT_IDS.map((deptId) => {
+          const meta = getDepartmentById(deptId);
+          // Should always resolve since DEPARTMENT_IDS is a subset of
+          // DEPARTMENTS — but guard so a future renaming doesn't crash the
+          // dashboard.
+          if (!meta) return null;
+          const rollup = data?.[deptId];
           return (
             <DepartmentStatusCard
-              key={dept.id}
-              departmentId={dept.id}
-              label={dept.label}
-              icon={dept.icon}
-              agentCount={rollup.agentCount}
-              health={rollup.health}
-              unresolvedApprovals={rollup.unresolvedApprovals}
-              lastActivityAt={rollup.lastActivityAt}
+              key={deptId}
+              departmentId={deptId}
+              label={meta.label}
+              icon={meta.icon}
+              health={rollup?.health ?? "grey"}
+              openInsights={rollup?.openInsights ?? 0}
+              pendingApprovals={rollup?.pendingApprovals ?? 0}
+              stalledWorkflows={rollup?.stalledWorkflows ?? 0}
+              lastActivity={rollup?.lastActivity ?? null}
+              agentCount={rollup?.agentCount ?? 0}
             />
           );
         })}
+      </div>
+      {/* DEPARTMENTS (engineering, ops) without server rollups are
+          intentionally not surfaced here — the Dashboard shows the five
+          INSIGHT_DEPARTMENTS only. Re-introduce engineering/ops when the
+          server endpoint expands to cover them. */}
+      <div className="sr-only" aria-hidden="true">
+        {DEPARTMENTS.length}
       </div>
     </section>
   );

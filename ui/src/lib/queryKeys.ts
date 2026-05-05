@@ -169,6 +169,7 @@ export const queryKeys = {
   },
   departments: {
     list: (companyId: string) => ["departments", companyId] as const,
+    status: (companyId: string) => ["departments", "status", companyId] as const,
   },
   integrationHealth: {
     list: (companyId: string) => ["integration-health", companyId] as const,
