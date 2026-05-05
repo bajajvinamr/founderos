@@ -111,7 +111,7 @@ export function IntegrationCard({
   lastSync,
 }: IntegrationCardProps) {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
+  const { pushToast } = useToast();
 
   const syncMutation = useMutation({
     mutationFn: () => integrationsApi.test(companyId, integration!.id),
@@ -119,16 +119,17 @@ export function IntegrationCard({
       queryClient.invalidateQueries({
         queryKey: ["integrations", companyId],
       });
-      showToast({
+      pushToast({
         title: "Sync started",
-        description: kind + " sync initiated",
+        body: kind + " sync initiated",
+        tone: "success",
       });
     },
     onError: () => {
-      showToast({
+      pushToast({
         title: "Sync failed",
-        description: "Unable to start sync",
-        variant: "destructive",
+        body: "Unable to start sync",
+        tone: "error",
       });
     },
   });
@@ -139,16 +140,17 @@ export function IntegrationCard({
       queryClient.invalidateQueries({
         queryKey: ["integrations", companyId],
       });
-      showToast({
+      pushToast({
         title: "Disconnected",
-        description: kind + " integration removed",
+        body: kind + " integration removed",
+        tone: "success",
       });
     },
     onError: () => {
-      showToast({
+      pushToast({
         title: "Failed to disconnect",
-        description: "Unable to remove integration",
-        variant: "destructive",
+        body: "Unable to remove integration",
+        tone: "error",
       });
     },
   });
@@ -174,9 +176,9 @@ export function IntegrationCard({
         <StatusPill status={isConnected ? "connected" : hasError ? "error" : "disconnected"} />
       </div>
 
-      {hasError && integration?.error && (
+      {hasError && integration?.lastError && (
         <div className="mb-3 text-xs text-red-600 dark:text-red-400 bg-red-500/10 rounded px-2 py-1">
-          {integration.error}
+          {integration.lastError}
         </div>
       )}
 
