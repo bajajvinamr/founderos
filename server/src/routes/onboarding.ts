@@ -413,6 +413,18 @@ export function onboardingRoutes(db: Db) {
             decidedAt,
           },
         });
+
+        // Council 2026-05-05 P2 (C1) — hot-reload the runtime telemetry
+        // client so the founder's consent decision takes effect immediately,
+        // not on next boot. Non-fatal: persisted state is the source of
+        // truth; a hydration failure leaves the client in its current state
+        // (file-config-driven) until the next reinit trigger.
+        try {
+          const { reinitTelemetryFromInstanceSettings } = await import("../telemetry.js");
+          await reinitTelemetryFromInstanceSettings(db);
+        } catch (reinitErr) {
+          logger.warn({ err: reinitErr }, "onboarding: telemetry reinit after consent failed");
+        }
       } catch (err) {
         logger.warn(
           { err, telemetryEnabled: input.telemetryEnabled },

@@ -126,6 +126,11 @@ export async function hubspotIngestService(
 
   // ─── Step 1: Fetch workspace's HubSpot connection ───────────────────────
 
+  // Council 2026-05-05 P2 (C2) — filter by status="active" so we never bind
+  // to a revoked / expired / errored connection row. The cron-side caller in
+  // hubspot-sync-cron.ts already filters by status="active" but this service
+  // is also reachable from manual triggers (admin "sync now"), so the filter
+  // belongs at the service boundary too. Defense in depth.
   const connection = await db
     .select()
     .from(composioConnections)
@@ -133,6 +138,7 @@ export async function hubspotIngestService(
       and(
         eq(composioConnections.companyId, companyId),
         eq(composioConnections.appName, "hubspot"),
+        eq(composioConnections.status, "active"),
       ),
     )
     .limit(1);

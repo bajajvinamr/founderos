@@ -493,4 +493,116 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
     // Verify dedupKey includes stage (so stage changes don't dedup on id alone)
     expect(dealEvents[0].dedupKey).toMatch(/^deal_\d{3}:[a-z]+$/);
   });
+
+  // ── (f) Council 2026-05-05 P2 (C2) — inactive connections must be skipped ──
+  //
+  // Trust contract: the cron iterates only `status="active"` rows, but the
+  // service is also reachable via manual triggers (admin "sync now"). Without
+  // a status filter at the service boundary, a manual sync against a workspace
+  // whose hubspot connection is `revoked` / `error` / `disconnected` would
+  // bind to the stale connectedAccountId and either leak data or 401-loop.
+  // Defense in depth: the filter belongs at both the cron AND the service.
+
+  it("(f) inactive HubSpot connections are not bound to during ingest (status=active filter at service boundary)", async () => {
+    // Setup: insert a REVOKED hubspot connection for Company A — should be skipped.
+    await db
+      .insert(composioConnections)
+      .values({
+        companyId: companyAId,
+        userId: "user-a",
+        appName: "hubspot",
+        composioConnectionId: "conn_a_hubspot_revoked",
+        status: "revoked",
+      })
+      .returning();
+
+    // Mock executeTool to fail loudly if it's ever called — proves the
+    // service short-circuited on the no-active-connection branch.
+    const mockExecute = vi.spyOn(composioClient, "executeTool").mockImplementation(async () => {
+      throw new Error("executeTool must NOT be called for inactive connections");
+    });
+
+    const result = await hubspotIngestService({
+      companyId: companyAId,
+      db,
+    });
+
+    expect(result.contactsProcessed).toBe(0);
+    expect(result.dealsProcessed).toBe(0);
+    expect(mockExecute).not.toHaveBeenCalled();
+
+    // No events should have been ingested.
+    const evRows = await db
+      .select()
+      .from(events)
+      .where(sql`company_id = ${companyAId} AND source = 'hubspot'`);
+    expect(evRows).toHaveLength(0);
+
+    mockExecute.mockRestore();
+  });
+
+  // ── (g) Council 2026-05-05 P2 (C2) — disambiguates inactive vs active ────
+  //
+  // When BOTH an inactive and an active connection exist for the same company,
+  // the service must pick the active one (status="active" filter), not the
+  // first row by insertion order or PK. This is the realistic post-rotation
+  // shape: founder reconnects → old row stays as `revoked` → new row is `active`.
+
+  it("(g) when active and inactive HubSpot rows coexist, the active one is selected", async () => {
+    // Realistic multi-admin scenario: original admin's connection got revoked
+    // (`user-a-old`), and a second admin (`user-a-new`) reconnected. The
+    // unique constraint (companyId, userId, appName) prevents two rows per
+    // user — so this is the shape we'd see across user changes, not a
+    // "rotate same user" case.
+
+    // First admin's old, revoked row
+    await db
+      .insert(composioConnections)
+      .values({
+        companyId: companyAId,
+        userId: "user-a-old",
+        appName: "hubspot",
+        composioConnectionId: "conn_a_hubspot_OLD",
+        status: "revoked",
+      })
+      .returning();
+
+    // Second admin's new, active row
+    await db
+      .insert(composioConnections)
+      .values({
+        companyId: companyAId,
+        userId: "user-a-new",
+        appName: "hubspot",
+        composioConnectionId: "conn_a_hubspot_NEW",
+        status: "active",
+      })
+      .returning();
+
+    const seenAccountIds: string[] = [];
+    const mockExecute = vi.spyOn(composioClient, "executeTool").mockImplementation(async (input: any) => {
+      if (input.connectedAccountId) seenAccountIds.push(input.connectedAccountId);
+      if (input.toolName === "HUBSPOT_CRM_GET_CONTACTS") {
+        return { ok: true, output: { data: { contacts: [] } } };
+      }
+      if (input.toolName === "HUBSPOT_CRM_GET_DEALS") {
+        return { ok: true, output: { data: { deals: [] } } };
+      }
+      throw new Error(`Unexpected tool: ${input.toolName}`);
+    });
+
+    await hubspotIngestService({
+      companyId: companyAId,
+      db,
+    });
+
+    // Every executeTool invocation must use the NEW (active) connectedAccountId.
+    expect(seenAccountIds.length).toBeGreaterThan(0);
+    for (const accountId of seenAccountIds) {
+      expect(accountId).toBe("conn_a_hubspot_NEW");
+    }
+    expect(seenAccountIds).not.toContain("conn_a_hubspot_OLD");
+
+    mockExecute.mockRestore();
+  });
 });
