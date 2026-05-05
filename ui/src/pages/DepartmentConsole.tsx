@@ -14,6 +14,8 @@ import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { AgentProviderBadge } from "../components/AgentProviderBadge";
+import { CompanyPulseWidget } from "../components/CompanyPulseWidget";
+import type { CompanyMetrics } from "../components/CompanyPulseWidget";
 import { agentUrl, cn } from "../lib/utils";
 import { Link } from "@/lib/router";
 import { AGENT_ROLE_LABELS } from "@founderos/shared";
@@ -55,8 +57,13 @@ const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 export function DepartmentConsole() {
   const { departmentId } = useParams<{ departmentId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, companies } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
+
+  const selectedCompany = companies?.find((c) => c.id === selectedCompanyId);
+  const companyMetrics = (selectedCompany as { metrics?: unknown } | undefined)?.metrics as
+    | CompanyMetrics
+    | undefined;
 
   const rawTab = searchParams.get("tab");
   const activeTab: DepartmentTab = isValidTab(rawTab) ? rawTab : "team";
@@ -113,22 +120,27 @@ export function DepartmentConsole() {
 
   // Specialized consoles each own their editorial header + tab bar.
   // Render inside a Suspense boundary so lazy-loaded chunks don't jank.
+  // S1.3 — Company Pulse rail mounts above each console so KPIs follow
+  // the founder across departments.
   if (SPECIALIZED_CONSOLES.has(department.id)) {
     return (
-      <Suspense fallback={<PageSkeleton variant="list" />}>
-        {department.id === "growth" && (
-          <GrowthConsole companyId={selectedCompanyId} agents={agents ?? []} />
-        )}
-        {department.id === "content" && (
-          <ContentConsole companyId={selectedCompanyId} agents={agents ?? []} />
-        )}
-        {department.id === "crm" && (
-          <CrmConsole companyId={selectedCompanyId} agents={agents ?? []} />
-        )}
-        {department.id === "finance" && (
-          <FinanceConsole companyId={selectedCompanyId} agents={agents ?? []} />
-        )}
-      </Suspense>
+      <div className="space-y-6">
+        <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
+        <Suspense fallback={<PageSkeleton variant="list" />}>
+          {department.id === "growth" && (
+            <GrowthConsole companyId={selectedCompanyId} agents={agents ?? []} />
+          )}
+          {department.id === "content" && (
+            <ContentConsole companyId={selectedCompanyId} agents={agents ?? []} />
+          )}
+          {department.id === "crm" && (
+            <CrmConsole companyId={selectedCompanyId} agents={agents ?? []} />
+          )}
+          {department.id === "finance" && (
+            <FinanceConsole companyId={selectedCompanyId} agents={agents ?? []} />
+          )}
+        </Suspense>
+      </div>
     );
   }
 
@@ -154,6 +166,9 @@ export function DepartmentConsole() {
 
   return (
     <div className="space-y-6">
+      {/* S1.3 — KPI rail above the dept header so it follows the founder. */}
+      <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
+
       {/* Editorial page header */}
       <header className="flex flex-col gap-1.5 pt-1">
         <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
