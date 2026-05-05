@@ -150,6 +150,17 @@ export const contentDrafts = pgTable(
      * Used to track clicks via /c/:trackingId endpoint and attribute conversions.
      */
     attributionUtm: text("attribution_utm"),
+    /**
+     * Scheduled publication time (S4.4).
+     * When set, the content-publish-tick cron will publish this draft
+     * at or after this timestamp.
+     */
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    /**
+     * Publication error message, truncated to 500 chars (S4.4).
+     * Populated when status='failed' to capture the reason publication failed.
+     */
+    error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
