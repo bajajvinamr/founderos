@@ -6,8 +6,8 @@ _Single source of truth for which sprint is next. Each session updates `Status` 
 
 | # | Sprint | Status | Effort | Depends on | Last touched | PR |
 |---|---|---|---|---|---|---|
-| **S1** | Foundation + workspace shell | not_started | 1w | – | – | – |
-| **S2** | Integrations + data layer | not_started | 1w | S1 | – | – |
+| **S1** | Foundation + workspace shell | done | 1w | – | 2026-05-05 | [#38](https://github.com/bajajvinamr/founderos/pull/38) |
+| **S2** | Integrations + data layer | in_progress | 1w | S1 | 2026-05-05 | (parallel team — S2.1, S2.7, S2.8, S2.10 in flight) |
 | **S3** | Chief of Staff + Growth dept | not_started | 1w | S2 | – | – |
 | **S4** | Content Studio + Lifecycle CRM | not_started | 1w | S3 | – | – |
 | **S5** | Finance + scenario modeling | not_started | 1w | S2 (parallel-able with S4) | – | – |

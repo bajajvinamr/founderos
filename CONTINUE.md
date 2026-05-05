@@ -1,8 +1,60 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-05 by Claude (DoubtBuddy 6-sprint roadmap pivot)_
+_Last updated: 2026-05-05 by Claude (S1 done + S2 Wave 1 dispatched)_
 
-## 2026-05-05 — Roadmap pivot to DoubtBuddy 6-sprint MVP — PR #37 OPEN
+## 2026-05-05 — S1 Foundation shipped, S2 Integrations in flight
+
+**Status:** Sprint 1 complete (PR #38), Sprint 2 in progress with 4 parallel agents on Wave 1.
+
+### Sprint 1 — DONE (PR [#38](https://github.com/bajajvinamr/founderos/pull/38))
+
+10 tickets shipped on `feat/s1-workspace-home` (+7 commits past `main`):
+
+| Ticket | Notes |
+|---|---|
+| S1.1 | DepartmentStatusGrid + compact DecisionsInbox on Dashboard (+9 unit tests) |
+| S1.2 | CapitalAllocationCard placeholder |
+| S1.3 | CompanyPulseWidget (KPI rail) on dept consoles |
+| S1.4 | `/alerts` page (escalations + approvals + S2.7/S3.2 placeholders) |
+| S1.5 | CommandPalette dept + decisions routes |
+| S1.6 | DecisionsInbox `compact` prop |
+| S1.7 | Department registry (migration 0075, idx 74, +9 integration tests) — rebased from wrong base mid-sprint |
+| S1.8 | activity_log workflow_id + lineage_refs (migration 0076, idx 75) |
+| S1.9 | Onboarding "choose departments" step (+3 bootstrap tests) |
+| S1.10 | Branding config + 6 core surfaces; long tail (~82 occurrences) tracked |
+
+Verification: DB+UI+server typecheck clean; 10/10 bootstrap tests pass; 9/9 departments tests pass.
+
+### Sprint 2 — Wave 1 in flight (4 parallel agents)
+
+Each agent is in an isolated git worktree on `feat/s1-workspace-home` base.
+
+| Agent | Ticket | Branch | Reserved |
+|---|---|---|---|
+| SDE-A (Sonnet) | S2.1 events table + ingestEvent service | feat/s2-events-table | migration 0077, idx 76 |
+| SDE-B (Sonnet) | S2.7 connector health + freshness | feat/s2-connector-health | migration 0079, idx 77 |
+| SDE-C (Haiku) | S2.8 retry queues + DLQ | feat/s2-dlq-retries | no migration (BullMQ only) |
+| SDE-D (Haiku) | S2.10 integrations page UX | feat/s2-integrations-ux | no migration (UI only) |
+
+**Wave 2** (5 ingestion agents) blocked on S2.1 landing — once `events` table + `ingestEvent` exist, dispatch S2.2 (Stripe), S2.3 (PostHog), S2.4 (LinkedIn), S2.5 (HubSpot), S2.6 (Notion+Slack).
+
+**Wave 3** (S2.9 KPI calc) blocked on Wave 2 — needs ingested data to compute against.
+
+### Lessons learned mid-sprint (apply to S2)
+
+- **Always specify branch base explicitly to sub-agents.** S1.7's agent branched from `main` instead of the integration branch `feat/s1-workspace-home`, requiring a 4-commit rebase mid-sprint. Wave 1 dispatch instructions explicitly state the base branch + verification step.
+- **Reserve migration numbers AND journal idx values up-front.** Both S1.7 and S1.8 independently appended at idx 74; the merge surfaced the collision. Wave 1 has 0077/idx76, 0079/idx77 reserved; 0078 left open as a buffer.
+- **Sub-agent token budgets vary.** SDE-1 (Haiku) ran out of budget mid-S1.10 sweep — created the foundation (branding.ts) and migrated 6 high-traffic files but left 82 occurrences across 37 lower-priority surfaces. Foundation-first design meant the partial work was still mergeable; long tail tracked separately. Pattern to repeat: brief Haiku for foundation tasks, accept partial sweeps.
+
+### Carry-forwards
+
+- Task #76 — pre-existing `ui/src/api/approvals.test.ts:184` 409 error path (separate issue)
+- Task #107 — S1.10 long tail sweep (82 hardcoded "FounderOS" occurrences)
+- Task #67 — runner token security review (deferred from M-series)
+
+---
+
+## 2026-05-05 — Roadmap pivot to DoubtBuddy 6-sprint MVP — PR #37 MERGED
 
 **What happened**: Re-read the buyer's actual scope contract (`/Users/vinamr/Downloads/FounderOS -DoubtBuddy.md`, 4054 lines). The 2026-05-04 self-serve provisioning roadmap was misaligned. The $4k buyer (who will resell as SaaS) was sold an **AI Company OS** with 6 named departments, not per-customer Fly app provisioning. Pivoted planning to 6-sprint MVP per DoubtBuddy spec.
 
