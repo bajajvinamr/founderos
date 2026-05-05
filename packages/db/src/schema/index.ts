@@ -119,6 +119,7 @@ export {
   EXPERIMENT_DEPARTMENTS,
   EXPERIMENT_STATUSES,
   EXPERIMENT_CHANNELS,
+  HYPOTHESIS_EMBEDDING_DIM,
   type Experiment,
   type ExperimentInsert,
   type ExperimentDepartment,
