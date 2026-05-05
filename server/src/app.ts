@@ -31,7 +31,7 @@ import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { instanceInvitesRoutes } from "./routes/instance-invites.js";
 import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
-import { integrationHealthRoutes } from "./routes/integration-health.js";
+import { postHogRoutes } from "./routes/posthog-connector.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
 import { conversationRoutes } from "./routes/conversations.js";
@@ -318,6 +318,7 @@ export async function createApp(
   api.use(instanceInvitesRoutes(db));
   api.use(templateRoutes(db));
   api.use(integrationRoutes(db));
+  api.use(postHogRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
   api.use(conversationRoutes(db));
