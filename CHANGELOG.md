@@ -1,3 +1,25 @@
+## [0.3.0] - 2026-05-05 14:49:22 UTC
+
+### Added
+- feat(s1+s2): Sprint 1 Foundation + Sprint 2 Integrations + pre-S3 trust closure + CodeQL fixes (5b02b1c)
+- feat(billing): server-side plan-tier enforcement middleware (#35) (0c4c8db)
+- feat(byo-runner): M3 — UI runner install dialog + status pill on Agents page (#25) (2886c79)
+- feat(byo-runner): M2 — @founderos/runner npm package (poll + claim + spawn + events + complete) (#24) (90d2c52)
+- feat(byo-runner): Sprint 1 BE — REST endpoints, runner adapter, observability (BYO-101→110) (#23) (ab9ad05)
+- feat(byo-runner): Sprint 0+1 foundation — ADR + OpenAPI + DB + auth mw + adapter (BYO-001/002/003/005/101/102/103) (de284c7)
+- feat(council-2026-05-03): Phase 0 production hardening — observability + atomic auth + Fly cutover (#20) (1abcf59)
+
+### Fixed
+- fix(billing): Stripe webhook idempotency + newest-row precedence + trialing as healthy (#33) (40c009d)
+- fix(security): baseline CSP + security headers on every response (#32) (3b5e208)
+- fix(security): rate limit on agent-invoke + onboarding bootstrap (#31) (caa8ef3)
+- fix(security): close Composio cross-org leak — require connectedAccountId (#30) (3cf54a2)
+- fix(self-serve): /deep auth gate + run-failure status + Fly release_command (#29) (6c00e21)
+- fix(auth): mirror Supabase identity into public."user" + FK orphan guard (#28) (54cee94)
+- fix(p0): placeholder.supabase.co — restore prod auth + heavy logging + DevOps plan (#27) (7221b88)
+- fix(council-2026-05-03): Phase 0 follow-up fixes — 8 council items (#21) (cf4802c)
+- fix(e2e): close #17 — add dialog role + testid to onboarding wizard (#19) (82ca8e2)
+
 ## [0.2.16] - 2026-05-02 01:32:34 UTC
 
 ## [0.2.15] - 2026-05-02 01:11:25 UTC
