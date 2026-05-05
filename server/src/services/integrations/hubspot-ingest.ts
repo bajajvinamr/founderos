@@ -39,6 +39,20 @@ import { logger } from "../../middleware/logger.js";
 export interface HubSpotIngestInput {
   companyId: string;
   db: Db;
+  /**
+   * Council 2026-05-06 R2 P2 — when multiple ACTIVE hubspot connections
+   * exist for the same company (multi-admin reconnect / share), the cron
+   * iterates each connection ID but the service-side re-select is
+   * (companyId, appName, status="active") + .limit(1) which arbitrarily
+   * picks one row. Pass the exact connectionId from the cron to ensure
+   * the service binds to the same row the cron vetted, eliminating the
+   * "wrong account synced twice" failure mode.
+   *
+   * Manual triggers (admin "sync now") that don't know which connection
+   * to use can omit this; the service falls back to status=active limit 1
+   * with a warn log when multiple actives are present.
+   */
+  connectionId?: string;
 }
 
 export interface HubSpotIngestResult {
@@ -122,7 +136,7 @@ const FIRST_SYNC_LOOKBACK_DAYS = 90;
 export async function hubspotIngestService(
   input: HubSpotIngestInput,
 ): Promise<HubSpotIngestResult> {
-  const { companyId, db } = input;
+  const { companyId, db, connectionId } = input;
 
   // ─── Step 1: Fetch workspace's HubSpot connection ───────────────────────
 
@@ -131,17 +145,37 @@ export async function hubspotIngestService(
   // hubspot-sync-cron.ts already filters by status="active" but this service
   // is also reachable from manual triggers (admin "sync now"), so the filter
   // belongs at the service boundary too. Defense in depth.
-  const connection = await db
-    .select()
-    .from(composioConnections)
-    .where(
-      and(
+  //
+  // Council 2026-05-06 R2 P2 — when an exact connectionId is provided (cron
+  // path), bind to THAT row. When omitted (manual trigger), fall back to the
+  // (companyId, appName="hubspot", status="active") triple — and warn if
+  // multiple active rows exist so the operator knows the selection was
+  // arbitrary.
+  const connectionPredicate = connectionId
+    ? and(
+        eq(composioConnections.id, connectionId),
         eq(composioConnections.companyId, companyId),
         eq(composioConnections.appName, "hubspot"),
         eq(composioConnections.status, "active"),
-      ),
-    )
-    .limit(1);
+      )
+    : and(
+        eq(composioConnections.companyId, companyId),
+        eq(composioConnections.appName, "hubspot"),
+        eq(composioConnections.status, "active"),
+      );
+
+  const connection = await db
+    .select()
+    .from(composioConnections)
+    .where(connectionPredicate)
+    .limit(connectionId ? 1 : 2); // fetch up to 2 to detect ambiguity on manual trigger
+
+  if (!connectionId && connection.length > 1) {
+    logger.warn(
+      { companyId, activeRowCount: connection.length, picked: connection[0].id },
+      "hubspot-ingest: multiple active connections for company on manual trigger — picked arbitrarily; pass connectionId for deterministic selection",
+    );
+  }
 
   if (connection.length === 0) {
     logger.warn({ companyId }, "hubspot-ingest: no active HubSpot connection for workspace");

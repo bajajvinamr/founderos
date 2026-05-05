@@ -48,7 +48,7 @@ import {
   AUTONOMY_LEVELS,
 } from "@founderos/db";
 import { validate } from "../middleware/validate.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertBoard, assertCompanyAccess, assertStrictCompanyMembership, getActorInfo } from "./authz.js";
 import { notFound, conflict, badRequest } from "../errors.js";
 import {
   listWorkflows,
@@ -179,9 +179,10 @@ export function workflowRoutes(db: Db) {
     async (req, res) => {
       const companyId = req.params.companyId as string;
       // RBAC: board members and agents of the same company may create workflows.
-      // Instance admin is not required — any member can define a workflow.
-      // Activate/pause endpoints are board-only.
-      assertCompanyAccess(req, companyId);
+      // Council 2026-05-06 P1 BLOCK fix — strict membership for write paths,
+      // no instance-admin cross-tenant bypass on autonomy-creating endpoints.
+      // Activate/pause/runs are also gated by assertStrictCompanyMembership below.
+      assertStrictCompanyMembership(req, companyId);
 
       const body = req.body as z.infer<typeof createWorkflowSchema>;
 
@@ -219,7 +220,9 @@ export function workflowRoutes(db: Db) {
     async (req, res) => {
       const companyId = req.params.companyId as string;
       const workflowId = req.params.workflowId as string;
-      assertCompanyAccess(req, companyId);
+      // Council 2026-05-06 P1 BLOCK fix — PATCH can flip autonomyLevel to 4,
+      // which is autonomy-relevant. Strict membership only.
+      assertStrictCompanyMembership(req, companyId);
 
       const body = req.body as z.infer<typeof patchWorkflowSchema>;
 
@@ -256,9 +259,11 @@ export function workflowRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     const workflowId = req.params.workflowId as string;
 
-    // Stricter than assertCompanyAccess: board only (no agent tokens).
+    // Stricter than assertCompanyAccess: board only (no agent tokens) AND
+    // strict membership (no instance-admin cross-tenant bypass).
+    // Council 2026-05-06 P1 BLOCK fix.
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertStrictCompanyMembership(req, companyId);
 
     const { actorType, actorId } = getActorInfo(req);
 
@@ -276,8 +281,9 @@ export function workflowRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     const workflowId = req.params.workflowId as string;
 
+    // Council 2026-05-06 P1 BLOCK fix — strict membership.
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertStrictCompanyMembership(req, companyId);
 
     const { actorType, actorId } = getActorInfo(req);
 
@@ -328,7 +334,11 @@ export function workflowRoutes(db: Db) {
     async (req, res) => {
       const companyId = req.params.companyId as string;
       const workflowId = req.params.workflowId as string;
-      assertCompanyAccess(req, companyId);
+      // Council 2026-05-06 P1 BLOCK fix — runs trigger autonomous side
+      // effects when the workflow is level 4 + flag enabled. Strict
+      // membership keeps cross-tenant instance-admins out of customer
+      // sends.
+      assertStrictCompanyMembership(req, companyId);
 
       const workflow = await getWorkflow(db, companyId, workflowId);
       if (!workflow) throw notFound("Workflow not found");
@@ -342,12 +352,30 @@ export function workflowRoutes(db: Db) {
       const body = req.body as z.infer<typeof createRunSchema>;
       const { actorType, actorId, agentId, runId } = getActorInfo(req);
 
-      // Derive initial run status from autonomy level.
-      // Level 3 = approval-required: run is created in pending_approval state.
-      const initialStatus =
-        workflow.autonomyLevel === AUTONOMY_LEVELS.APPROVAL_REQUIRED
-          ? ("pending_approval" as const)
-          : ("running" as const);
+      // Council 2026-05-06 P1 BLOCK fix — re-check the autonomy flag at run
+      // creation time, NOT just at workflow creation. Without this, a workflow
+      // created at level=4 when the flag was true continues to autonomously
+      // execute even after the admin disables the kill switch — flag flip
+      // becomes a future-only signal, useless for incident response.
+      //
+      // Decision matrix:
+      //   level 1 (draft):     status="running" (manual; template gates sends)
+      //   level 2 (manual):    status="running"
+      //   level 3 (approval):  status="pending_approval" (always — humans gate)
+      //   level 4 (autonomous):
+      //     flag enabled:  status="running"
+      //     flag disabled: status="pending_approval" (downgrade — kill switch)
+      let initialStatus: "running" | "pending_approval";
+      if (workflow.autonomyLevel === AUTONOMY_LEVELS.APPROVAL_REQUIRED) {
+        initialStatus = "pending_approval";
+      } else if (workflow.autonomyLevel === AUTONOMY_LEVELS.AUTONOMOUS) {
+        const stillPermitted = await canRunAutonomously(db, workflow);
+        initialStatus = stillPermitted ? "running" : "pending_approval";
+      } else {
+        // Levels 1 + 2 — draft / manual; the template code itself gates
+        // any customer-facing side effect.
+        initialStatus = "running";
+      }
 
       const run = await createWorkflowRun(db, {
         companyId,

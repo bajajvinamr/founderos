@@ -31,6 +31,25 @@ export interface LogActivityInput {
   entityId: string;
   agentId?: string | null;
   runId?: string | null;
+  /**
+   * Council 2026-05-06 P1 BLOCK fix — workflow_id column was added to
+   * activity_log in S1.8 (migration 0076) but never populated. Without
+   * it the audit trail for autonomous workflow executions cannot be
+   * filtered by workflow — operators trying to investigate "why did
+   * this customer get this email" have to grep `details` JSON.
+   *
+   * Set this for any activity originating from a workflow lifecycle
+   * (created / activated / paused / autonomy_changed / status_changed)
+   * or a workflow_run (created / completed / failed / cancelled).
+   */
+  workflowId?: string | null;
+  /**
+   * Lineage refs (also added in migration 0076). Optional structured
+   * pointers to upstream entities that caused this activity — used for
+   * cross-system tracing (e.g., "this was triggered by experiment
+   * exp-123 hitting threshold X").
+   */
+  lineageRefs?: Record<string, unknown> | null;
   details?: Record<string, unknown> | null;
 }
 
@@ -51,6 +70,8 @@ export async function logActivity(db: Db, input: LogActivityInput) {
     entityId: input.entityId,
     agentId: input.agentId ?? null,
     runId: input.runId ?? null,
+    workflowId: input.workflowId ?? null,
+    lineageRefs: input.lineageRefs ?? null,
     details: redactedDetails,
   });
 
@@ -65,6 +86,8 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       entityId: input.entityId,
       agentId: input.agentId ?? null,
       runId: input.runId ?? null,
+      workflowId: input.workflowId ?? null,
+      lineageRefs: input.lineageRefs ?? null,
       details: redactedDetails,
     },
   });

@@ -119,6 +119,10 @@ export async function createWorkflow(
     actorId: input.actorId,
     agentId: input.agentId ?? null,
     runId: input.runId ?? null,
+    // Council 2026-05-06 P1 BLOCK fix — populate workflow_id (column added
+    // in S1.8 migration 0076 but never set on writes). This makes the audit
+    // trail filterable by workflow for incident response on autonomous sends.
+    workflowId: row.id,
     action: "workflow.created",
     entityType: "workflow",
     entityId: row.id,
@@ -187,6 +191,7 @@ export async function updateWorkflow(
     actorId: input.actorId,
     agentId: input.agentId ?? null,
     runId: input.runId ?? null,
+    workflowId: updated.id,
     action: isStatusChange
       ? "workflow.status_changed"
       : isAutonomyChange
@@ -294,6 +299,7 @@ export async function createWorkflowRun(
     actorId: input.actorId,
     agentId: input.agentId ?? null,
     runId: input.runId ?? null,
+    workflowId: input.workflowId,
     action: "workflow_run.created",
     entityType: "workflow_run",
     entityId: run.id,

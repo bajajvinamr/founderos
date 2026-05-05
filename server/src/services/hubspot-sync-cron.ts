@@ -140,8 +140,15 @@ async function syncAllWorkspaces(db: Db): Promise<SyncAllWorkspacesResult> {
 
     for (const conn of activeConnections) {
       try {
+        // Council 2026-05-06 R2 P2 — pass the exact connectionId we
+        // vetted as active so the service binds to the same row, not
+        // an arbitrary status=active row picked by .limit(1) in the
+        // service. Multi-admin companies have multiple active rows
+        // (different userIds), and re-selection without the ID can
+        // sync the same workspace twice in one cron tick.
         const syncResult = await hubspotIngestService({
           companyId: conn.companyId,
+          connectionId: conn.connectionId,
           db,
         });
 
