@@ -494,7 +494,7 @@ describeEmbeddedPostgres("activation-nudge workflow template (S4.7)", () => {
   // ── G. Action execution ──────────────────────────────────────────────────
 
   describe("G. Action execution (executeNudgeActions)", () => {
-    it("G1 — marks all actions as completed with timestamp", () => {
+    it("G1 — marks all actions as completed with timestamp", async () => {
       const actions = [
         {
           type: "send_email" as const,
@@ -508,11 +508,112 @@ describeEmbeddedPostgres("activation-nudge workflow template (S4.7)", () => {
         },
       ];
 
-      const executed = executeNudgeActions(actions);
+      const executed = await executeNudgeActions(actions);
       expect(executed).toHaveLength(2);
       expect(executed[0].status).toBe("completed");
       expect(executed[1].status).toBe("completed");
       expect(executed[0].executedAt).toBeDefined();
+    });
+
+    // Council 2026-05-05 W0.2 BLOCK fix verification — activation-nudge variant.
+    //
+    // Before W0.2, executeNudgeActions was a "no-op stub" that mapped every
+    // action to status="completed" without ever touching an email transport.
+    // Founders saw the workflow run as completed; recipients saw nothing.
+    //
+    // After W0.2, the function dispatches send_email actions through the
+    // EmailTransport (CaptureTransport in NODE_ENV=test) while leaving
+    // log_crm_note + nudge_sent as bookkeeping markers.
+    it("G2 — send_email actions are dispatched through the EmailTransport", async () => {
+      const { resetEmailTransport, getCapturedEmails } = await import(
+        "../services/transports/email-transport.js"
+      );
+      resetEmailTransport();
+
+      const actions = [
+        {
+          type: "send_email" as const,
+          payload: {
+            distinctId: "user-42",
+            email: "nudge@example.com",
+            subject: "We miss you!",
+            template: "activation-nudge",
+          },
+          status: "pending" as const,
+        },
+        {
+          type: "log_crm_note" as const,
+          payload: { distinctId: "user-42", subject: "Re-engagement nudge sent" },
+          status: "pending" as const,
+        },
+        {
+          type: "nudge_sent" as const,
+          payload: { distinctId: "user-42" },
+          status: "pending" as const,
+        },
+      ];
+
+      const executed = await executeNudgeActions(
+        actions,
+        { id: "wf-test-activation-nudge" },
+        "run-test-1",
+      );
+
+      // Transport received exactly 1 email (only send_email triggers send).
+      const emails = getCapturedEmails();
+      expect(emails).toHaveLength(1);
+      expect(emails[0]!.to).toBe("nudge@example.com");
+      expect(emails[0]!.subject).toBe("We miss you!");
+      // Tag threading for webhook reconciliation.
+      expect(emails[0]!.tags?.find((t) => t.name === "template")?.value).toBe(
+        "activation-nudge",
+      );
+      expect(emails[0]!.tags?.find((t) => t.name === "workflow_id")?.value).toBe(
+        "wf-test-activation-nudge",
+      );
+      expect(emails[0]!.tags?.find((t) => t.name === "distinct_id")?.value).toBe(
+        "user-42",
+      );
+
+      // send_email action was enriched with provider id + transport mode.
+      const sendEmailAction = executed[0] as { payload: Record<string, unknown>; status: string };
+      expect(sendEmailAction.status).toBe("completed");
+      expect(sendEmailAction.payload.providerMessageId).toBeDefined();
+      expect(sendEmailAction.payload.transportMode).toBe("capture");
+
+      // log_crm_note + nudge_sent stay completed (bookkeeping markers).
+      expect(executed[1].status).toBe("completed");
+      expect(executed[2].status).toBe("completed");
+
+      resetEmailTransport();
+    });
+
+    it("G3 — send_email with missing recipient is marked failed without throwing", async () => {
+      // Defensive: buildNudgeActions skips candidates without email, but if a
+      // hand-written action ever reaches executeNudgeActions without a
+      // recipient, the function MUST stamp status="failed" + an error string
+      // rather than crashing the whole run mid-batch.
+      const { resetEmailTransport, getCapturedEmails } = await import(
+        "../services/transports/email-transport.js"
+      );
+      resetEmailTransport();
+
+      const actions = [
+        {
+          type: "send_email" as const,
+          payload: { distinctId: "user-no-email" }, // no email!
+          status: "pending" as const,
+        },
+      ];
+
+      const executed = await executeNudgeActions(actions);
+      expect(executed).toHaveLength(1);
+      expect(executed[0].status).toBe("failed");
+      expect(executed[0].error).toBe("no recipient email");
+      // Transport must NOT have received anything.
+      expect(getCapturedEmails()).toHaveLength(0);
+
+      resetEmailTransport();
     });
   });
 });

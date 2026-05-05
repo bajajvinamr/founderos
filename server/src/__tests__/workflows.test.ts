@@ -43,7 +43,7 @@
 
 import express from "express";
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { companies, createDb, workflows, workflowRuns } from "@founderos/db";
 import {
@@ -53,6 +53,20 @@ import {
 import { workflowRoutes } from "../routes/workflows.js";
 import { errorHandler } from "../middleware/index.js";
 import { AUTONOMOUS_EMAIL_SETTING_KEY } from "../services/workflow-autonomy.js";
+import * as stripeModule from "../services/stripe-client.js";
+
+// ── Stripe mock (required for G3 upsell template — checkout session creation) ─
+// Council 2026-05-05 W0.2 BLOCK fix verification needs the upsell template to
+// reach the email-send branch; without this mock the Stripe client throws
+// "STRIPE_SECRET_KEY missing" before transport.send() is even invoked.
+const mockStripeCheckoutUrl = "https://checkout.stripe.com/c/pay/cs_test_w0_2";
+const mockStripeClient = {
+  isEnabled: () => true,
+  createCheckoutSession: vi.fn().mockResolvedValue({ url: mockStripeCheckoutUrl }),
+  retrieveSubscription: vi.fn().mockResolvedValue(null),
+  constructWebhookEvent: vi.fn(),
+};
+vi.spyOn(stripeModule, "createStripeClient").mockReturnValue(mockStripeClient as never);
 
 const support = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = support.supported ? describe : describe.skip;
@@ -692,5 +706,94 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
     expect(persistedRun!.status).toBe("completed");
 
     resetEmailTransport(); // restore for next test
+  });
+
+  // ── G3. Upsell template actually calls the transport (W0.2 BLOCK fix) ──────
+
+  it("G3. POST /runs → upsell autonomous → transport receives 1 send + Stripe URL", async () => {
+    // Council 2026-05-05 W0.2 BLOCK fix verification — upsell variant.
+    //
+    // Before W0.2, sendUpsellEmail was a "v1: Log intent only" stub plus a
+    // parent-flow `.map(status: "completed")` that obliterated per-action
+    // results. After W0.2 the template:
+    //   1. generates a real Stripe checkout session (mocked here)
+    //   2. dispatches via EmailTransport.send() with the checkoutUrl in payload
+    //   3. persists the transport result (queued → completed) without overwrite
+    //
+    // CaptureTransport (NODE_ENV=test) appends to in-memory; we assert the
+    // recipient + the workflow_id tag + the checkoutUrl payload all survive
+    // the route → executor → template → transport chain.
+    const { resetEmailTransport, getCapturedEmails } = await import(
+      "../services/transports/email-transport.js"
+    );
+    resetEmailTransport();
+    mockStripeClient.createCheckoutSession.mockClear();
+
+    await enableAutonomousEmail(db);
+
+    const app = buildApp(db, {}, [companyId]);
+
+    const [w] = await db
+      .insert(workflows)
+      .values({
+        companyId,
+        name: "Upsell — real transport contract",
+        template: "upsell",
+        triggerKind: "schedule",
+        triggerSpec: { cron: "0 9 * * *" },
+        autonomyLevel: 4,
+        status: "active",
+        config: {
+          contactEmail: "upsell-recipient@example.com",
+          contactName: "Upsell User",
+          companyName: "TestCo",
+          primaryFeature: "advanced analytics",
+          pricingPageUrl: "https://example.com/pricing",
+          successUrl: "https://example.com/dashboard",
+          cancelUrl: "https://example.com/pricing",
+        },
+      })
+      .returning();
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/workflows/${w!.id}/runs`)
+      .send({ triggeredBy: { kind: "manual" } })
+      .expect(201);
+
+    expect(res.body.status).toBe("running");
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    expect(mockStripeClient.createCheckoutSession).toHaveBeenCalledTimes(1);
+
+    const emails = getCapturedEmails();
+    expect(emails).toHaveLength(1);
+    expect(emails[0]!.to).toBe("upsell-recipient@example.com");
+    expect(emails[0]!.subject).toContain("TestCo");
+    // Tag threading is the webhook reconciliation contract — must survive.
+    expect(emails[0]!.tags?.find((t) => t.name === "workflow_id")?.value).toBe(w!.id);
+    expect(emails[0]!.tags?.find((t) => t.name === "template")?.value).toBe("upsell");
+
+    const [persistedRun] = await db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, res.body.id));
+
+    expect(persistedRun!.status).toBe("completed");
+    // Verify transport result was persisted, NOT overwritten by .map(completed):
+    // - providerMessageId is set (capture mode synthetic id)
+    // - transportMode === "capture"
+    // - checkoutUrl from Stripe is preserved in payload
+    const persistedActions = persistedRun!.actions as Array<{
+      payload: { providerMessageId?: string; transportMode?: string; checkoutUrl?: string };
+      status: string;
+    }>;
+    expect(persistedActions).toHaveLength(1);
+    expect(persistedActions[0]!.status).toBe("completed");
+    expect(persistedActions[0]!.payload.providerMessageId).toBeDefined();
+    expect(persistedActions[0]!.payload.transportMode).toBe("capture");
+    expect(persistedActions[0]!.payload.checkoutUrl).toBe(mockStripeCheckoutUrl);
+
+    resetEmailTransport();
   });
 });

@@ -21,6 +21,7 @@ import { canRunAutonomously } from "../../workflow-autonomy.js";
 import { logActivity } from "../../activity-log.js";
 import { logger } from "../../../middleware/logger.js";
 import { createStripeClient } from "../../stripe-client.js";
+import { getEmailTransport } from "../../transports/email-transport.js";
 
 export interface UpsellConfig {
   /** Email of the engaged free user */
@@ -47,6 +48,10 @@ export interface UpsellEmailAction {
     bodyText: string;
     bodyHtml: string;
     checkoutUrl: string;
+    /** Resend / capture provider id for webhook reconciliation (council 2026-05-05 W0.2). */
+    providerMessageId?: string;
+    /** Transport mode tag — "resend" / "capture" — for observability. */
+    transportMode?: string;
   };
   status: "pending" | "completed" | "failed";
   executedAt?: string;
@@ -136,22 +141,28 @@ export async function executeUpsellTemplate(
       { workflowId, runId },
       "upsell autonomous send triggered",
     );
-    await sendUpsellEmail(db, workflow, action);
-    await updateWorkflowRunStatus(db, runId, "completed", {
-      actions: [{ ...action, status: "completed", executedAt: new Date().toISOString() }],
+    // Council 2026-05-05 W0.2 fix: persist transport result as-is, do NOT
+    // .map(status: "completed") — that obliterated real per-action outcomes.
+    const sentAction = await sendUpsellEmail(workflow, runId, action);
+    const runStatus = sentAction.status === "failed" ? "failed" : "completed";
+    await updateWorkflowRunStatus(db, runId, runStatus, {
+      actions: [sentAction],
     });
 
     await logActivity(db, {
       companyId: workflow.companyId,
       actorType: "system",
       actorId: "workflow-executor",
-      action: "upsell_email_sent",
+      action: sentAction.status === "failed" ? "upsell_email_failed" : "upsell_email_sent",
       entityType: "workflow_run",
       entityId: runId,
       workflowId,
       details: {
         recipientEmail: config.contactEmail,
         primaryFeature: config.primaryFeature,
+        providerMessageId: sentAction.payload.providerMessageId,
+        transportMode: sentAction.payload.transportMode,
+        ...(sentAction.error ? { error: sentAction.error } : {}),
       },
     });
   } else if (workflow.autonomyLevel === 3) {
@@ -175,29 +186,68 @@ export async function executeUpsellTemplate(
 }
 
 /**
- * sendUpsellEmail — actually dispatch the upsell email
+ * sendUpsellEmail — dispatch the upsell email via the active EmailTransport.
  *
- * In v1, this is mocked. In v2, integrate with Resend or HubSpot.
- * For now, just log intent; tests can spy on this function.
+ * Council 2026-05-05 W0.2 BLOCK fix: replaced the v1 "log intent" stub with
+ * a real transport.send() call. Transport selection is process-wide
+ * (NODE_ENV=test → capture, RESEND_API_KEY → resend, else → capture+warn).
+ *
+ * Returns the action enriched with transport result + per-action status.
+ * "queued" from the transport flattens to action.status="completed"
+ * provisionally; the Resend webhook receiver (W0.2c) will later promote
+ * to "delivered" or downgrade to "bounced" by providerMessageId.
  */
 async function sendUpsellEmail(
-  db: Db,
   workflow: Workflow,
+  runId: string,
   action: UpsellEmailAction,
-): Promise<void> {
-  // v1: Log intent only. Real send happens in a separate email-send job.
+): Promise<UpsellEmailAction> {
+  const transport = getEmailTransport();
+  const fromAddress =
+    process.env.FOUNDEROS_EMAIL_FROM ?? "FounderOS <onboarding@founderos.io>";
+
   logger.info(
-    { workflowId: workflow.id, to: action.payload.recipientEmail },
-    "upsell email queued for send",
+    { workflowId: workflow.id, runId, to: action.payload.recipientEmail, mode: transport.mode },
+    "upsell email dispatching",
   );
 
-  // TODO: v2 integration
-  // const emailResult = await emailSender.send({
-  //   to: action.payload.recipientEmail,
-  //   subject: action.payload.subject,
-  //   text: action.payload.bodyText,
-  //   html: action.payload.bodyHtml,
-  // });
+  const result = await transport.send({
+    to: action.payload.recipientEmail,
+    from: fromAddress,
+    subject: action.payload.subject,
+    text: action.payload.bodyText,
+    html: action.payload.bodyHtml,
+    tags: [
+      { name: "workflow_id", value: workflow.id },
+      { name: "workflow_run_id", value: runId },
+      { name: "template", value: "upsell" },
+    ],
+  });
+
+  if (result.status === "failed") {
+    logger.error(
+      { workflowId: workflow.id, runId, to: action.payload.recipientEmail, reason: result.reason },
+      "upsell email send failed",
+    );
+    return {
+      ...action,
+      status: "failed",
+      error: result.reason ?? "transport rejected",
+      executedAt: new Date().toISOString(),
+      payload: { ...action.payload, transportMode: transport.mode },
+    };
+  }
+
+  return {
+    ...action,
+    status: "completed",
+    executedAt: new Date().toISOString(),
+    payload: {
+      ...action.payload,
+      providerMessageId: result.id,
+      transportMode: transport.mode,
+    },
+  };
 }
 
 /**

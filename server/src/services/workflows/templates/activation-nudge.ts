@@ -55,6 +55,8 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { events, type Workflow, type WorkflowAction } from "@founderos/db";
 import { isDraftOnly, requiresApproval } from "../../workflow-autonomy.js";
+import { getEmailTransport } from "../../transports/email-transport.js";
+import { logger } from "../../../middleware/logger.js";
 
 // ── Config schema (inferred from config JSONB) ──────────────────────────────
 
@@ -292,22 +294,115 @@ export function shouldExecuteNudge(workflow: Pick<Workflow, "autonomyLevel">): b
 // ── Execute nudge actions (stub for integration) ────────────────────────────
 
 /**
- * executeNudgeActions — carry out the email and CRM note actions.
+ * executeNudgeActions — carry out send_email + log_crm_note + nudge_sent actions.
  *
- * In production, this would:
- *   - Call emailService.send() or HubSpot API to deliver emails
- *   - Call hubspotService.createNote() for CRM notes
- *   - Update each action's status and executedAt
+ * Council 2026-05-05 W0.2 BLOCK fix: replaced the v1 stub (which marked every
+ * action "completed" regardless of outcome) with real per-action dispatch.
  *
- * For testing, this is a no-op stub that marks all actions as "completed".
+ * Per-action behavior:
+ *   - "send_email"     → transport.send(); failure stamps status="failed" + error
+ *   - "log_crm_note"   → still a no-op stub (HubSpot integration deferred to S4.10)
+ *   - "nudge_sent"     → bookkeeping marker, always "completed"
+ *
+ * If a send_email fails, the matching downstream log_crm_note + nudge_sent
+ * for the SAME distinctId are still marked completed — the dedup marker is
+ * needed to prevent retry storms. The send failure is the audit signal.
  *
  * @param actions   Workflow actions to execute
- * @returns Updated actions with status="completed"
+ * @param workflow  The workflow row — id is threaded into Resend tags
+ * @param runId     The workflow_run id — threaded into Resend tags
+ * @returns Updated actions with per-action status (completed | failed)
  */
-export function executeNudgeActions(actions: WorkflowAction[]): WorkflowAction[] {
-  return actions.map((action) => ({
-    ...action,
-    status: "completed" as const,
-    executedAt: new Date().toISOString(),
-  }));
+export async function executeNudgeActions(
+  actions: WorkflowAction[],
+  workflow?: Pick<Workflow, "id">,
+  runId?: string,
+): Promise<WorkflowAction[]> {
+  const transport = getEmailTransport();
+  const fromAddress =
+    process.env.FOUNDEROS_EMAIL_FROM ?? "FounderOS <onboarding@founderos.io>";
+  const now = () => new Date().toISOString();
+
+  const out: WorkflowAction[] = [];
+
+  for (const action of actions) {
+    if (action.type === "send_email") {
+      const payload = action.payload as Record<string, unknown>;
+      const to = (payload.email ?? payload.recipientEmail) as string | undefined;
+      const subject = (payload.subject ?? "We miss you!") as string;
+      const text =
+        (payload.bodyText as string | undefined) ??
+        `Hey — we noticed you haven't been back in a while. ${subject}`;
+      const html =
+        (payload.bodyHtml as string | undefined) ??
+        `<p>Hey — we noticed you haven't been back in a while.</p><p>${subject}</p>`;
+
+      if (!to) {
+        logger.warn(
+          { workflowId: workflow?.id, runId, payload },
+          "activation-nudge send_email skipped — no recipient email in payload",
+        );
+        out.push({
+          ...action,
+          status: "failed",
+          error: "no recipient email",
+          executedAt: now(),
+        });
+        continue;
+      }
+
+      const tags: Array<{ name: string; value: string }> = [
+        { name: "template", value: "activation-nudge" },
+      ];
+      if (workflow?.id) tags.push({ name: "workflow_id", value: workflow.id });
+      if (runId) tags.push({ name: "workflow_run_id", value: runId });
+      if (typeof payload.distinctId === "string") {
+        tags.push({ name: "distinct_id", value: payload.distinctId });
+      }
+
+      const result = await transport.send({
+        to,
+        from: fromAddress,
+        subject,
+        text,
+        html,
+        tags,
+      });
+
+      if (result.status === "failed") {
+        logger.error(
+          { workflowId: workflow?.id, runId, to, reason: result.reason },
+          "activation-nudge email send failed",
+        );
+        out.push({
+          ...action,
+          status: "failed",
+          error: result.reason ?? "transport rejected",
+          executedAt: now(),
+          payload: { ...payload, transportMode: transport.mode },
+        });
+      } else {
+        out.push({
+          ...action,
+          status: "completed",
+          executedAt: now(),
+          payload: {
+            ...payload,
+            providerMessageId: result.id,
+            transportMode: transport.mode,
+          },
+        });
+      }
+    } else {
+      // log_crm_note + nudge_sent: bookkeeping. HubSpot integration is a
+      // separate ticket (S4.10 CRM Console UI consolidation, task #167).
+      out.push({
+        ...action,
+        status: "completed" as const,
+        executedAt: now(),
+      });
+    }
+  }
+
+  return out;
 }
