@@ -10,15 +10,41 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 | Area | State |
 |---|---|
-| Wave 0 progress | W0.1 ✅ · W0.2 ✅ · W0.3a ✅ (TTL middleware) · W0.3b ✅ (rotation+90d) · W0.4 ✅ (env-var+expiry hint) — **WAVE 0 CLOSED** |
-| Branch | `feat/trust-closure` (HEAD: `97ff663` — RunnerInstallDialog env-var fix + expiry hint) |
-| Tests | 50/50 W0.2 surface · 28/28 runner-routes (incl. 9 new W0.3) · 16/16 UI dialog+pill |
-| Council BLOCK closure | **4/4 P1 fixes shipped.** All council 2026-05-05 BLOCK findings closed across 6 atomic commits. |
-| Loop pacing | Wake 4 closed W0.3b + W0.4 — Wave 0 done within Day 1. Next: re-run /council on cumulative diff (task #191), then begin S4 Wave 3 dispatch. |
+| Wave 0 progress | W0.1 ✅ · W0.2 ✅ · W0.3 ✅ · W0.4 ✅ + **R1 close-out** ✅ (2 fix-the-fix P1s caught + shipped) — **WAVE 0 CLOSED** |
+| Branch | `feat/trust-closure` (HEAD: `0759cbc` — R1 close-out activation-nudge dispatcher + onboarding workflow_run_id tag) |
+| Tests | 23/23 workflows · 28/28 runner-routes · 12/12 resend-webhook · 11/11 runner-auth · 8/8 activation-nudge · 16/16 UI dialog+pill. Server + UI typecheck clean. |
+| Council BLOCK closure | **4/4 original P1 fixes** + **2/2 close-out P1 fixes-of-fixes** shipped across 8 atomic commits. Verdict from Codex+Gemini parallel: PASS WITH CONDITIONS → SHIP. |
+| Loop pacing | Wake 5 ran the close-out council — caught & shipped 2 net-new P1s the BLOCK fixes themselves introduced. Next: begin S4 Wave 3 dispatch (S4.8 churn rescue, S4.3 attribution, S4.4 calendar). |
 
 ---
 
 ## Issues recorded today
+
+### [02:35:00 UTC] [HIGH] [W0 close-out council CAUGHT 2 net-new P1s] — fix-the-fix shipped, BLOCK truly closed
+
+**What happened:** Per task #191 ran the cumulative Wave 0 diff (24 files, +2403/-60) through Codex+Gemini parallel adversarial review. Pre-flight pings both returned ready, FULL council mode. R1 returned 2 P1 BLOCK findings on the council's OWN BLOCK FIXES — exactly the failure mode the close-out council is designed to catch.
+
+**Findings:**
+1. **[P1 BOTH-CONFIRMED]** `server/src/services/workflows/templates/onboarding-emails.ts:221` emitted Resend tags `{ workflow_id, template, day }` but missed `workflow_run_id`. The W0.2c webhook receiver (`server/src/routes/resend-webhook.ts`) finds runs via that tag — without it every onboarding delivery/bounce event 200-acks and silently drops. The buyer-trust gate (the entire purpose of W0.2c) would have looked green in CaptureTransport but failed silently in prod for the most-frequent template.
+2. **[P1 Codex-only]** `server/src/services/workflows.ts:334` dispatcher switch had cases for `onboarding-emails` + `upsell` but NOT `activation-nudge` — every activation-nudge run fell through to the warn-only default and stuck at "running" forever. The W0.2 wave shipped a real transport for activation-nudge but never wired the dispatcher contract.
+
+**What I tried:**
+- Verified P1.1 by direct grep — confirmed onboarding-emails was the only template missing the tag (upsell + activation-nudge already had it).
+- Verified P1.2 by reading workflows.ts:334 — switch fell straight through to `default: logger.warn(...)`.
+- Skipped R2 convergence loop — both P1s are concrete narrow fixes, no architectural debate to converge on.
+- Wrote `executeActivationNudgeTemplate(db, workflow, workflowRun)` wrapper that reads pre-stamped actions from `workflowRun.actions` (matching the architecture: scheduler scans, builds actions, creates run; template dispatches). Hit a CHECK constraint on `status='queued'` (allowed values are pending_approval/running/completed/failed) — fixed by using `running` for the test fixture. Hit a missing `error` column on workflow_runs — refactored to persist errors as a synthetic failed action in `actions[]` (matching upsell/onboarding convention). Both Codex test runs pass after.
+
+**Workaround applied:** None — fixes shipped clean in commit `0759cbc`. Default branch of dispatcher ALSO now marks unknown templates "failed" instead of just warning, applying the same observability hygiene across the board.
+
+**Status:** SHIPPED. R1 close-out: 2/2 P1 BLOCKs caught + fixed. Wave 0 truly closed (8 atomic commits + 2 docs commits). Council decision logged at `~/.gstack/projects/bajajvinamr-founderos/decisions.md` with full evidence + R1 transcript.
+
+**Council methodology insight:** This is the second time the "fix-the-fix" pattern has caught a P1 the BLOCK-fix implementer (me) missed (first was 2026-05-05 R2 P2 hubspot connectionId on S4.5). Both times: parallel adversarial review on the council's OWN fixes catches a P1 that self-review misses. Decision: keep close-out council as standing protocol after every BLOCK closure. Cost ~5min latency, value = the silent buyer-trust break the original council was trying to prevent.
+
+**Files touched:** `server/src/services/workflows.ts` (dispatcher case + default failure), `server/src/services/workflows/templates/onboarding-emails.ts` (workflow_run_id tag + runId param), `server/src/services/workflows/templates/activation-nudge.ts` (new executeActivationNudgeTemplate + setActivationRunStatus), `server/src/__tests__/workflows.test.ts` (G2 contract assertion + new G4 + G5).
+
+**Next-action recommendation for Vinamr:** No action — both fixes shipped and tests green. Wave 0 is now mergeable. Next is S4 Wave 3 dispatch (S4.8 churn rescue with council pre-merge per task #155, plus S4.3 attribution + S4.4 calendar). The S4.8 ticket explicitly carries a council requirement because it's an autonomous customer email loop — that one shouldn't ship without parallel review either.
+
+---
 
 ### [02:13:00 UTC] [LOW] [WAVE 0 CLOSED] All 4 P1 BLOCK findings shipped within Day 1
 
