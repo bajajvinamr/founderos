@@ -200,6 +200,15 @@ export const workflowRuns = pgTable(
     actions: jsonb("actions").$type<WorkflowAction[]>().notNull().default([]),
     /** KPI snapshot at run start — used for lift measurement 7d later. */
     metricSnapshot: jsonb("metric_snapshot").$type<Record<string, unknown>>(),
+    /**
+     * idempotencyKey: optional composite-scoped dedup key for workflow run creation.
+     * When provided, enables race-safe dedup via UNIQUE NULLS NOT DISTINCT on
+     * (company_id, workflow_id, idempotency_key). Null values collide once per
+     * (company_id, workflow_id) pair, preventing accidental dual-NULL rows during
+     * migration. Used to prevent duplicate runs from dual triggers (kpi_anomaly
+     * insight + Stripe at_risk webhook on same customer same day).
+     */
+    idempotencyKey: text("idempotency_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },

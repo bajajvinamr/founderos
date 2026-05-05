@@ -273,6 +273,7 @@ export interface CreateWorkflowRunInput {
   actorId: string;
   agentId?: string | null;
   runId?: string | null;
+  idempotencyKey?: string | null;
   data: Omit<WorkflowRunInsert, "id" | "workflowId" | "companyId" | "createdAt">;
 }
 
@@ -280,14 +281,35 @@ export async function createWorkflowRun(
   db: Db,
   input: CreateWorkflowRunInput,
 ): Promise<WorkflowRun> {
+  const insertData = {
+    ...input.data,
+    workflowId: input.workflowId,
+    companyId: input.companyId,
+    ...(input.idempotencyKey && { idempotencyKey: input.idempotencyKey }),
+  };
+
   const [run] = await db
     .insert(workflowRuns)
-    .values({
-      ...input.data,
-      workflowId: input.workflowId,
-      companyId: input.companyId,
+    .values(insertData)
+    .onConflictDoNothing({
+      target: [workflowRuns.companyId, workflowRuns.workflowId, workflowRuns.idempotencyKey],
     })
     .returning();
+
+  // If conflict fired (onConflictDoNothing), re-query to return existing run
+  if (!run && input.idempotencyKey) {
+    const [existing] = await db
+      .select()
+      .from(workflowRuns)
+      .where(
+        and(
+          eq(workflowRuns.companyId, input.companyId),
+          eq(workflowRuns.workflowId, input.workflowId),
+          eq(workflowRuns.idempotencyKey, input.idempotencyKey),
+        ),
+      );
+    if (existing) return existing;
+  }
 
   if (!run) throw new Error("Insert returned no run row");
 

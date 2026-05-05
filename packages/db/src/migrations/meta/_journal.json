@@ -624,6 +624,13 @@
       "when": 1780100000000,
       "tag": "0091_content_drafts_scheduling",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1780150000000,
+      "tag": "0092_workflow_runs_idempotency",
+      "breakpoints": true
     }
   ]
 }
