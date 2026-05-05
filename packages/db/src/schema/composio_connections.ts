@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -24,6 +25,15 @@ import { companies } from "./companies.js";
  *
  * Uniqueness: (company_id, user_id, app_name) — one connection per (user, app)
  * inside a company. Reconnecting overwrites via UPSERT.
+ *
+ * Health columns (added S2.7 / migration 0079):
+ *   - `last_sync_at`          — when the connector last fetched data (null = never run)
+ *   - `last_sync_status`      — ok | fail | partial | syncing | never
+ *                               NOT NULL DEFAULT 'never'. DB-level CHECK enforces
+ *                               the 5-value enum regardless of writer path.
+ *   - `last_error`            — freeform error text from the last failed sync
+ *   - `consecutive_failures`  — reset to 0 on any success; incremented on fail.
+ *                               DB-level CHECK enforces >= 0.
  */
 export const composioConnections = pgTable(
   "composio_connections",
@@ -39,6 +49,18 @@ export const composioConnections = pgTable(
     composioConnectionId: text("composio_connection_id").notNull(),
     /** pending | active | failed | revoked */
     status: text("status").notNull().default("pending"),
+    // --- S2.7 health columns ---
+    /** When the connector last successfully (or partially) fetched data; null = never run. */
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    /** ok | fail | partial | syncing | never — NOT NULL with DB-level CHECK. */
+    lastSyncStatus: text("last_sync_status")
+      .$type<ConnectorSyncStatus>()
+      .notNull()
+      .default("never"),
+    /** Freeform error description from the last failed sync attempt. */
+    lastError: text("last_error"),
+    /** Incremented on every sync failure; reset to 0 on any success. CHECK >= 0 at DB level. */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -57,3 +79,13 @@ export const composioConnections = pgTable(
 
 export type ComposioConnection = typeof composioConnections.$inferSelect;
 export type ComposioConnectionInsert = typeof composioConnections.$inferInsert;
+
+/** Valid values for `composioConnections.lastSyncStatus`. */
+export const CONNECTOR_SYNC_STATUSES = [
+  "ok",
+  "fail",
+  "partial",
+  "syncing",
+  "never",
+] as const;
+export type ConnectorSyncStatus = (typeof CONNECTOR_SYNC_STATUSES)[number];

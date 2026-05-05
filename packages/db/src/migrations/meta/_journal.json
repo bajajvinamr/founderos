@@ -540,6 +540,13 @@
       "when": 1779300000000,
       "tag": "0077_events",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1779400000000,
+      "tag": "0079_connector_health",
+      "breakpoints": true
     }
   ]
 }

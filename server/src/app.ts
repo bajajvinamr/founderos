@@ -318,6 +318,7 @@ export async function createApp(
   api.use(instanceInvitesRoutes(db));
   api.use(templateRoutes(db));
   api.use(integrationRoutes(db));
+  api.use(integrationHealthRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
   api.use(conversationRoutes(db));
