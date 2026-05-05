@@ -86,3 +86,11 @@ export {
   type ComposioConnection,
   type ComposioConnectionInsert,
 } from "./composio_connections.js";
+export {
+  departments,
+  workspaceDepartments,
+  type Department,
+  type DepartmentInsert,
+  type WorkspaceDepartment,
+  type WorkspaceDepartmentInsert,
+} from "./departments.js";
