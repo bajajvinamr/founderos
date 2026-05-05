@@ -80,13 +80,22 @@ describeEmbeddedPostgres("runnerAuthMiddleware — BYO-101", () => {
   }
 
   /** Insert a token and return both the plaintext and the row. */
-  async function makeToken(companyId: string, plaintext: string, opts?: { revoked?: boolean }) {
+  async function makeToken(
+    companyId: string,
+    plaintext: string,
+    opts?: {
+      revoked?: boolean;
+      /** W0.3: explicit expiry timestamp (Date in past = expired now). */
+      expiresAt?: Date | null;
+    },
+  ) {
     const [row] = await db
       .insert(runnerTokens)
       .values({
         companyId,
         tokenHash: hashRunnerToken(plaintext),
         revokedAt: opts?.revoked ? new Date() : null,
+        expiresAt: opts?.expiresAt ?? null,
       })
       .returning();
     return { plaintext, row };
@@ -266,6 +275,73 @@ describeEmbeddedPostgres("runnerAuthMiddleware — BYO-101", () => {
 
     expect(req.actor.companyId).toBe(companyA.id);
     expect(req.actor.companyId).not.toBe(companyB.id);
+    expect(req.actor.runnerTokenId).toBe(tokenRow.id);
+  });
+
+  // ── W0.3 (council 2026-05-05) — TTL + rotation ──────────────────────────────
+
+  it("W0.3 — token with future expires_at → 200 next() (active TTL)", async () => {
+    const company = await makeCompany("Future Expiry Co");
+    // 90 days from now — the default TTL we'll set on issuance.
+    const future = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    const { plaintext, row: tokenRow } = await makeToken(
+      company.id,
+      // 32 alphanumeric chars after `fos_` (TOKEN_FORMAT regex).
+      "fos_w0301aaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      { expiresAt: future },
+    );
+
+    const mw = runnerAuthMiddleware(db);
+    const { req, res, next, log, didNext } = makeFakeReqRes(`Bearer ${plaintext}`);
+    await mw(req, res, next);
+
+    expect(log.status).toBeUndefined();
+    expect(didNext()).toBe(true);
+    expect(req.actor.runnerTokenId).toBe(tokenRow.id);
+  });
+
+  it("W0.3 — token with past expires_at → 401 runner_token_expired + rotationHint", async () => {
+    const company = await makeCompany("Expired Co");
+    // 1 hour ago — a representative expired token.
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    const { plaintext } = await makeToken(
+      company.id,
+      "fos_w0302bbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      { expiresAt: past },
+    );
+
+    const mw = runnerAuthMiddleware(db);
+    const { req, res, next, log, didNext } = makeFakeReqRes(`Bearer ${plaintext}`);
+    await mw(req, res, next);
+
+    expect(log.status).toBe(401);
+    expect(log.body).toMatchObject({
+      error: "runner_token_expired",
+      code: "expired",
+    });
+    // Critical: rotationHint must be present so the runner CLI can prompt
+    // cleanly instead of looping on a 401 forever.
+    expect(log.body.rotationHint).toBeTruthy();
+    expect(typeof log.body.expiredAt).toBe("string");
+    expect(didNext()).toBe(false);
+  });
+
+  it("W0.3 — token with NULL expires_at (legacy) → 200 next() (backward compat)", async () => {
+    // Pre-migration-0089 tokens have no expires_at. Auth middleware must
+    // still accept them — operators can manually rotate via the dashboard.
+    const company = await makeCompany("Legacy TokenCo");
+    const { plaintext, row: tokenRow } = await makeToken(
+      company.id,
+      "fos_w0303ccccccccccccccccccccccccccc",
+      { expiresAt: null },
+    );
+
+    const mw = runnerAuthMiddleware(db);
+    const { req, res, next, log, didNext } = makeFakeReqRes(`Bearer ${plaintext}`);
+    await mw(req, res, next);
+
+    expect(log.status).toBeUndefined();
+    expect(didNext()).toBe(true);
     expect(req.actor.runnerTokenId).toBe(tokenRow.id);
   });
 });
