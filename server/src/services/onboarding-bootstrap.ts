@@ -20,6 +20,7 @@
  */
 
 import type { Db } from "@founderos/db";
+import { workspaceDepartments } from "@founderos/db";
 import type { AgentRole } from "@founderos/shared";
 import {
   accessService,
@@ -31,6 +32,20 @@ import {
   projectService,
   secretService,
 } from "./index.js";
+
+// S1.9 — onboarding always provisions these 5 core departments. Migration
+// 0075 backfills them for already-existing companies; new companies get
+// rows written here. Source of truth for the core list lives in
+// `packages/db/src/migrations/0075_departments.sql` (is_core = true).
+const CORE_DEPARTMENT_IDS = [
+  "chief-of-staff",
+  "growth",
+  "content",
+  "crm",
+  "finance",
+] as const;
+const NON_CORE_DEPARTMENT_IDS = ["engineering", "ops"] as const;
+type NonCoreDepartmentId = (typeof NON_CORE_DEPARTMENT_IDS)[number];
 
 export const AGENT_SLOTS = ["cos", "growth", "content", "finance"] as const;
 export type AgentSlot = (typeof AGENT_SLOTS)[number];
@@ -61,6 +76,10 @@ export type BootstrapInput = {
   adapterChoice: "claude_local" | "anthropic_api" | "skip";
   anthropicKey: string;
   integrations?: Record<string, boolean>;
+  /** S1.9 — non-core departments the founder opted in to (engineering, ops). */
+  nonCoreDepartments?: NonCoreDepartmentId[];
+  /** S1.9 — initial autonomy level applied to every enabled department. */
+  autonomyLevel?: number;
   charters: Record<AgentSlot, BootstrapCharter>;
   companyName: string;
 };
@@ -76,6 +95,14 @@ export type BootstrapResult = {
   goalId: string | null;
   projectId: string;
 };
+
+function clampAutonomy(raw: number): number {
+  if (!Number.isFinite(raw)) return 2;
+  const rounded = Math.round(raw);
+  if (rounded < 1) return 1;
+  if (rounded > 4) return 4;
+  return rounded;
+}
 
 function buildAgentAdapterConfig(anthropicSecretId: string | null) {
   if (!anthropicSecretId) return { env: {} };
@@ -141,6 +168,27 @@ export async function bootstrapCompanyOnboarding(
       context.actorUserId,
       "owner",
       "active",
+    );
+
+    // S1.9 — workspace_departments rows for this new company. The 5 core
+    // departments are always provisioned. Non-core (engineering, ops) are
+    // included only if the founder opted in. Single workspace-wide autonomy
+    // level applies to all rows in v1; founders can fine-tune per-department
+    // later via the API. Migration 0075 backfills already-existing companies
+    // — this insert handles new ones.
+    const autonomyLevel = clampAutonomy(input.autonomyLevel ?? 2);
+    const optedInNonCore = (input.nonCoreDepartments ?? []).filter(
+      (d): d is NonCoreDepartmentId =>
+        (NON_CORE_DEPARTMENT_IDS as readonly string[]).includes(d),
+    );
+    const enabledDepartmentIds = [...CORE_DEPARTMENT_IDS, ...optedInNonCore];
+    await txDb.insert(workspaceDepartments).values(
+      enabledDepartmentIds.map((departmentId) => ({
+        companyId: company.id,
+        departmentId,
+        enabled: true,
+        autonomyLevel,
+      })),
     );
 
     // 2. Anthropic key as a company secret (only when the founder

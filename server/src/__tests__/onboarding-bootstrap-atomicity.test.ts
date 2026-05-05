@@ -12,6 +12,7 @@ import {
   goals,
   projectGoals,
   projects,
+  workspaceDepartments,
 } from "@founderos/db";
 import {
   getEmbeddedPostgresTestSupport,
@@ -388,5 +389,65 @@ describeEmbeddedPostgres("bootstrapCompanyOnboarding — atomic bootstrap", () =
     const allAgents = await db.select().from(agents);
     expect(allAgents).toHaveLength(4);
     expect(allAgents.every((a) => a.companyId === first.companyId)).toBe(true);
+  });
+
+  // S1.9 — workspace_departments provisioning. Core 5 always; non-core opt-in;
+  // single autonomy level applies to all rows.
+  it("S1.9: provisions the 5 core workspace_departments rows by default", async () => {
+    const result = await bootstrapCompanyOnboarding(db, buildInput(), {
+      actorUserId: ACTOR_USER_ID,
+    });
+
+    const rows = await db
+      .select()
+      .from(workspaceDepartments)
+      .where(eq(workspaceDepartments.companyId, result.companyId));
+
+    expect(rows).toHaveLength(5);
+    const ids = rows.map((r) => r.departmentId).sort();
+    expect(ids).toEqual([
+      "chief-of-staff",
+      "content",
+      "crm",
+      "finance",
+      "growth",
+    ]);
+    expect(rows.every((r) => r.enabled === true)).toBe(true);
+    // default autonomy = 2 ("Approval-first")
+    expect(rows.every((r) => r.autonomyLevel === 2)).toBe(true);
+  });
+
+  it("S1.9: opts in to non-core departments when requested", async () => {
+    const result = await bootstrapCompanyOnboarding(
+      db,
+      buildInput({ nonCoreDepartments: ["engineering", "ops"] }),
+      { actorUserId: ACTOR_USER_ID },
+    );
+
+    const rows = await db
+      .select()
+      .from(workspaceDepartments)
+      .where(eq(workspaceDepartments.companyId, result.companyId));
+
+    expect(rows).toHaveLength(7);
+    const ids = rows.map((r) => r.departmentId).sort();
+    expect(ids).toContain("engineering");
+    expect(ids).toContain("ops");
+  });
+
+  it("S1.9: applies the requested autonomy level to every row, clamped to 1..4", async () => {
+    const result = await bootstrapCompanyOnboarding(
+      db,
+      // 99 is out of range — clamp asserts max=4 (level 4 = fully autonomous).
+      buildInput({ autonomyLevel: 99 }),
+      { actorUserId: ACTOR_USER_ID },
+    );
+
+    const rows = await db
+      .select()
+      .from(workspaceDepartments)
+      .where(eq(workspaceDepartments.companyId, result.companyId));
+
+    expect(rows.every((r) => r.autonomyLevel === 4)).toBe(true);
   });
 });

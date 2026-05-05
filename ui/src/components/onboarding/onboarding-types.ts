@@ -60,6 +60,36 @@ export const INTEGRATION_LABELS: Record<IntegrationKey, string> = {
 export const AGENT_SLOTS = ["cos", "growth", "content", "finance"] as const;
 export type AgentSlot = (typeof AGENT_SLOTS)[number];
 
+/**
+ * S1.9 — Department picker. The 5 core departments (chief-of-staff,
+ * growth, content, crm, finance) are always-on by business rule. The
+ * founder can opt in to non-core departments (engineering, ops) and
+ * pick a workspace-wide autonomy level for v1. Server expands this
+ * into per-department `workspace_departments` rows.
+ */
+export const NON_CORE_DEPARTMENTS = ["engineering", "ops"] as const;
+export type NonCoreDepartmentId = (typeof NON_CORE_DEPARTMENTS)[number];
+
+export const NON_CORE_DEPARTMENT_LABELS: Record<NonCoreDepartmentId, string> = {
+  engineering: "Engineering",
+  ops: "Operations",
+};
+
+export const NON_CORE_DEPARTMENT_DESCRIPTIONS: Record<NonCoreDepartmentId, string> = {
+  engineering: "Product, PRs, reviews, infra",
+  ops: "Workflows, approvals, SOPs",
+};
+
+export const AUTONOMY_LEVELS = [1, 2, 3, 4] as const;
+export type AutonomyLevel = (typeof AUTONOMY_LEVELS)[number];
+
+export const AUTONOMY_LEVEL_LABELS: Record<AutonomyLevel, { label: string; sublabel: string }> = {
+  1: { label: "Advisory only", sublabel: "Agents draft, you decide everything." },
+  2: { label: "Approval-first", sublabel: "Agents act after you approve. (Recommended)" },
+  3: { label: "Auto-execute safe tasks", sublabel: "Routine work runs; risky calls escalate." },
+  4: { label: "Fully autonomous", sublabel: "Agents act without approval. Advanced." },
+};
+
 export interface AgentCharter {
   slot: AgentSlot;
   /** User-editable display name. */
@@ -106,6 +136,10 @@ export interface OnboardingDraft {
   adapterChoice: AdapterChoice;
   anthropicKey: string;
   integrations: Record<IntegrationKey, boolean>;
+  /** S1.9 — non-core departments the founder opted in to. Core 5 always on. */
+  nonCoreDepartments: NonCoreDepartmentId[];
+  /** S1.9 — workspace-wide autonomy level for all enabled departments. */
+  autonomyLevel: AutonomyLevel;
   charters: AgentCharterMap;
   firstDecisionId: string | null;
 }
@@ -118,6 +152,9 @@ export interface OnboardingBootstrapResponse {
   goalId: string | null;
   projectId: string | null;
 }
+
+export const DEFAULT_NON_CORE_DEPARTMENTS: NonCoreDepartmentId[] = [];
+export const DEFAULT_AUTONOMY_LEVEL: AutonomyLevel = 2;
 
 export const DEFAULT_INTEGRATION_STATE: Record<IntegrationKey, boolean> =
   INTEGRATION_KEYS.reduce(

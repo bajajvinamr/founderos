@@ -13,6 +13,7 @@ import { Step1Vision } from "./steps/Step1Vision.js";
 import { Step2Bottleneck } from "./steps/Step2Bottleneck.js";
 import { Step3Team } from "./steps/Step3Team.js";
 import { Step4Plugin, type ValidationState } from "./steps/Step4Plugin.js";
+import { Step5Departments } from "./steps/Step5Departments.js";
 import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
 import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
 import {
@@ -20,16 +21,22 @@ import {
   buildFirstDecisions,
 } from "./auto-charter.js";
 import {
+  DEFAULT_AUTONOMY_LEVEL,
   DEFAULT_INTEGRATION_STATE,
+  DEFAULT_NON_CORE_DEPARTMENTS,
+  type AutonomyLevel,
   type Bottleneck,
   type IntegrationKey,
+  type NonCoreDepartmentId,
   type OnboardingBootstrapResponse,
   type OnboardingDraft,
   type TeamShape,
 } from "./onboarding-types.js";
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
-const TOTAL_STEPS = 6;
+// S1.9 — added Step 5 (departments) between Plugin and MeetTeam.
+// MeetTeam moved 5 → 6, FirstDecision moved 6 → 7.
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+const TOTAL_STEPS = 7;
 
 function buildInitialDraft(): OnboardingDraft {
   return {
@@ -41,6 +48,8 @@ function buildInitialDraft(): OnboardingDraft {
     adapterChoice: "claude_local",
     anthropicKey: "",
     integrations: { ...DEFAULT_INTEGRATION_STATE },
+    nonCoreDepartments: [...DEFAULT_NON_CORE_DEPARTMENTS],
+    autonomyLevel: DEFAULT_AUTONOMY_LEVEL,
     charters: buildAutoCharters({
       vision: "",
       bottlenecks: [],
@@ -64,11 +73,12 @@ export function FounderOnboardingWizard() {
 
   // Server-generated decisions: real Claude call that uses the founder's
   // vision + bottlenecks + team to produce 3 tailored cards. Fetched lazily
-  // once the user has reached step 5 (all context fields are populated).
-  // Falls back to client-side templates if the fetch is still in flight or
-  // errors — we never block the wizard on the LLM round-trip.
+  // once the user has reached the meet-team step (step 6 after S1.9 inserted
+  // a departments step at 5). Falls back to client-side templates if the
+  // fetch is still in flight or errors — we never block the wizard on the
+  // LLM round-trip.
   const canFetchDecisions =
-    step >= 5 &&
+    step >= 6 &&
     draft.vision.trim().length >= 10 &&
     draft.bottlenecks.length >= 1;
 
@@ -143,8 +153,9 @@ export function FounderOnboardingWizard() {
       if (draft.adapterChoice === "claude_local" || draft.adapterChoice === "skip") return true;
       return validation.status === "valid";
     }
-    if (current === 5) return true;
+    if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
+    if (current === 7) return true;
     return false;
   }
 
@@ -166,6 +177,8 @@ export function FounderOnboardingWizard() {
         adapterChoice: draft.adapterChoice,
         anthropicKey: draft.adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
         integrations: draft.integrations,
+        nonCoreDepartments: draft.nonCoreDepartments,
+        autonomyLevel: draft.autonomyLevel,
         charters: draft.charters,
       };
       const bootstrap = await api.post<OnboardingBootstrapResponse>(
@@ -320,12 +333,24 @@ export function FounderOnboardingWizard() {
                 />
               )}
               {step === 5 && (
+                <Step5Departments
+                  nonCoreDepartments={draft.nonCoreDepartments}
+                  autonomyLevel={draft.autonomyLevel}
+                  onNonCoreDepartmentsChange={(next: NonCoreDepartmentId[]) =>
+                    patchDraft({ nonCoreDepartments: next })
+                  }
+                  onAutonomyLevelChange={(next: AutonomyLevel) =>
+                    patchDraft({ autonomyLevel: next })
+                  }
+                />
+              )}
+              {step === 6 && (
                 <Step5MeetTeam
                   charters={draft.charters}
                   onChartersChange={(c) => patchDraft({ charters: c })}
                 />
               )}
-              {step === 6 && (
+              {step === 7 && (
                 <Step6FirstDecision
                   decisions={decisions}
                   charters={draft.charters}
