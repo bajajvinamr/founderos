@@ -346,3 +346,13 @@ export {
   type TransitionContentBrief,
   type ListContentBriefsQuery,
 } from "./content-briefs.js";
+export {
+  CONTENT_DRAFT_FORMATS,
+  CONTENT_DRAFT_STATUSES,
+  generateContentSchema,
+  updateContentDraftSchema,
+  type ContentDraftFormatValue,
+  type ContentDraftStatusValue,
+  type GenerateContent,
+  type UpdateContentDraft,
+} from "./content-drafts.js";

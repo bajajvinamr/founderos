@@ -164,3 +164,19 @@ export {
   type ContentBriefInsert,
   type ContentBriefStatus,
 } from "./content_briefs.js";
+export {
+  contentDrafts,
+  CONTENT_DRAFT_FORMATS,
+  CONTENT_DRAFT_STATUSES,
+  type ContentDraft,
+  type ContentDraftInsert,
+  type ContentDraftFormat,
+  type ContentDraftStatus,
+  type ContentDraftPayload,
+  type LinkedInPayload,
+  type XThreadPayload,
+  type NewsletterPayload,
+  type ReelScriptPayload,
+  type LandingCopyPayload,
+  type AdCreativePayload,
+} from "./content_drafts.js";

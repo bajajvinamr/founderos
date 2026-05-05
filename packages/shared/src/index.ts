@@ -702,6 +702,14 @@ export {
   type UpdateContentBrief,
   type TransitionContentBrief,
   type ListContentBriefsQuery,
+  CONTENT_DRAFT_FORMATS,
+  CONTENT_DRAFT_STATUSES,
+  generateContentSchema,
+  updateContentDraftSchema,
+  type ContentDraftFormatValue,
+  type ContentDraftStatusValue,
+  type GenerateContent,
+  type UpdateContentDraft,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
