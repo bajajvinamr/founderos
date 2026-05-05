@@ -51,6 +51,10 @@ import {
   type UpdateContentDraft,
 } from "@founderos/shared";
 import { runContentGenerator } from "../services/agents/content-generator.js";
+import {
+  getAttribution,
+  generateAttributionUtm,
+} from "../services/content-attribution.js";
 
 type ContentDraftRow = typeof contentDrafts.$inferSelect;
 
@@ -67,6 +71,7 @@ function serializeDraft(row: ContentDraftRow) {
         ? row.publishedAt.toISOString()
         : row.publishedAt ?? null,
     publishedToUrl: row.publishedToUrl ?? null,
+    attributionUtm: row.attributionUtm ?? null,
     generatedByRunId: row.generatedByRunId ?? null,
     generationError: row.generationError ?? null,
     createdAt:
@@ -248,7 +253,11 @@ export function contentDraftRoutes(db: Db) {
 
       // Verify ownership before mutating.
       const [existing] = await db
-        .select({ id: contentDrafts.id })
+        .select({
+          id: contentDrafts.id,
+          format: contentDrafts.format,
+          status: contentDrafts.status,
+        })
         .from(contentDrafts)
         .where(
           and(
@@ -275,6 +284,11 @@ export function contentDraftRoutes(db: Db) {
 
       if (body.status === "published") {
         updateFields.publishedAt = new Date();
+        // Auto-generate attributionUtm on publish (S4.3)
+        updateFields.attributionUtm = generateAttributionUtm(
+          draftId,
+          existing.format,
+        );
       }
 
       const [updated] = await db
@@ -289,6 +303,47 @@ export function contentDraftRoutes(db: Db) {
         .returning();
 
       res.json(serializeDraft(updated!));
+    },
+  );
+
+  /**
+   * GET /api/companies/:companyId/content-drafts/:draftId/attribution
+   * Returns attribution metrics for the draft over the last 30 days.
+   */
+  router.get(
+    "/companies/:companyId/content-drafts/:draftId/attribution",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      const draftId = req.params.draftId as string;
+      assertCompanyAccess(req, companyId);
+
+      // Verify draft exists and belongs to this company
+      const [draft] = await db
+        .select({
+          id: contentDrafts.id,
+          attributionUtm: contentDrafts.attributionUtm,
+          status: contentDrafts.status,
+        })
+        .from(contentDrafts)
+        .where(
+          and(
+            eq(contentDrafts.id, draftId),
+            eq(contentDrafts.companyId, companyId),
+          ),
+        )
+        .limit(1);
+
+      if (!draft) throw notFound("Content draft not found");
+
+      // Fetch attribution metrics
+      const metrics = await getAttribution(
+        db,
+        draftId,
+        companyId,
+        draft.attributionUtm ?? "",
+      );
+
+      res.json(metrics);
     },
   );
 

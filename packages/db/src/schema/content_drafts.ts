@@ -144,6 +144,12 @@ export const contentDrafts = pgTable(
      * column + the brief transitioning to 'drafting' (not 'review').
      */
     generationError: text("generation_error"),
+    /**
+     * Auto-generated UTM parameters at publish time (S4.3).
+     * Format: utm_source=founderos&utm_campaign=<draftId>&utm_medium=<format>
+     * Used to track clicks via /c/:trackingId endpoint and attribute conversions.
+     */
+    attributionUtm: text("attribution_utm"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

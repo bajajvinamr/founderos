@@ -69,6 +69,7 @@ import { experimentRoutes } from "./routes/experiments.js";
 import { workflowRoutes } from "./routes/workflows.js";
 import { contentBriefRoutes } from "./routes/content-briefs.js";
 import { contentDraftRoutes } from "./routes/content-drafts.js";
+import { contentTrackingRoutes } from "./routes/content-tracking.js";
 import { funnelRoutes } from "./routes/funnel.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
@@ -442,6 +443,10 @@ export async function createApp(
       allowedHostnames: opts.allowedHostnames,
     }),
   );
+
+  // Content tracking links (S4.3) — public-facing /c/:trackingId endpoint
+  app.use(contentTrackingRoutes(db));
+
   app.use("/api", api);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
