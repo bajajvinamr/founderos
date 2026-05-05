@@ -10,15 +10,31 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 | Area | State |
 |---|---|
-| Wave 0 progress | W0.1 ✅ shipped · W0.2 next · W0.3 + W0.4 queued |
-| Branch | `feat/trust-closure` (HEAD: about to commit W0.1) |
-| Tests | 19/19 workflows.test.ts passing including new G1 dispatcher contract test |
-| Council BLOCK closure | 1/4 P1 fixes shipped |
-| Loop pacing | Active; ScheduleWakeup invoked after W0.1 commit |
+| Wave 0 progress | W0.1 ✅ · W0.2 ✅ (3 templates + webhook) · W0.3 next · W0.4 queued |
+| Branch | `feat/trust-closure` (HEAD: `f2fdc10` — Resend webhook receiver) |
+| Tests | 50/50 across workflows.test.ts (21) + activation-nudge.test.ts (17) + resend-webhook.test.ts (12) |
+| Council BLOCK closure | 3/4 P1 fixes shipped (W0.1 dispatcher · W0.2 onboarding+upsell+nudge templates · W0.2c webhook) |
+| Loop pacing | Active; Wake 3 just landed W0.2 fully — heading to W0.3 token TTL |
 
 ---
 
 ## Issues recorded today
+
+### [01:53:00 UTC] [LOW] [W0.2c shipped] Resend webhook receiver landed — 3-stage delivery walk now wired
+
+**What happened:** Wake 3 closed the W0.2c BLOCK fully. Built a 30-line Svix verifier (no `svix` npm dep — slopsquatting + ADR policy) + a route handler with `db.transaction` + `SELECT...FOR UPDATE` for race protection on JSONB `actions[]` mutation under concurrent webhook events. Mounted unconditionally before the `/api` Router so missing-secret produces a logged 503 instead of a silent 404 (same fail-closed pattern as the Supabase auth webhook from 2026-05-03 council).
+
+**What I tried:** Used the `rawBody` Buffer that the global `express.json` verify hook captures into `(req as any).rawBody` (app.ts:166). No additional `express.raw()` mount needed — that simplification means the route can be mounted alongside the rest of the API without route-ordering surgery.
+
+**Workaround applied:** None — fix shipped clean. Action.status now flows: `pending → completed (queued) → completed+delivered=true | failed+bounced=true | completed+complained=true`. Run-level status auto-recomputes: any failed action → run.status="failed".
+
+**Status:** SHIPPED. Council 2026-05-05 BLOCK fully closed for W0.2 (3/4 P1s). Commit `f2fdc10`.
+
+**Files touched:** new `server/src/services/transports/resend-webhook-verify.ts` (30 lines crypto), new `server/src/routes/resend-webhook.ts` (~250 lines route handler), modified `server/src/app.ts` (+6 lines mount), new `server/src/__tests__/resend-webhook.test.ts` (12 tests).
+
+**Next-action recommendation for Vinamr:** Set `RESEND_WEBHOOK_SECRET=whsec_...` in Fly secrets before flipping prod traffic to the new route. Configure the webhook URL `https://founderos.fly.dev/api/webhooks/resend` in Resend dashboard with these subscriptions: `email.delivered`, `email.bounced`, `email.complained`, `email.failed`, `email.delivery_delayed`. Engagement events (opened/clicked) are deliberately not handled — would land with S5 finance attribution.
+
+---
 
 ### [01:30:00 UTC] [MED] [W0.2 onboarding] Resend "queued" ≠ delivered — webhook receiver lands in next wake
 
@@ -28,7 +44,7 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 **Workaround applied:** Emit "completed" provisionally when the transport accepts. Persisted `providerMessageId` + `transportMode` into `action.payload` for later webhook reconciliation. Logged a clear note in the template's docstring: "completed here means transport accepted; webhook receiver lands in W0.2c."
 
-**Status:** DEFERRED to next wake (W0.2c). Once webhook lands, action.status becomes a 3-stage walk: `pending → completed-provisional → completed-confirmed | bounced | failed`. The schema already supports this via the actions JSONB column.
+**Status:** ✅ RESOLVED in W0.2c (commit `f2fdc10`, 23 minutes after this entry was logged). Webhook receiver mounted, signature verified via Svix, action lifecycle now walks `pending → completed → completed+delivered | failed+bounced | completed+complained`.
 
 **Files touched:** `server/src/services/workflows/templates/onboarding-emails.ts` (the docstring note), `server/src/services/transports/email-transport.ts` (the SendEmailResult.status JSDoc).
 
