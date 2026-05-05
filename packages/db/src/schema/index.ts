@@ -94,3 +94,10 @@ export {
   type WorkspaceDepartment,
   type WorkspaceDepartmentInsert,
 } from "./departments.js";
+export {
+  events,
+  EVENT_SOURCES,
+  type Event,
+  type EventInsert,
+  type EventSource,
+} from "./events.js";
