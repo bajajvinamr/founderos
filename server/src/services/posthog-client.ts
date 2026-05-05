@@ -1,13 +1,23 @@
 /**
  * Thin PostHog API client — native fetch, no SDK dependency.
  *
- * Implements only the surface needed for the Growth console integration:
- *   - listProjects()
- *   - getEventCounts()
- *   - getUtmSourceBreakdown()
+ * Implements the surface needed for the Growth console integration (S2.3):
+ *   - listProjects()          — list projects accessible with the API key
+ *   - validateApiKey()        — verify an API key by hitting /api/projects/:id
+ *   - getEventCounts()        — HogQL event aggregation
+ *   - getUtmSourceBreakdown() — HogQL UTM attribution
+ *   - listEvents()            — paginated event fetch for polling fallback
+ *
+ * HMAC signature verification is exported separately:
+ *   - verifyPostHogWebhookSignature()
  *
  * All requests carry a 10-second timeout enforced via AbortController.
+ *
+ * Supported hosts (v1): https://us.posthog.com, https://eu.posthog.com
+ * Self-hosted: intentionally excluded per ROADMAP cross-cutting decision.
  */
+
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 export class PostHogAuthError extends Error {
   constructor(message = "PostHog authentication failed: invalid or expired API key") {
@@ -24,7 +34,7 @@ export interface PostHogConfig {
   projectId?: string;
 }
 
-interface PostHogProject {
+export interface PostHogProject {
   id: number;
   name: string;
 }
@@ -34,8 +44,30 @@ interface PostHogHogQLResponse {
   columns: string[];
 }
 
+/** Shape of a raw PostHog event from /api/projects/:id/events */
+export interface PostHogRawEvent {
+  id: string;
+  event: string;
+  distinct_id: string;
+  timestamp: string;
+  properties: Record<string, unknown>;
+}
+
+interface PostHogEventsPage {
+  results: PostHogRawEvent[];
+  next: string | null;
+}
+
+export interface ListEventsOptions {
+  /** ISO-8601 timestamp — fetch events with timestamp > after */
+  after?: string;
+  /** Default 100, max 1000 per PostHog docs. */
+  limit?: number;
+}
+
 export interface PostHogClient {
   listProjects(): Promise<PostHogProject[]>;
+  validateApiKey(projectId: string | number): Promise<PostHogProject>;
   getEventCounts(
     projectId: number,
     events: string[],
@@ -45,6 +77,35 @@ export interface PostHogClient {
     projectId: number,
     since: Date,
   ): Promise<Array<{ source: string; count: number }>>;
+  listEvents(
+    projectId: number,
+    opts?: ListEventsOptions,
+  ): Promise<{ events: PostHogRawEvent[]; nextPage: string | null }>;
+}
+
+/**
+ * Verify a PostHog webhook HMAC-SHA256 signature.
+ *
+ * PostHog signs webhook payloads with HMAC-SHA256 using the project's webhook
+ * secret. The digest is sent as the PostHog-Signature header:
+ *   sha256=<hex-digest>
+ */
+export function verifyPostHogWebhookSignature(
+  rawBody: Buffer,
+  signature: string,
+  secret: string,
+): boolean {
+  if (!signature || !secret) return false;
+
+  const prefix = "sha256=";
+  if (!signature.startsWith(prefix)) return false;
+
+  const digest = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const expected = Buffer.from(prefix + digest, "utf8");
+  const received = Buffer.from(signature, "utf8");
+
+  if (expected.length !== received.length) return false;
+  return timingSafeEqual(expected, received);
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -92,9 +153,14 @@ export function createPostHogClient(config: PostHogConfig): PostHogClient {
   }
 
   async function listProjects(): Promise<PostHogProject[]> {
-    // The /api/projects/ endpoint returns paginated results under .results
     const data = await apiFetch<{ results: PostHogProject[] }>("/api/projects/");
     return data.results;
+  }
+
+  async function validateApiKey(
+    projectId: string | number,
+  ): Promise<PostHogProject> {
+    return apiFetch<PostHogProject>(`/api/projects/${projectId}`);
   }
 
   async function runHogQL(
@@ -117,7 +183,6 @@ export function createPostHogClient(config: PostHogConfig): PostHogClient {
   ): Promise<Record<string, number>> {
     if (events.length === 0) return {};
 
-    // Build a quoted list for the IN clause
     const inList = events.map((e) => `'${e.replace(/'/g, "\\'")}'`).join(", ");
     const sinceIso = since.toISOString();
 
@@ -131,7 +196,6 @@ export function createPostHogClient(config: PostHogConfig): PostHogClient {
 
     const result = await runHogQL(projectId, hql);
 
-    // Initialise every requested event to 0 so callers always get a complete map
     const counts: Record<string, number> = {};
     for (const e of events) counts[e] = 0;
 
@@ -173,5 +237,26 @@ export function createPostHogClient(config: PostHogConfig): PostHogClient {
       .filter((r) => r.count > 0);
   }
 
-  return { listProjects, getEventCounts, getUtmSourceBreakdown };
+  async function listEvents(
+    projectId: number,
+    opts: ListEventsOptions = {},
+  ): Promise<{ events: PostHogRawEvent[]; nextPage: string | null }> {
+    const limit = opts.limit ?? 100;
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (opts.after) params.set("after", opts.after);
+
+    const data = await apiFetch<PostHogEventsPage>(
+      `/api/projects/${projectId}/events/?${params.toString()}`,
+    );
+
+    return { events: data.results, nextPage: data.next };
+  }
+
+  return {
+    listProjects,
+    validateApiKey,
+    getEventCounts,
+    getUtmSourceBreakdown,
+    listEvents,
+  };
 }
