@@ -17,7 +17,6 @@ import {
   composioConnections,
   events,
   createDb,
-  type ComposioConnectionInsert,
 } from "@founderos/db";
 import {
   getEmbeddedPostgresTestSupport,
@@ -25,6 +24,22 @@ import {
 } from "./helpers/embedded-postgres.js";
 import { hubspotIngestService } from "../services/integrations/hubspot-ingest.js";
 import * as composioClient from "../services/composio-client.js";
+import { initEventIngest } from "../services/event-ingest.js";
+
+/**
+ * Generate a unique 6-char alpha issue prefix per test row.
+ *
+ * `companies.issue_prefix` has a UNIQUE index (`companies_issue_prefix_idx`)
+ * with default `'PAP'`. Inserting two rows in the same test without overriding
+ * the default collides. Random 6-letter prefixes give ~308M unique values, so
+ * collisions across tests in the same shared DB are negligible.
+ */
+function uniqueIssuePrefix(): string {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
 
 const support = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = support.supported ? describe : describe.skip;
@@ -45,6 +60,12 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
   beforeAll(async () => {
     temp = await startEmbeddedPostgresTestDatabase("founderos-hubspot-ingest-");
     db = createDb(temp.connectionString);
+    // Bind module-level `ingestEvent()` singleton to the test db.
+    // hubspotIngestService -> ingestEvent() (singleton import) -> would throw
+    // "event-ingest not initialized" without this. The throw is swallowed by
+    // the per-contact try/catch, leaving contactsProcessed=0 and silent assert
+    // failures downstream.
+    initEventIngest(db);
   }, 60_000);
 
   afterAll(async () => {
@@ -57,16 +78,18 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
     await db.execute(sql`TRUNCATE TABLE "composio_connections" CASCADE`);
     await db.execute(sql`TRUNCATE TABLE "companies" CASCADE`);
 
-    // Create two test companies for cross-org leak testing
+    // Create two test companies for cross-org leak testing.
+    // Each row needs a unique issuePrefix — UNIQUE index on companies.issue_prefix
+    // means the second row can't reuse the schema default 'PAP'.
     const [companyA] = await db
       .insert(companies)
-      .values({ name: "Company A" })
+      .values({ name: "Company A", issuePrefix: uniqueIssuePrefix() })
       .returning({ id: companies.id });
     companyAId = companyA!.id;
 
     const [companyB] = await db
       .insert(companies)
-      .values({ name: "Company B" })
+      .values({ name: "Company B", issuePrefix: uniqueIssuePrefix() })
       .returning({ id: companies.id });
     companyBId = companyB!.id;
   });
