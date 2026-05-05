@@ -23,6 +23,7 @@ import {
   decryptWithMasterKey,
 } from "../secrets/local-encrypted-provider.js";
 import { runPostHogPoll } from "../services/posthog-poll.js";
+import { initEventIngest } from "../services/event-ingest.js";
 
 // ─── Test setup ───────────────────────────────────────────────────────────────
 
@@ -270,16 +271,19 @@ describe("runPostHogPoll", () => {
   }
 
   function makeDb(row: DbRow | null, captureUpdate?: (data: unknown) => void) {
+    // ── select() chain — production: db.select().from(t).where(...) ─────
+    // Note: production posthog-poll.ts:66 destructures `[row]` from a query
+    // that has NO `.limit()`, so the where() must resolve directly to the
+    // row array.
     const whereMock = vi.fn().mockResolvedValue(row ? [row] : []);
     const fromMock = vi.fn().mockReturnValue({ where: whereMock });
     const selectMock = vi.fn().mockReturnValue({ from: fromMock });
 
-    // Chained update
+    // ── update() chain — production: db.update(t).set(...).where(...) ──
     const updateWhereMock = vi.fn().mockImplementation((_cond) => Promise.resolve());
     const updateSetMock = vi.fn().mockReturnValue({ where: updateWhereMock });
     const updateMock = vi.fn().mockReturnValue({ set: updateSetMock });
 
-    // Capture the set() arg for assertions
     if (captureUpdate) {
       updateSetMock.mockImplementation((data: unknown) => {
         captureUpdate(data);
@@ -287,10 +291,24 @@ describe("runPostHogPoll", () => {
       });
     }
 
+    // ── insert() chain — required because runPostHogPoll calls module-
+    // level `ingestEvent()` which is wired to this same mock db via
+    // initEventIngest(mockDb) in beforeEach. ingestEvent runs:
+    //   db.insert(events).values({...}).onConflictDoNothing().returning({id})
+    // We resolve with a synthetic id row so `inserted.length > 0` and the
+    // path returns deduplicated:false (mirrors successful first-write).
+    const insertReturningMock = vi.fn().mockResolvedValue([{ id: "synthetic-event-id" }]);
+    const insertOnConflictMock = vi.fn().mockReturnValue({ returning: insertReturningMock });
+    const insertValuesMock = vi.fn().mockReturnValue({
+      onConflictDoNothing: insertOnConflictMock,
+    });
+    const insertMock = vi.fn().mockReturnValue({ values: insertValuesMock });
+
     return {
       db: {
         select: selectMock,
         update: updateMock,
+        insert: insertMock,
       } as unknown,
       updateSetMock,
     };
@@ -308,6 +326,11 @@ describe("runPostHogPoll", () => {
 
   it("returns 0 ingested when integration not found", async () => {
     const { db } = makeDb(null);
+    // Production runPostHogPoll calls module-level `ingestEvent()` (singleton).
+    // Without initEventIngest(db), the singleton throws "not initialized" and
+    // posthog-poll silently swallows the error → ingested stays 0 with no clear
+    // signal. Initialize per-test against the same mockDb the poll uses.
+    initEventIngest(db as Parameters<typeof initEventIngest>[0]);
     const result = await runPostHogPoll(db as Parameters<typeof runPostHogPoll>[0], {
       companyId: "company-1",
       integrationId: "int-missing",
@@ -317,6 +340,7 @@ describe("runPostHogPoll", () => {
 
   it("returns 0 ingested when integration is disconnected", async () => {
     const { db } = makeDb(makeIntegrationRow({ status: "disconnected" }));
+    initEventIngest(db as Parameters<typeof initEventIngest>[0]);
     const result = await runPostHogPoll(db as Parameters<typeof runPostHogPoll>[0], {
       companyId: "company-1",
       integrationId: "int-posthog-1",
@@ -354,6 +378,7 @@ describe("runPostHogPoll", () => {
       }),
       (data) => { updatedConfig = data; },
     );
+    initEventIngest(db as Parameters<typeof initEventIngest>[0]);
 
     const result = await runPostHogPoll(db as Parameters<typeof runPostHogPoll>[0], {
       companyId: "company-1",
@@ -381,6 +406,7 @@ describe("runPostHogPoll", () => {
         config: { projectId: "42", lastPollAt: "2024-06-15T00:00:00Z" },
       }),
     );
+    initEventIngest(db as Parameters<typeof initEventIngest>[0]);
 
     const result = await runPostHogPoll(db as Parameters<typeof runPostHogPoll>[0], {
       companyId: "company-1",

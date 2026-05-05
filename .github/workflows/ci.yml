@@ -147,6 +147,23 @@ jobs:
         if: always()
         run: pnpm ci:coverage-summary || true
 
+      - name: Enforce per-module coverage thresholds
+        # Hard gate on per-glob coverage for trust-closure modules.
+        # Reads server/coverage/coverage-summary.json (written by the previous
+        # step's `--coverage.reporter=json-summary`) and verifies each
+        # threshold-target file meets its line% bar. Vitest's own threshold
+        # gate runs inside that step too but is masked by `|| echo` above; this
+        # step is the unmasked equivalent.
+        # Targets (TC-5 council 2026-05-05 R1+R2):
+        #   - server/src/services/integrations/**     lines >= 75
+        #   - server/src/services/funnel*              lines >= 75 (no-op
+        #                                              until S3 funnel lands)
+        #   - server/src/services/cos/brief*           lines >= 75 (no-op
+        #                                              until S3 daily-brief
+        #                                              lands)
+        #   - server/src/services/event-ingest.ts     lines >= 80
+        run: node scripts/ci/enforce-coverage-thresholds.mjs
+
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4

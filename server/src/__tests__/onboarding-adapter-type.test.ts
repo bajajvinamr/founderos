@@ -54,6 +54,15 @@ const mockValidateAnthropicKey = vi.hoisted(() =>
 
 const mockLogActivity = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
+const mockInstanceSettingsService = vi.hoisted(() => ({
+  getGeneral: vi.fn().mockResolvedValue({}),
+  getExperimental: vi.fn().mockResolvedValue({}),
+  updateGeneral: vi.fn().mockResolvedValue({ id: "instance-settings-1", general: {} }),
+  updateExperimental: vi.fn().mockResolvedValue({ id: "instance-settings-1", experimental: {} }),
+  listCompanyIds: vi.fn().mockResolvedValue([]),
+  get: vi.fn().mockResolvedValue({}),
+}));
+
 vi.mock("../services/index.js", () => ({
   companyService: () => mockCompanyService,
   accessService: () => mockAccessService,
@@ -63,6 +72,9 @@ vi.mock("../services/index.js", () => ({
   projectService: () => mockProjectService,
   issueService: () => mockIssueService,
   companyMemoryService: () => mockMemoryService,
+  // S-TC1 — onboarding now persists telemetry consent into instance
+  // settings. Mocked here so the bootstrap route can resolve the service.
+  instanceSettingsService: () => mockInstanceSettingsService,
   validateAnthropicKey: mockValidateAnthropicKey,
   logActivity: mockLogActivity,
 }));

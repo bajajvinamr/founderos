@@ -1,6 +1,7 @@
 export {
   instanceGeneralSettingsSchema,
   patchInstanceGeneralSettingsSchema,
+  telemetryConsentSchema,
   type InstanceGeneralSettings,
   type PatchInstanceGeneralSettings,
   instanceExperimentalSettingsSchema,

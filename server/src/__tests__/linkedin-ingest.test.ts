@@ -6,32 +6,43 @@ import * as composioClient from "../services/composio-client.js";
 vi.mock("../services/event-ingest.js");
 vi.mock("../services/composio-client.js");
 
+/**
+ * Build a mock Drizzle db whose `select().from(t).where(...).limit(n)` chain
+ * resolves to the given rows.
+ *
+ * Why a single `.where()`, not chained: production code uses
+ * `.where(and(eq(a), eq(b))).limit(1)` — Drizzle's chained `.where()` REPLACES
+ * (not ANDs) the previous condition, so production code at
+ * services/integrations/linkedin-ingest.ts:147 wraps both predicates in `and()`
+ * and calls `.where()` exactly once. The earlier mock used the wrong shape
+ * (`.where(...).where(...)`) and broke once the production code was updated.
+ */
+function mockDbWithConnection(rows: Record<string, unknown>[]) {
+  return {
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue(rows),
+        }),
+      }),
+    }),
+  };
+}
+
 describe("linkedinIngestService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("should ingest event and return event id", async () => {
-    const mockDb = {
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi
-            .fn()
-            .mockReturnValueOnce({
-              where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([
-                  {
-                    composioConnectionId: "conn-123",
-                    userId: "user-1",
-                    appName: "linkedin",
-                    status: "active",
-                  },
-                ]),
-              }),
-            }),
-        }),
-      }),
-    };
+    const mockDb = mockDbWithConnection([
+      {
+        composioConnectionId: "conn-123",
+        userId: "user-1",
+        appName: "linkedin",
+        status: "active",
+      },
+    ]);
 
     const mockIngestEvent = vi.mocked(ingestEvent);
     mockIngestEvent.mockResolvedValue({ eventId: "event-1", deduplicated: false });
@@ -89,26 +100,14 @@ describe("linkedinIngestService", () => {
   });
 
   it("should handle multiple posts with dedup contract", async () => {
-    const mockDb = {
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi
-            .fn()
-            .mockReturnValueOnce({
-              where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([
-                  {
-                    composioConnectionId: "conn-123",
-                    userId: "user-1",
-                    appName: "linkedin",
-                    status: "active",
-                  },
-                ]),
-              }),
-            }),
-        }),
-      }),
-    };
+    const mockDb = mockDbWithConnection([
+      {
+        composioConnectionId: "conn-123",
+        userId: "user-1",
+        appName: "linkedin",
+        status: "active",
+      },
+    ]);
 
     const mockIngestEvent = vi.mocked(ingestEvent);
     mockIngestEvent.mockResolvedValue({ eventId: "stub-unique-id", deduplicated: false });
@@ -161,26 +160,14 @@ describe("linkedinIngestService", () => {
   });
 
   it("should handle follower snapshot events", async () => {
-    const mockDb = {
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi
-            .fn()
-            .mockReturnValueOnce({
-              where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([
-                  {
-                    composioConnectionId: "conn-123",
-                    userId: "user-1",
-                    appName: "linkedin",
-                    status: "active",
-                  },
-                ]),
-              }),
-            }),
-        }),
-      }),
-    };
+    const mockDb = mockDbWithConnection([
+      {
+        composioConnectionId: "conn-123",
+        userId: "user-1",
+        appName: "linkedin",
+        status: "active",
+      },
+    ]);
 
     const mockIngestEvent = vi.mocked(ingestEvent);
     mockIngestEvent.mockResolvedValue({ eventId: "follower-event", deduplicated: false });
@@ -217,26 +204,14 @@ describe("linkedinIngestService", () => {
   });
 
   it("should prevent cross-org leaks via dedupKey structure", async () => {
-    const mockDb = {
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi
-            .fn()
-            .mockReturnValueOnce({
-              where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([
-                  {
-                    composioConnectionId: "conn-123",
-                    userId: "user-1",
-                    appName: "linkedin",
-                    status: "active",
-                  },
-                ]),
-              }),
-            }),
-        }),
-      }),
-    };
+    const mockDb = mockDbWithConnection([
+      {
+        composioConnectionId: "conn-123",
+        userId: "user-1",
+        appName: "linkedin",
+        status: "active",
+      },
+    ]);
 
     const mockIngestEvent = vi.mocked(ingestEvent);
     mockIngestEvent.mockResolvedValue({ eventId: "event-org-a", deduplicated: false });

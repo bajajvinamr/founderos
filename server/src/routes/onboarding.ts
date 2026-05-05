@@ -33,12 +33,15 @@ import { assertBoard } from "./authz.js";
 import { logger } from "../middleware/logger.js";
 import { runPostSignupBootstrap } from "../auth/post-signup-hook.js";
 import {
+  instanceSettingsService,
   issueService,
   logActivity,
   validateAnthropicKey,
 } from "../services/index.js";
+import { subscriptionService } from "../services/subscription.js";
 import {
   AGENT_SLOTS,
+  ANALYTICS_INTEGRATION_KEYS,
   bootstrapCompanyOnboarding,
   type BootstrapInput,
 } from "../services/onboarding-bootstrap.js";
@@ -93,6 +96,12 @@ const bootstrapSchema = z.object({
     finance: charterSchema,
   }),
   companyName: z.string().min(1).max(120).optional(),
+  // S-TC1 (council 2026-05-05 P1) — explicit telemetry consent decision
+  // from the final wizard step. Optional for backwards compatibility with
+  // older clients (e.g. CI smoke tests); when omitted, defaults to false
+  // (do NOT enable telemetry without explicit consent — that's the whole
+  // point of this fix).
+  telemetryEnabled: z.boolean().optional().default(false),
 });
 
 const firstDecisionsSchema = z.object({
@@ -219,6 +228,11 @@ function buildServerFirstDecisions(bottlenecks: string[]) {
 export function onboardingRoutes(db: Db) {
   const router = Router();
   const issues = issueService(db);
+  // S-TC1 — used to persist the founder's telemetry consent decision into
+  // instance_settings.general.telemetryConsent. Operates on the same
+  // singleton row that the /settings/general admin toggle reads/writes,
+  // so the wizard answer and the admin UI stay in sync.
+  const settings = instanceSettingsService(db);
 
   /**
    * POST /api/onboarding/bootstrap
@@ -311,6 +325,57 @@ export function onboardingRoutes(db: Db) {
         }
       }
 
+      // S-TC2 (council 2026-05-05 P2 — analytics milestone for paid users).
+      //
+      // The "10-min first value" S3 demo metrics ("32% of signups from
+      // LinkedIn") require Stripe + PostHog + LinkedIn. Pre-fix, the
+      // `integrations` field defaulted to `{}` and onboarding completed
+      // without any analytics intent — leaving GrowthConsole to fall back
+      // to MOCK data on a paid surface. The fix: for active subscriptions,
+      // require the founder to commit to wiring at least ONE analytics
+      // connector before bootstrap completes.
+      //
+      // Trial / free users skip this gate — onboarding must NOT dead-end
+      // a brand-new founder on day 1. The matching UI side of the gate is
+      // in `ui/src/pages/departments/GrowthConsole.tsx`: paid + no
+      // integrations yet = explicit AnalyticsConnectPrompt, never mocks.
+      const isPaid = await subscriptionService(db)
+        .isSubscriptionActive()
+        .catch((err) => {
+          // Failure to read billing status is NON-fatal here. We log and
+          // proceed as "free" — the conservative direction for an
+          // onboarding gate is to let the founder through, not to block
+          // them on a billing-API outage. The trust-gate's downstream
+          // counterpart (GrowthConsole) reads billing status on its own
+          // and will refuse to render mocks if `isPaid` is true at the
+          // time of dashboard render.
+          logger.warn(
+            { err },
+            "onboarding: billing-status check failed — treating as free for milestone gate",
+          );
+          return false;
+        });
+
+      if (isPaid) {
+        const integrationsFlags = input.integrations ?? {};
+        const hasAnalytics = ANALYTICS_INTEGRATION_KEYS.some(
+          (key) => integrationsFlags[key] === true,
+        );
+        if (!hasAnalytics) {
+          throw unprocessable(
+            "An analytics integration is required before completing onboarding on a paid plan",
+            {
+              code: "ANALYTICS_INTEGRATION_REQUIRED",
+              acceptedKinds: [...ANALYTICS_INTEGRATION_KEYS],
+              hint:
+                "Pick at least one of Stripe, PostHog, or LinkedIn during onboarding " +
+                "so we can populate the GrowthConsole with real numbers instead of " +
+                "showing sample data on a paid surface.",
+            },
+          );
+        }
+      }
+
       const actorUserId = req.actor.userId ?? "local-board";
       const companyName =
         input.companyName?.trim() || deriveCompanyNameFromVision(input.vision);
@@ -332,7 +397,61 @@ export function onboardingRoutes(db: Db) {
       const result = await bootstrapCompanyOnboarding(db, bootstrapInput, {
         actorUserId,
       });
-      res.status(201).json(result);
+
+      // S-TC1 (council 2026-05-05 P1) — persist the founder's telemetry
+      // consent decision. We do this OUTSIDE the bootstrap transaction:
+      // a failure here MUST NOT bring down onboarding, but it also MUST
+      // NOT silently flip default behavior. The default in
+      // `loadConfig()` is OFF, so on failure the system stays OFF — the
+      // safe direction for a privacy gate.
+      try {
+        const decidedAt = new Date().toISOString();
+        await settings.updateGeneral({
+          telemetryConsent: {
+            enabled: input.telemetryEnabled,
+            decided: true,
+            decidedAt,
+          },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, telemetryEnabled: input.telemetryEnabled },
+          "onboarding: failed to persist telemetry consent — defaulting to OFF",
+        );
+      }
+
+      // S3.10 — strip the firstRunPromise from the wire response. It exists
+      // on the result object so tests + workers can await the magic-moment
+      // orchestrator; the founder's wizard polls
+      // GET /api/companies/:companyId/first-run-progress for status.
+      const {
+        firstRunPromise: _firstRunPromise,
+        ...wireResult
+      } = result;
+      void _firstRunPromise;
+      res.status(201).json(wireResult);
+    },
+  );
+
+  /**
+   * GET /api/companies/:companyId/first-run-progress
+   *
+   * S3.10 — surfaces in-memory first-run progress for the dashboard's
+   * "Generating your first executive brief…" UI. Returns null when the
+   * gate did not fire (< 2 integrations) or the progress map evicted the
+   * row after a long idle period (server restart).
+   */
+  router.get(
+    "/companies/:companyId/first-run-progress",
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      requireCompanyAccess(req, companyId);
+      const { getFirstRunProgress } = await import(
+        "../services/onboarding/first-run.js"
+      );
+      const progress = getFirstRunProgress(companyId);
+      res.json({ progress });
     },
   );
 

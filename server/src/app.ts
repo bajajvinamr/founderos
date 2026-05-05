@@ -32,6 +32,7 @@ import { instanceInvitesRoutes } from "./routes/instance-invites.js";
 import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { integrationHealthRoutes } from "./routes/integration-health.js";
+import { insightRoutes } from "./routes/insights.js";
 import { postHogRoutes } from "./routes/posthog-connector.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
@@ -43,6 +44,8 @@ import { decisionOutcomeRoutes } from "./routes/decision-outcomes.js";
 import { createDecisionFollowupCron } from "./services/decision-followup-cron.js";
 import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
 import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
+import { dailyBriefRoutes } from "./routes/daily-briefs.js";
+import { createDailyFounderBriefCron } from "./jobs/daily-founder-brief.js";
 import { billingRoutes } from "./routes/billing.js";
 import { stripeBackfillRoutes } from "./routes/stripe-backfill.js";
 import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
@@ -61,6 +64,9 @@ import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
 import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
 import { departmentRoutes } from "./routes/departments.js";
+import { departmentStatusRoutes } from "./routes/department-status.js";
+import { experimentRoutes } from "./routes/experiments.js";
+import { funnelRoutes } from "./routes/funnel.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -316,12 +322,16 @@ export async function createApp(
   api.use(dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
   api.use(departmentRoutes(db));
+  api.use(departmentStatusRoutes(db));
+  api.use(experimentRoutes(db));
+  api.use(funnelRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(instanceInvitesRoutes(db));
   api.use(templateRoutes(db));
   api.use(integrationRoutes(db));
   api.use(integrationHealthRoutes(db));
+  api.use(insightRoutes(db));
   api.use(postHogRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
@@ -331,6 +341,7 @@ export async function createApp(
   api.use(companyProviderRoutes(db));
   api.use(decisionOutcomeRoutes(db));
   api.use(weeklyWrapRoutes(db));
+  api.use(dailyBriefRoutes(db));
   api.use(permissionCoachRoutes(db));
   api.use(agentHandoffRoutes(db));
   api.use(composioRoutes(db));
@@ -505,6 +516,8 @@ export async function createApp(
   weeklyWrapDeliveryCron.start();
   const linkedinSyncCron = createLinkedInSyncCron({ db });
   linkedinSyncCron.start();
+  const dailyFounderBriefCron = createDailyFounderBriefCron({ db });
+  dailyFounderBriefCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       runInCronContext("feedback-export-flush", () => {
@@ -544,6 +557,7 @@ export async function createApp(
     decisionFollowupCron.stop();
     weeklyWrapDeliveryCron.stop();
     linkedinSyncCron.stop();
+    dailyFounderBriefCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();

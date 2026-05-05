@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "@/lib/router";
 import { Tabs } from "@/components/ui/tabs";
@@ -12,56 +11,28 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Linkedin,
-  BookOpen,
-  Users,
-  Mail,
-  Search,
   FlaskConical,
 } from "lucide-react";
 import type { Agent } from "@founderos/shared";
 import { integrationDataApi } from "../../api/integration-data";
-import type {
-  PostHogFunnelPayload,
-  PostHogChannelsPayload,
-} from "../../api/integration-data";
 import { agentsInDepartment } from "../../lib/departments";
+import { experimentsApi, type Experiment as ApiExperiment } from "../../api/experiments";
+import { ExperimentCard as ApiExperimentCard } from "../../components/ExperimentCard";
+import { FunnelDiagnostics } from "./growth/FunnelDiagnostics";
+import { useIsPaidPlan } from "../../api/billing";
+import { AnalyticsConnectPrompt } from "./AnalyticsConnectPrompt";
+import {
+  DEMO_CHANNELS,
+  DEMO_EXPERIMENTS,
+  DEMO_FUNNEL,
+} from "./growth-demo-data";
+import type {
+  Channel,
+  Experiment,
+  ExperimentStatus,
+} from "./growth-types";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type ExperimentStatus = "idea" | "running" | "analyzing" | "shipped" | "killed";
-
-interface Experiment {
-  id: string;
-  hypothesis: string;
-  channel: string;
-  ownerName: string;
-  impact: number;
-  confidence: number;
-  ease: number;
-  status: ExperimentStatus;
-  expectedLift: string;
-  expectedCacDelta: string;
-  updatedAt: Date;
-  note?: string;
-}
-
-interface Channel {
-  id: string;
-  name: string;
-  icon: React.ElementType;
-  signupsThisMonth: number;
-  spendDollars: number;
-  cac: number | null;
-  deltaPercent: number;
-  trend: "up" | "down" | "flat";
-  sparkline: number[]; // 7 values 0-100 relative heights
-}
-
-interface FunnelStage {
-  label: string;
-  count: number;
-}
+// ─── Types (re-exported for backward compatibility within this module) ──────
 
 type GrowthTab = "experiments" | "channels" | "funnel" | "paid";
 
@@ -71,155 +42,12 @@ function isValidTab(v: string | null): v is GrowthTab {
   return VALID_TABS.includes(v as GrowthTab);
 }
 
-// ─── Mock data — Wave 5 replaces with real experiment service ─────────────────
-
-const MOCK_EXPERIMENTS: Experiment[] = [
-  {
-    id: "exp-1",
-    hypothesis: "Tighten hero to '$10M company with 3 people'",
-    channel: "Landing",
-    ownerName: "Growth teammate",
-    impact: 9,
-    confidence: 8,
-    ease: 9,
-    status: "running",
-    expectedLift: "+8% signup rate",
-    expectedCacDelta: "-$18 CAC",
-    updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2h ago
-  },
-  {
-    id: "exp-2",
-    hypothesis: "Add pricing anchor — highlight $799 solo tier",
-    channel: "Landing",
-    ownerName: "Growth teammate",
-    impact: 8,
-    confidence: 6,
-    ease: 9,
-    status: "analyzing",
-    expectedLift: "+5% trial starts",
-    expectedCacDelta: "-$9 CAC",
-    updatedAt: new Date(Date.now() - 18 * 60 * 60 * 1000), // 18h ago
-  },
-  {
-    id: "exp-3",
-    hypothesis: "LinkedIn outbound to YC founders",
-    channel: "LinkedIn",
-    ownerName: "Growth teammate",
-    impact: 8,
-    confidence: 7,
-    ease: 6,
-    status: "running",
-    expectedLift: "+12 demos/mo",
-    expectedCacDelta: "-$40 CAC",
-    updatedAt: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4h ago
-  },
-  {
-    id: "exp-4",
-    hypothesis: "Founder-led weekly newsletter",
-    channel: "Email",
-    ownerName: "Growth teammate",
-    impact: 9,
-    confidence: 6,
-    ease: 5,
-    status: "idea",
-    expectedLift: "+3% signup rate",
-    expectedCacDelta: "$0 CAC",
-    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3d ago
-  },
-  {
-    id: "exp-5",
-    hypothesis: "Refer-a-founder program (+3 mo scale tier)",
-    channel: "Referral",
-    ownerName: "Growth teammate",
-    impact: 7,
-    confidence: 8,
-    ease: 4,
-    status: "idea",
-    expectedLift: "+15% new signups",
-    expectedCacDelta: "-$60 CAC",
-    updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5d ago
-  },
-  {
-    id: "exp-6",
-    hypothesis: "Google Ads on 'AI executive team'",
-    channel: "Paid search",
-    ownerName: "Growth teammate",
-    impact: 6,
-    confidence: 5,
-    ease: 8,
-    status: "killed",
-    expectedLift: "+8 signups/mo",
-    expectedCacDelta: "+$42 CAC",
-    updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7d ago
-    note: "CAC too high",
-  },
-];
-
-const MOCK_CHANNELS: Channel[] = [
-  {
-    id: "linkedin",
-    name: "LinkedIn",
-    icon: Linkedin,
-    signupsThisMonth: 42,
-    spendDollars: 0,
-    cac: 0,
-    deltaPercent: 18,
-    trend: "up",
-    sparkline: [30, 40, 35, 55, 60, 70, 85],
-  },
-  {
-    id: "content",
-    name: "Content / SEO",
-    icon: BookOpen,
-    signupsThisMonth: 28,
-    spendDollars: 0,
-    cac: 0,
-    deltaPercent: 4,
-    trend: "up",
-    sparkline: [50, 48, 55, 52, 57, 60, 62],
-  },
-  {
-    id: "referral",
-    name: "Referral",
-    icon: Users,
-    signupsThisMonth: 12,
-    spendDollars: 0,
-    cac: null,
-    deltaPercent: 0,
-    trend: "flat",
-    sparkline: [20, 15, 18, 22, 16, 19, 20],
-  },
-  {
-    id: "outbound",
-    name: "Outbound email",
-    icon: Mail,
-    signupsThisMonth: 6,
-    spendDollars: 8,
-    cac: 1.33,
-    deltaPercent: -22,
-    trend: "down",
-    sparkline: [40, 35, 30, 28, 25, 20, 18],
-  },
-  {
-    id: "paid",
-    name: "Paid search",
-    icon: Search,
-    signupsThisMonth: 3,
-    spendDollars: 180,
-    cac: 60,
-    deltaPercent: -70,
-    trend: "down",
-    sparkline: [80, 60, 45, 30, 20, 10, 5],
-  },
-];
-
-const MOCK_FUNNEL: FunnelStage[] = [
-  { label: "Traffic", count: 12400 },
-  { label: "Signup", count: 348 },
-  { label: "Activation", count: 92 },
-  { label: "Trial", count: 41 },
-  { label: "Paid", count: 7 },
-];
+// Demo data lives in `./growth-demo-data` and is rendered ONLY for free /
+// trial users. Council 2026-05-05 P2: paid users must never see fabricated
+// numbers — they get an explicit "connect analytics" CTA instead.
+//
+// The constants below keep aliases (`MOCK_*` → `DEMO_*`) only inside this
+// file's render closures; the demo source of truth is a separate module.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -412,141 +240,27 @@ function DataSourceCaption({ fetchedAt }: { fetchedAt: string }) {
   );
 }
 
-function FunnelView({
+// Note (2026-05-05 / TC-2): The earlier inline `FunnelView` + `FunnelBars`
+// pair was rendered directly from this file before S3.7. Sprint 3 swapped
+// in the recharts-backed `<FunnelDiagnostics>` (server-computed pirate
+// funnel from the events table) which now owns the funnel tab. The legacy
+// helpers were removed in this commit because they were both unused and
+// pulled `DEMO_FUNNEL` into the paid-user render closure (the trust-gate
+// concern that drove the council finding).
+
+function PaidTab({
   pushToast,
-  posthogFunnel,
+  isPaid,
 }: {
   pushToast: (input: { title: string; body: string }) => void;
-  posthogFunnel: { payload: PostHogFunnelPayload; fetchedAt: string } | null | undefined;
+  isPaid: boolean;
 }) {
-  // Build stages from real data or fall back to mock
-  const stages: FunnelStage[] = posthogFunnel
-    ? [
-        { label: "Traffic", count: posthogFunnel.payload.pageviews },
-        { label: "Signup", count: posthogFunnel.payload.signups },
-        { label: "Activation", count: posthogFunnel.payload.activations },
-        { label: "Trial", count: posthogFunnel.payload.trials },
-        { label: "Paid", count: posthogFunnel.payload.paid },
-      ]
-    : MOCK_FUNNEL;
-
-  const maxCount = Math.max(stages[0].count, 1);
-
-  // Find biggest drop-off for insight callout
-  let biggestDropIdx = 1;
-  let biggestDrop = 0;
-  for (let i = 1; i < stages.length; i++) {
-    const prev = stages[i - 1].count;
-    const cur = stages[i].count;
-    const drop = prev > 0 ? (prev - cur) / prev : 0;
-    if (drop > biggestDrop) {
-      biggestDrop = drop;
-      biggestDropIdx = i;
-    }
-  }
-  const dropLabel = `${stages[biggestDropIdx - 1].label} → ${stages[biggestDropIdx].label}`;
-  const dropPct = Math.round(biggestDrop * 100);
-
-  if (!posthogFunnel) {
-    return (
-      <div className="space-y-6">
-        {/* Empty state */}
-        <div className="rounded-md border border-dashed border-border bg-card p-8 flex flex-col items-center gap-3 text-center">
-          <p className="text-sm text-muted-foreground">
-            No funnel data yet. Connect PostHog to see real conversion numbers.
-          </p>
-          <a
-            href="/integrations"
-            className="text-[12px] font-medium text-[var(--brand,theme(colors.teal.500))] hover:underline"
-          >
-            Connect PostHog →
-          </a>
-        </div>
-
-        {/* Fallback mock funnel */}
-        <div className="opacity-40 pointer-events-none">
-          <FunnelBars stages={MOCK_FUNNEL} />
-        </div>
-      </div>
-    );
+  // Paid users — render the connect-CTA, no fabricated spend numbers (council
+  // 2026-05-05 P2). Free / trial keeps the demo strip.
+  if (isPaid) {
+    return <AnalyticsConnectPrompt surface="paid" />;
   }
 
-  return (
-    <div className="space-y-6">
-      <FunnelBars stages={stages} />
-
-      {/* Insight callout */}
-      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 flex items-start justify-between gap-4">
-        <p className="text-sm text-foreground/80 leading-relaxed">
-          <span className="font-semibold text-foreground">
-            Biggest drop-off: {dropLabel} ({dropPct}% loss).
-          </span>{" "}
-          Suggested experiment: rework this stage of the funnel.
-        </p>
-        <button
-          onClick={() =>
-            pushToast({ title: "Added to backlog", body: "Funnel experiment added to idea queue." })
-          }
-          className="shrink-0 text-[11px] text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium whitespace-nowrap"
-        >
-          + Add to experiment backlog
-        </button>
-      </div>
-
-      <DataSourceCaption fetchedAt={posthogFunnel.fetchedAt} />
-    </div>
-  );
-}
-
-function FunnelBars({ stages }: { stages: FunnelStage[] }) {
-  const maxCount = Math.max(stages[0].count, 1);
-  return (
-    <div className="rounded-md border border-border bg-card divide-y divide-border overflow-hidden">
-      {stages.map((stage, idx) => {
-        const prevCount = idx > 0 ? stages[idx - 1].count : stage.count;
-        const convPct = idx === 0 ? 100 : Math.round((stage.count / Math.max(prevCount, 1)) * 100);
-        const barWidth = Math.round((stage.count / maxCount) * 100);
-        return (
-          <div key={stage.label} className="px-4 py-3 flex items-center gap-3">
-            <div className="w-16 shrink-0">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
-                {stage.label}
-              </p>
-            </div>
-            <div className="flex-1">
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-[var(--brand,theme(colors.teal.500))] transition-all"
-                  style={{ width: `${barWidth}%` }}
-                />
-              </div>
-            </div>
-            <div className="w-12 text-right tabular-nums text-xs font-semibold text-foreground shrink-0">
-              {stage.count.toLocaleString()}
-            </div>
-            {idx > 0 && (
-              <div
-                className={cn(
-                  "w-10 text-right tabular-nums text-[11px] font-medium shrink-0",
-                  convPct < 20
-                    ? "text-red-500"
-                    : convPct < 50
-                      ? "text-amber-500"
-                      : "text-emerald-600 dark:text-emerald-400",
-                )}
-              >
-                {convPct}%
-              </div>
-            )}
-            {idx === 0 && <div className="w-10 shrink-0" />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PaidTab({ pushToast }: { pushToast: (input: { title: string; body: string }) => void }) {
   return (
     <div className="max-w-lg">
       <div className="rounded-md border border-border bg-card p-6 space-y-4">
@@ -587,14 +301,27 @@ function PaidTab({ pushToast }: { pushToast: (input: { title: string; body: stri
 
 function ExperimentsTab({
   experiments,
+  apiExperiments,
+  ownerName,
   pushToast,
 }: {
   experiments: Experiment[];
+  apiExperiments: ApiExperiment[] | null | undefined;
+  ownerName: string;
   pushToast: (input: { title: string; body: string }) => void;
 }) {
-  const sorted = [...experiments].sort((a, b) => iceTotal(b) - iceTotal(a));
-  const running = sorted.filter((e) => e.status === "running").length;
-  const highIce = sorted.filter((e) => iceTotal(e) >= 20).length;
+  // Prefer real API rows when present; fall back to mocks for the empty
+  // workspace so the tab is never blank pre-Wave-5 LLM flow.
+  const useApi = !!(apiExperiments && apiExperiments.length > 0);
+
+  const sortedMock = [...experiments].sort((a, b) => iceTotal(b) - iceTotal(a));
+  const running = useApi
+    ? apiExperiments!.filter((e) => e.status === "running").length
+    : sortedMock.filter((e) => e.status === "running").length;
+  const highIce = useApi
+    ? apiExperiments!.filter((e) => (e.iceScore ?? 0) >= 50).length
+    : sortedMock.filter((e) => iceTotal(e) >= 20).length;
+  const total = useApi ? apiExperiments!.length : sortedMock.length;
 
   return (
     <div className="space-y-5">
@@ -602,11 +329,12 @@ function ExperimentsTab({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-md border border-border bg-card px-4 py-3">
         <p className="text-[12px] text-muted-foreground tabular-nums">
           Total experiments:{" "}
-          <span className="text-foreground font-medium">{sorted.length}</span>
+          <span className="text-foreground font-medium">{total}</span>
           <span className="mx-2 text-muted-foreground/40">·</span>
           Running: <span className="text-foreground font-medium">{running}</span>
           <span className="mx-2 text-muted-foreground/40">·</span>
-          ICE ≥ 20: <span className="text-foreground font-medium">{highIce}</span>
+          {useApi ? "ICE ≥ 50" : "ICE ≥ 20"}:{" "}
+          <span className="text-foreground font-medium">{highIce}</span>
         </p>
         <Button
           size="sm"
@@ -624,11 +352,17 @@ function ExperimentsTab({
       </div>
 
       {/* Grid */}
-      {sorted.length === 0 ? (
+      {total === 0 ? (
         <EmptyState icon={FlaskConical} message="No experiments yet. Propose the first one." />
+      ) : useApi ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {apiExperiments!.map((exp) => (
+            <ApiExperimentCard key={exp.id} experiment={exp} ownerName={ownerName} />
+          ))}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sorted.map((exp) => (
+          {sortedMock.map((exp) => (
             <ExperimentCard key={exp.id} exp={exp} />
           ))}
         </div>
@@ -709,6 +443,12 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
     setSearchParams({ tab });
   }
 
+  // ── Plan tier — council 2026-05-05 P2 trust gate ──────────────────────────
+  // Paid (active OR trialing on Stripe) plans get the integration-CTA empty
+  // state instead of demo data. Free / trial-not-yet-billed plans keep the
+  // mock preview as an acceptable demo of the surface.
+  const { isPaid } = useIsPaidPlan();
+
   // ── PostHog data queries ──────────────────────────────────────────────────
   const { data: posthogFunnelData } = useQuery({
     queryKey: ["integration-data", companyId, "posthog.funnel"],
@@ -724,6 +464,16 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
     retry: false,
   });
 
+  // Experiments — Sprint 3 S3.5 wiring. Returns the full list sorted by ICE
+  // server-side; UI just renders. Empty result falls back to demo cards on
+  // free / trial; paid users see the AnalyticsConnectPrompt instead.
+  const { data: apiExperiments } = useQuery({
+    queryKey: ["experiments", companyId],
+    queryFn: () => experimentsApi.list(companyId!),
+    enabled: !!companyId,
+    retry: false,
+  });
+
   // ── Empty-state gate ──────────────────────────────────────────────────────
   const deptAgents = agentsInDepartment("growth", agents);
   const hasTeammates = deptAgents.length > 0;
@@ -732,29 +482,55 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
 
   // ── Derive display values ─────────────────────────────────────────────────
   const growthTeammates = agents.filter((a) => a.role === "cmo" || a.role === "pm");
-  const channelsLive = MOCK_CHANNELS.filter((c) => c.signupsThisMonth > 0).length;
-  const totalSpend = MOCK_CHANNELS.reduce((sum, c) => sum + c.spendDollars, 0);
+  const ownerName =
+    growthTeammates.length > 0
+      ? (growthTeammates[0].name ?? "Growth teammate")
+      : "Growth teammate";
 
-  const experiments: Experiment[] = MOCK_EXPERIMENTS.map((exp) => ({
+  const hasRealChannels =
+    !!posthogChannelsData?.payload?.channels &&
+    posthogChannelsData.payload.channels.length > 0;
+  const hasRealApiExperiments = !!(apiExperiments && apiExperiments.length > 0);
+
+  // Header summary numbers — show real data when present, demo numbers ONLY
+  // for free / trial. Paid users with no live data get neutral zeros (no
+  // fabricated counts).
+  const channelsLive = hasRealChannels
+    ? posthogChannelsData!.payload.channels.length
+    : isPaid
+      ? 0
+      : DEMO_CHANNELS.filter((c) => c.signupsThisMonth > 0).length;
+  const totalSpend = isPaid
+    ? 0
+    : DEMO_CHANNELS.reduce((sum, c) => sum + c.spendDollars, 0);
+
+  // Experiment list rendered in the experiments tab. Source preference:
+  //   1. Real API rows (always preferred when present, on any plan).
+  //   2. Demo cards (free / trial only — paid sees the connect-CTA).
+  const demoExperiments: Experiment[] = DEMO_EXPERIMENTS.map((exp) => ({
     ...exp,
-    ownerName:
-      growthTeammates.length > 0
-        ? (growthTeammates[0].name ?? "Growth teammate")
-        : "Growth teammate",
+    ownerName,
   }));
+  const fallbackExperiments: Experiment[] = isPaid ? [] : demoExperiments;
 
-  const runningCount = experiments.filter((e) => e.status === "running").length;
+  const runningCount = hasRealApiExperiments
+    ? apiExperiments!.filter((e) => e.status === "running").length
+    : fallbackExperiments.filter((e) => e.status === "running").length;
 
+  const experimentsTabCount = hasRealApiExperiments
+    ? apiExperiments!.length
+    : fallbackExperiments.length;
+  const channelsTabCount = hasRealChannels
+    ? posthogChannelsData!.payload.channels.length
+    : isPaid
+      ? 0
+      : DEMO_CHANNELS.length;
   const tabItems = [
-    { value: "experiments", label: `Experiments · ${experiments.length}` },
-    { value: "channels", label: `Channels · ${MOCK_CHANNELS.length}` },
+    { value: "experiments", label: `Experiments · ${experimentsTabCount}` },
+    { value: "channels", label: `Channels · ${channelsTabCount}` },
     { value: "funnel", label: "Funnel" },
     { value: "paid", label: "Paid" },
   ];
-
-  const hasRealChannels =
-    posthogChannelsData?.payload?.channels &&
-    posthogChannelsData.payload.channels.length > 0;
 
   return (
     <div className="space-y-6">
@@ -798,47 +574,61 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
           />
         ) : (
           <>
-            {activeTab === "experiments" && (
-              <ExperimentsTab experiments={experiments} pushToast={pushToast} />
-            )}
-            {activeTab === "channels" && (
-              <div className="space-y-3">
-                {!hasRealChannels && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Showing sample data.{" "}
-                    <a
-                      href="/integrations"
-                      className="text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium"
-                    >
-                      Connect PostHog for real data →
-                    </a>
-                  </p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {hasRealChannels
-                    ? posthogChannelsData!.payload.channels.map((ch) => (
-                        <RealChannelCard
-                          key={ch.source}
-                          source={ch.source}
-                          count={ch.count}
-                        />
-                      ))
-                    : MOCK_CHANNELS.map((ch) => (
-                        <ChannelCard key={ch.id} channel={ch} />
-                      ))}
+            {activeTab === "experiments" &&
+              (isPaid && !hasRealApiExperiments ? (
+                <AnalyticsConnectPrompt surface="experiments" />
+              ) : (
+                <ExperimentsTab
+                  experiments={fallbackExperiments}
+                  apiExperiments={apiExperiments}
+                  ownerName={ownerName}
+                  pushToast={pushToast}
+                />
+              ))}
+            {activeTab === "channels" &&
+              (isPaid && !hasRealChannels ? (
+                <AnalyticsConnectPrompt surface="channels" />
+              ) : (
+                <div className="space-y-3">
+                  {!hasRealChannels && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Showing sample data.{" "}
+                      <a
+                        href="/integrations"
+                        className="text-[var(--brand,theme(colors.teal.500))] hover:underline font-medium"
+                      >
+                        Connect PostHog for real data →
+                      </a>
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {hasRealChannels
+                      ? posthogChannelsData!.payload.channels.map((ch) => (
+                          <RealChannelCard
+                            key={ch.source}
+                            source={ch.source}
+                            count={ch.count}
+                          />
+                        ))
+                      : DEMO_CHANNELS.map((ch) => (
+                          <ChannelCard key={ch.id} channel={ch} />
+                        ))}
+                  </div>
+                  {hasRealChannels && (
+                    <DataSourceCaption fetchedAt={posthogChannelsData!.fetchedAt} />
+                  )}
                 </div>
-                {hasRealChannels && (
-                  <DataSourceCaption fetchedAt={posthogChannelsData!.fetchedAt} />
-                )}
-              </div>
+              ))}
+            {activeTab === "funnel" && companyId && (
+              <FunnelDiagnostics companyId={companyId} />
             )}
-            {activeTab === "funnel" && (
-              <FunnelView
-                pushToast={pushToast}
-                posthogFunnel={posthogFunnelData ?? null}
+            {activeTab === "funnel" && !companyId && (
+              <EmptyState
+                icon={TrendingUp}
+                message="Funnel diagnostics need a company context. Pick a workspace from the sidebar."
               />
             )}
-            {activeTab === "paid" && <PaidTab pushToast={pushToast} />}
+            {activeTab === "paid" && <PaidTab pushToast={pushToast} isPaid={isPaid} />}
           </>
         )}
       </div>

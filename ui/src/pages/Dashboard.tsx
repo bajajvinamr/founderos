@@ -20,6 +20,7 @@ import { CompanyMemoryCard } from "../components/CompanyMemoryCard";
 import { CompanyProvidersWidget } from "../components/CompanyProvidersWidget";
 import { PendingOutcomesBanner } from "../components/PendingOutcomesBanner";
 import { FounderBriefing } from "../components/FounderBriefing";
+import { FirstRunProgressCard } from "../components/FirstRunProgressCard";
 import { DepartmentStatusGrid } from "../components/DepartmentStatusGrid";
 import { CapitalAllocationCard } from "../components/CapitalAllocationCard";
 import { DecisionsInbox } from "./DecisionsInbox";
@@ -208,6 +209,11 @@ export function Dashboard() {
         <ProductTour userId={session.user.id} companyId={selectedCompanyId} />
       )}
       {error && <p className="text-sm text-destructive">{error.message}</p>}
+
+      {/* S3.10 — magic activation gate. Only renders while a first-run is
+          in flight for this company; auto-fires the "Your first brief is
+          ready" toast on completion and unmounts after a short cooldown. */}
+      {selectedCompanyId && <FirstRunProgressCard companyId={selectedCompanyId} />}
 
       {/* The Morning Brief — what a founder actually wants in their first 30
           seconds of the day. Narrative + decisions + wins. Everything that
