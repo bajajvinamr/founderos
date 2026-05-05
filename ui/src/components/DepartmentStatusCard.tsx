@@ -10,10 +10,17 @@ export interface DepartmentStatusCardProps {
   departmentId: string;
   label: string;
   icon: LucideIcon;
-  agentCount: number;
   health: DepartmentHealth;
-  unresolvedApprovals: number;
-  lastActivityAt: Date | null;
+  /** Number of open insights surfaced for this department. */
+  openInsights: number;
+  /** Number of pending approvals attributed to this department's agents. */
+  pendingApprovals: number;
+  /** Number of stalled (paused) workflows — company-scoped today. */
+  stalledWorkflows: number;
+  /** ISO timestamp of the most-recent activity across this department's
+   *  agents (heartbeat OR runtime updatedAt, whichever is later). */
+  lastActivity: string | null;
+  agentCount: number;
 }
 
 const HEALTH_RING: Record<DepartmentHealth, string> = {
@@ -34,10 +41,12 @@ export function DepartmentStatusCard({
   departmentId,
   label,
   icon: Icon,
-  agentCount,
   health,
-  unresolvedApprovals,
-  lastActivityAt,
+  openInsights,
+  pendingApprovals,
+  stalledWorkflows,
+  lastActivity,
+  agentCount,
 }: DepartmentStatusCardProps) {
   return (
     <Link
@@ -54,14 +63,6 @@ export function DepartmentStatusCard({
               {agentCount === 0
                 ? "No teammates"
                 : `${agentCount} teammate${agentCount === 1 ? "" : "s"}`}
-              {unresolvedApprovals > 0 && (
-                <>
-                  <span className="mx-1.5">·</span>
-                  <span className="text-amber-600 dark:text-amber-400">
-                    {unresolvedApprovals} pending
-                  </span>
-                </>
-              )}
             </p>
           </div>
         </div>
@@ -70,11 +71,56 @@ export function DepartmentStatusCard({
           aria-hidden="true"
         />
       </div>
-      {lastActivityAt && agentCount > 0 && (
-        <p className="text-[11px] text-muted-foreground/70 mt-2 tabular-nums">
-          Last activity {timeAgo(lastActivityAt)}
-        </p>
+
+      {/* Four-counter row — matches MetricCard / FinanceKindCard density.
+          Hidden when the dept is grey since every counter would be 0
+          and the row would just add visual noise. */}
+      {agentCount > 0 && (
+        <dl className="grid grid-cols-4 gap-2 mt-3">
+          <CounterCell label="Insights" value={openInsights} />
+          <CounterCell
+            label="Approvals"
+            value={pendingApprovals}
+            tone={pendingApprovals > 0 ? "warn" : "default"}
+          />
+          <CounterCell
+            label="Stalled"
+            value={stalledWorkflows}
+            tone={stalledWorkflows > 0 ? "warn" : "default"}
+          />
+          <CounterCell
+            label="Last seen"
+            value={lastActivity ? timeAgo(lastActivity) : "—"}
+            mono
+          />
+        </dl>
       )}
     </Link>
+  );
+}
+
+interface CounterCellProps {
+  label: string;
+  value: string | number;
+  tone?: "default" | "warn";
+  mono?: boolean;
+}
+
+function CounterCell({ label, value, tone = "default", mono = false }: CounterCellProps) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "text-xs font-medium tabular-nums truncate",
+          mono ? "text-muted-foreground" : "text-foreground",
+          tone === "warn" && "text-amber-600 dark:text-amber-400",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
