@@ -53,7 +53,14 @@
 
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
-import { events, type Workflow, type WorkflowAction } from "@founderos/db";
+import {
+  events,
+  workflowRuns,
+  type Workflow,
+  type WorkflowAction,
+  type WorkflowRun,
+} from "@founderos/db";
+import { canRunAutonomously } from "../../workflow-autonomy.js";
 import { isDraftOnly, requiresApproval } from "../../workflow-autonomy.js";
 import { getEmailTransport } from "../../transports/email-transport.js";
 import { logger } from "../../../middleware/logger.js";
@@ -405,4 +412,115 @@ export async function executeNudgeActions(
   }
 
   return out;
+}
+
+/**
+ * executeActivationNudgeTemplate — main dispatcher entry point
+ * ============================================================
+ *
+ * Council R1 close-out P1 (2026-05-05 fix-the-fix) — without this wrapper,
+ * the dispatcher in `services/workflows.ts` falls through to its `default`
+ * branch when a workflow.template === "activation-nudge" run is created,
+ * silently leaving the run stuck at `running` forever. Codex flagged this
+ * in the Wave 0 close-out council — verified by inspecting the switch at
+ * services/workflows.ts:334 (only `onboarding-emails` and `upsell` were
+ * wired pre-fix).
+ *
+ * Architectural note: activation-nudge differs from onboarding-emails and
+ * upsell in that its actions are PRE-STAMPED on the workflow_run by the
+ * upstream scheduler (S4.7 trigger: scan unactivated → dedup → build action
+ * list). The scheduler integration lives outside this file. This wrapper
+ * therefore reads `workflowRun.actions` rather than building actions from
+ * `workflow.config` like the other two templates.
+ *
+ * If a run lands here with no pre-stamped actions, that's a contract bug
+ * upstream — fail-fast with a clear error rather than masking it.
+ *
+ * @param db          Drizzle handle
+ * @param workflow    The workflow row (template='activation-nudge')
+ * @param workflowRun The newly-created workflow_run row (actions pre-stamped)
+ */
+export async function executeActivationNudgeTemplate(
+  db: Db,
+  workflow: Workflow,
+  workflowRun: WorkflowRun,
+): Promise<void> {
+  const workflowId = workflow.id;
+  const runId = workflowRun.id;
+
+  // Read pre-stamped actions from the run.
+  const incoming = (workflowRun.actions as unknown as WorkflowAction[]) ?? [];
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    logger.error(
+      { workflowId, runId },
+      "activation-nudge run has no pre-stamped actions — scheduler contract bug",
+    );
+    // workflow_runs has no `error` column — errors are persisted as a
+    // synthetic failed action in the actions[] jsonb (matches the existing
+    // upsell.ts / onboarding-emails.ts pattern).
+    await setActivationRunStatus(db, runId, "failed", {
+      actions: [
+        {
+          type: "send_email",
+          payload: {},
+          status: "failed",
+          error:
+            "activation-nudge expects actions to be pre-stamped by the scan/trigger upstream; received empty actions[]",
+        } as unknown as WorkflowAction,
+      ],
+    });
+    return;
+  }
+
+  // Autonomy gate — this is the SAME gate that onboarding-emails / upsell
+  // use, just adapted to the pre-stamped-actions shape.
+  const canRun = await canRunAutonomously(db, workflow);
+
+  if (!canRun) {
+    // Draft-only or requires-approval: leave actions pending; the founder
+    // (or approval flow) will dispatch them later. This matches upsell's
+    // pending_approval branch.
+    logger.info(
+      { workflowId, runId, autonomyLevel: workflow.autonomyLevel },
+      "activation-nudge gated to pending_approval (autonomyLevel<4 or flag off)",
+    );
+    await setActivationRunStatus(db, runId, "pending_approval", {
+      actions: incoming,
+    });
+    return;
+  }
+
+  // Autonomous send.
+  logger.info(
+    { workflowId, runId, actionCount: incoming.length },
+    "activation-nudge autonomous send triggered",
+  );
+  const executed = await executeNudgeActions(incoming, workflow, runId);
+
+  const anyFailed = executed.some((a) => a.status === "failed");
+  const runStatus = anyFailed ? "failed" : "completed";
+  await setActivationRunStatus(db, runId, runStatus, { actions: executed });
+}
+
+/**
+ * Internal status writer. Kept private to this file so the activation-nudge
+ * dispatcher contract stays compact; mirrors the pattern in
+ * onboarding-emails.ts / upsell.ts (each owns its own status writer).
+ */
+async function setActivationRunStatus(
+  db: Db,
+  runId: string,
+  status: "completed" | "failed" | "pending_approval",
+  patch: { actions: WorkflowAction[] },
+): Promise<void> {
+  const completedAt =
+    status === "completed" || status === "failed" ? new Date() : null;
+  await db
+    .update(workflowRuns)
+    .set({
+      status,
+      actions: patch.actions as unknown as WorkflowRun["actions"],
+      ...(completedAt !== null ? { completedAt } : {}),
+    })
+    .where(eq(workflowRuns.id, runId));
 }

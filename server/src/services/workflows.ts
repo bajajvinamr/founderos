@@ -38,6 +38,7 @@ import {
 import { logActivity } from "./activity-log.js";
 import { executeOnboardingEmailTemplate } from "./workflows/templates/onboarding-emails.js";
 import { executeUpsellTemplate } from "./workflows/templates/upsell.js";
+import { executeActivationNudgeTemplate } from "./workflows/templates/activation-nudge.js";
 import { logger } from "../middleware/logger.js";
 
 // ── List / get ────────────────────────────────────────────────────────────────
@@ -338,12 +339,23 @@ export async function executeWorkflowTemplate(
     case "upsell":
       await executeUpsellTemplate(db, workflow, workflowRun);
       break;
-    // Future templates: activation-nudge, churn-rescue
+    case "activation-nudge":
+      // Council R1 close-out P1 (2026-05-05) — pre-fix this fell through to
+      // the `default` warn-only branch and the run stuck at "running" forever.
+      // Codex flagged in the Wave 0 close-out council.
+      await executeActivationNudgeTemplate(db, workflow, workflowRun);
+      break;
+    // Future templates: churn-rescue (S4.8 — task #164)
     default:
       logger.warn(
         { template: workflow.template, workflowId: workflow.id },
         "unknown workflow template",
       );
+      // Mark the run failed instead of leaving it stuck at "running" — same
+      // observability hygiene as other failure paths in this dispatcher.
+      await setRunStatus(db, workflowRun.id, "failed", {
+        error: `unknown workflow template: ${workflow.template}`,
+      });
   }
 }
 

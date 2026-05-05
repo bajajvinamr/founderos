@@ -692,6 +692,12 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
       // Verify tags are threaded (workflow_id is the reconciliation key for webhooks).
       expect(email.tags?.find((t) => t.name === "workflow_id")?.value).toBe(w!.id);
       expect(email.tags?.find((t) => t.name === "template")?.value).toBe("onboarding-emails");
+      // Council R1 close-out P1 (2026-05-05) — workflow_run_id MUST be on every
+      // email tag set or the Resend webhook can't correlate delivery events to
+      // the run; bounce/delivery events get silently 200-ack'd and dropped.
+      // Both Codex + Gemini flagged this in R1; commit fixes onboarding to
+      // match upsell + activation-nudge.
+      expect(email.tags?.find((t) => t.name === "workflow_run_id")?.value).toBe(res.body.id);
     }
     // Subjects should reference TestCo (companyName personalization).
     expect(emails[0]!.subject).toContain("TestCo");
@@ -793,6 +799,168 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
     expect(persistedActions[0]!.payload.providerMessageId).toBeDefined();
     expect(persistedActions[0]!.payload.transportMode).toBe("capture");
     expect(persistedActions[0]!.payload.checkoutUrl).toBe(mockStripeCheckoutUrl);
+
+    resetEmailTransport();
+  });
+
+  // ── G4. Activation-nudge dispatcher contract (council R1 close-out P1) ──────
+
+  it("G4. POST /runs → activation-nudge with pre-stamped action → transport called + run.status=completed", async () => {
+    // Council R1 close-out P1 (2026-05-05) — Codex flagged that the dispatcher
+    // switch in services/workflows.ts had no case for "activation-nudge", so
+    // any run created against an activation-nudge workflow fell through to the
+    // `default` warn-only branch and the run stuck at "running" forever.
+    //
+    // Verifies the new executeActivationNudgeTemplate wrapper:
+    //   1. Dispatcher routes "activation-nudge" template to the wrapper.
+    //   2. Wrapper reads pre-stamped actions from workflowRun.actions.
+    //   3. Autonomous gate (autonomyLevel=4 + flag) → executeNudgeActions runs.
+    //   4. send_email actions hit the EmailTransport with workflow_run_id tag.
+    //   5. Run row transitions to "completed".
+    const { resetEmailTransport, getCapturedEmails } = await import(
+      "../services/transports/email-transport.js"
+    );
+    resetEmailTransport();
+
+    await enableAutonomousEmail(db);
+
+    const app = buildApp(db, {}, [companyId]);
+
+    const [w] = await db
+      .insert(workflows)
+      .values({
+        companyId,
+        name: "Activation nudge — dispatcher contract",
+        template: "activation-nudge",
+        triggerKind: "schedule",
+        triggerSpec: { cron: "0 */6 * * *" },
+        autonomyLevel: 4,
+        status: "active",
+        config: { inactivityWindow: 7, dedupWindow: 14 },
+      })
+      .returning();
+
+    // Route does not pre-stamp actions — we have to insert the run directly
+    // with the actions array set, simulating the upstream scheduler trigger.
+    const [pre] = await db
+      .insert(workflowRuns)
+      .values({
+        companyId,
+        workflowId: w!.id,
+        status: "running",
+        triggeredBy: { kind: "manual" },
+        actions: [
+          {
+            type: "send_email",
+            payload: {
+              email: "nudge-target@example.com",
+              recipientEmail: "nudge-target@example.com",
+              subject: "We miss you!",
+              bodyText: "Re-engagement nudge body",
+              distinctId: "user-123",
+            },
+            status: "pending",
+          },
+          {
+            type: "log_crm_note",
+            payload: { distinctId: "user-123", note: "Re-engagement nudge sent" },
+            status: "pending",
+          },
+          {
+            type: "nudge_sent",
+            payload: { distinctId: "user-123" },
+            status: "pending",
+          },
+        ],
+      })
+      .returning();
+
+    // Now call the executor directly — same code path as the route's
+    // setImmediate fire-and-forget dispatch, but synchronous so the test
+    // can assert on the post-state.
+    const { executeWorkflowTemplate } = await import("../services/workflows.js");
+    await executeWorkflowTemplate(db, w!, pre!);
+
+    const emails = getCapturedEmails();
+    expect(emails).toHaveLength(1);
+    expect(emails[0]!.to).toBe("nudge-target@example.com");
+    // workflow_run_id tag is the webhook reconciliation key — same contract
+    // as G2 (onboarding) + G3 (upsell). All three templates must agree.
+    expect(emails[0]!.tags?.find((t) => t.name === "workflow_run_id")?.value).toBe(pre!.id);
+    expect(emails[0]!.tags?.find((t) => t.name === "template")?.value).toBe("activation-nudge");
+
+    const [persistedRun] = await db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, pre!.id));
+    expect(persistedRun!.status).toBe("completed");
+
+    const persistedActions = persistedRun!.actions as Array<{
+      type: string;
+      status: string;
+    }>;
+    expect(persistedActions).toHaveLength(3);
+    expect(persistedActions.every((a) => a.status === "completed")).toBe(true);
+
+    resetEmailTransport();
+  });
+
+  // ── G5. Empty-actions failure path (council R1 close-out P1) ──────────────
+
+  it("G5. activation-nudge with no pre-stamped actions → run.status=failed, no transport call", async () => {
+    // Failsafe: if the upstream scheduler has a contract bug and creates a run
+    // with empty actions[], we MUST NOT silently leave it at "running" — that
+    // was the original Codex finding. Instead transition to failed with a
+    // clear error message.
+    const { resetEmailTransport, getCapturedEmails } = await import(
+      "../services/transports/email-transport.js"
+    );
+    resetEmailTransport();
+    await enableAutonomousEmail(db);
+
+    const [w] = await db
+      .insert(workflows)
+      .values({
+        companyId,
+        name: "Activation nudge — empty actions",
+        template: "activation-nudge",
+        triggerKind: "schedule",
+        triggerSpec: { cron: "0 */6 * * *" },
+        autonomyLevel: 4,
+        status: "active",
+        config: {},
+      })
+      .returning();
+
+    const [pre] = await db
+      .insert(workflowRuns)
+      .values({
+        companyId,
+        workflowId: w!.id,
+        status: "running",
+        triggeredBy: { kind: "manual" },
+        actions: [],
+      })
+      .returning();
+
+    const { executeWorkflowTemplate } = await import("../services/workflows.js");
+    await executeWorkflowTemplate(db, w!, pre!);
+
+    expect(getCapturedEmails()).toHaveLength(0);
+    const [persistedRun] = await db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, pre!.id));
+    expect(persistedRun!.status).toBe("failed");
+    // Error is persisted as a synthetic failed action (workflow_runs has no
+    // `error` column — errors live in actions[] per the existing convention).
+    const failedActions = persistedRun!.actions as Array<{
+      status: string;
+      error?: string;
+    }>;
+    expect(failedActions).toHaveLength(1);
+    expect(failedActions[0]!.status).toBe("failed");
+    expect(failedActions[0]!.error).toContain("pre-stamped");
 
     resetEmailTransport();
   });

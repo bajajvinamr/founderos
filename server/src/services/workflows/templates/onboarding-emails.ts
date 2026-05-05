@@ -137,7 +137,7 @@ export async function executeOnboardingEmailTemplate(
     // Persist actions as-is, then derive run status from action outcomes:
     //   - any "failed"   → run = "failed"   (loud signal in UI; partial-send incidents)
     //   - else "completed" or all queued → run = "completed"
-    await sendOnboardingEmails(db, workflow, actions);
+    await sendOnboardingEmails(db, workflow, runId, actions);
     const anyFailed = actions.some((a) => a.status === "failed");
     const successCount = actions.filter((a) => a.status === "completed").length;
     const runStatus = anyFailed ? "failed" : "completed";
@@ -202,6 +202,7 @@ export async function executeOnboardingEmailTemplate(
 async function sendOnboardingEmails(
   db: Db,
   workflow: Workflow,
+  runId: string,
   actions: OnboardingEmailAction[],
 ): Promise<void> {
   const config = (workflow.config as unknown) as OnboardingEmailConfig;
@@ -219,6 +220,14 @@ async function sendOnboardingEmails(
       html: action.payload.bodyHtml,
       tags: [
         { name: "workflow_id", value: workflow.id },
+        // Council R1 close-out P1 (2026-05-05 fix-the-fix) — without
+        // workflow_run_id the Resend webhook receiver finds no run to
+        // correlate the bounce/delivery event to and silently drops it.
+        // Both Codex + Gemini flagged this as a both-confirmed P1 in the
+        // Wave 0 close-out council. upsell.ts + activation-nudge.ts already
+        // emit this; onboarding-emails.ts (the first template I converted
+        // in commit b93a94e) was missed.
+        { name: "workflow_run_id", value: runId },
         { name: "template", value: "onboarding-emails" },
         { name: "day", value: String(action.payload.day) },
       ],
