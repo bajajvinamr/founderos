@@ -157,3 +157,10 @@ export {
   type WorkflowRun,
   type WorkflowRunInsert,
 } from "./workflows.js";
+export {
+  contentBriefs,
+  CONTENT_BRIEF_STATUSES,
+  type ContentBrief,
+  type ContentBriefInsert,
+  type ContentBriefStatus,
+} from "./content_briefs.js";
