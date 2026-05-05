@@ -1,8 +1,77 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-05 (council retro + pre-S3 trust closure) by Claude_
+_Last updated: 2026-05-05 (PM, EXPANDED council BLOCK + Sprint 3 shipped + trust-closure in flight) by Claude_
 
-## 🟡 2026-05-05 — Council retro PASS WITH CONDITIONS · pre-S3 trust closure in flight
+## 🔴 2026-05-05 PM — Council EXPANDED BLOCK · Sprint 3 shipped · trust-closure dispatched
+
+**Status:** Sprint 3 fully shipped (10/10 tickets) at `feat/s3-cos-growth` SHA `d562228`, PR [#39](https://github.com/bajajvinamr/founderos/pull/39) extended with Wave 3. User invoked `/council` for expanded broader product audit. Council `2026-05-05T16:22:34Z` ran FULL adversarial mode (Codex `gpt-5.4` + Gemini `gemini-2.5-pro` after `gemini-3.1-pro-preview` AND `gemini-3-pro-preview` both 429 — preview-pool capacity event). **Verdict: BLOCK** on P1 telemetry-consent default mismatch + 4 confirmed-by-both P2s. User chose Path A — trust-closure sprint (~3-5d) before Sprint 4 dispatch. 4 trust-closure agents in flight + TC-6 shipped + TC-2 holding for sequential post-TC-1.
+
+### Sprint 3 — DONE (10/10 tickets, integrated, pushed)
+
+| Ticket | Branch SHA | Tests | Notes |
+|---|---|---|---|
+| S3.1 Insights schema + API | `8eff28e` | passing | Wave 1 |
+| S3.5 Experiments + Growth UI | `b3f30b2` | passing | Wave 1 (1 flake — see #175) |
+| S3.2 KPI anomaly detection | `97a7b0a` | passing | Wave 2 |
+| S3.3 Daily Founder Brief | `d1652e6` | passing | Wave 2 |
+| S3.4 Department Status rollup | `dee1733` | passing | Wave 2 |
+| S3.7 Funnel diagnostics | `166e118` | passing | Wave 2 |
+| S3.6 Experiment suggester + pgvector | `6a79405` | 27/27 | Wave 3 (idx 81 / file 0084) |
+| S3.8 Channel recommendation | `06d1e19` | 5/5 | Wave 3 (last-touch attribution) |
+| S3.9 LinkedIn growth attribution | `d02515c` | 5/5 | Wave 3 (DEMO LINE: "32% from LinkedIn") |
+| S3.10 Magic activation gate | `4bbf4ac` | 5/5 + 10/10 bootstrap | Wave 3 (10-min first-value) |
+
+Integrated branch: `feat/s3-cos-growth` @ `d562228`. Auto-released to v0.4.0 (release-main workflow). Full battery 58/58 (1 known flake: experiments.test.ts ice_impact=11 race — task #175). Migration journal idx 0..81 clean per `pnpm --filter @founderos/db check:migrations`.
+
+### Council 2026-05-05 EXPANDED — confirmed-by-both findings (must close before S4 dispatch per Path A)
+
+| ID | Sev | Title | File:line | Status |
+|---|---|---|---|---|
+| TC-1 (#169) | **P1 BLOCK** | Telemetry consent default mismatch | `Landing.tsx:1114` says opt-in, `config.ts:377` defaults `?? true`, `shared/telemetry/{config,client}` posts to `telemetry.founderos.ai/ingest` unconditionally | 🛠 In flight (Sonnet) |
+| TC-2 (#170) | P2 | GrowthConsole leaks mock data on paid path | `onboarding.ts:74-76` makes integrations optional; `GrowthConsole.tsx:161-225+453-471` falls back to `MOCK_CHANNELS`/`MOCK_FUNNEL` | ⏸ Hold for post-TC-1 (Sonnet) |
+| TC-3 (#171) | P2 | App-code-only tenant invariants | `runner.ts:94-107+126`, `heartbeat_runs.ts:10-14`, `issue_labels.ts:9-11`, `execution_workspaces.ts:19-22` — composite FK + CHECK absent | 🛠 In flight (Sonnet, idx 82 / file 0085) |
+| TC-4 (#172) | P2 | On-call is "wait for founder to notice" | `observability-plan.md:32-45` "No SLO / no alerts"; `e2e-synthetic.yml` runs public-only; `auth-round-trip.spec.ts:9-17+41-44` test.skip | 🛠 In flight (general-purpose) |
+| TC-5 (#173) | P2 | S3 analytics layer partially untested | `slack-ingest.test.ts:24-30` + `notion-ingest.test.ts:20-22` describe.skip; #125-#128 still open; ci.yml:130-148 no coverage threshold | 🛠 In flight (general-purpose) |
+| TC-6 (#174) | P3 | Doc canonical drift PGlite vs embedded-postgres | `AGENTS.md:36`, `doc/SPEC.md:384+486`, `doc/SPEC-implementation.md:729`, `CLAUDE.md:20+28` | ✅ DONE — `feat/tc-6-doc-canonical` @ `39b6dbf` |
+
+Single-model findings (lower priority, logged in decisions.md):
+- [P2→P3] Single-origin Fly SPOF (Gemini-only; Codex disputes citing aspirational SPEC.md). Resolution: known accepted risk from 2026-05-03 council.
+- [P2] Product strategy contracting to single $4k buyer (Gemini-only; Codex calls out-of-scope GTM). Time-box runner pitch, validate broader OS thesis with 5-10 prospects, reserve 20% capacity for Path B.
+
+Council artifact: `~/.gstack/projects/founderos/decisions.md` 2026-05-05 EXPANDED entry. Run artifact: `~/.vanta/council-runs.jsonl` ts=`2026-05-05T16:22:34.337Z`. Findings: 7 hashes traceable in `~/.vanta/council-feedback.jsonl`.
+
+### Next-session resume protocol
+
+1. **Wait for TC-1, TC-3, TC-4, TC-5 completions** — agent IDs tracked in this session. When they return, integrate into `feat/s3-cos-growth` (or new `feat/trust-closure` branch — TBD based on PR #39 size).
+2. **Dispatch TC-2 sequentially after TC-1 lands** — TC-2 modifies onboarding wizard which TC-1 also touches; explicit non-overlap requires sequential dispatch.
+3. **Re-run full test battery** post-integration. Watch for regressions from composite FK migration (TC-3) — some tests that insert cross-company rows may need fixture updates.
+4. **Update PR #39 description** to reflect Sprint 3 + trust-closure (or open #41 for trust-closure if PR #39 grows past reviewable size).
+5. **Verify CI green** — billing block #129 cleared earlier today, but the schema-drift FAILURE is non-blocking per #38 precedent.
+6. **Re-run /council on TC-1/3/4 work BEFORE merging** — telemetry default flip + composite FK migration + alert routes are all council-trigger surface (auth/security-adjacent). Defense in depth.
+7. **THEN dispatch Sprint 4 Wave 1** (#152 S4.1, #153 S4.5) — both council-flagged (#154/#155); council R1 must precede merge per Path A.
+
+### Carry-along tickets (deferred, not blocking trust-closure)
+
+| # | Sprint | Severity | Item |
+|---|---|---|---|
+| #135 | S3 carry | P1 | `runner_tokens.expiresAt` (default 90d) + rotation + device fingerprint |
+| #136 | S4 | P2 | Session resume fallback when `~/.claude/sessions/<sid>/` missing on second machine |
+| #137 | S4 | P2 | Runner stdout per-line + per-batch byte caps (DoS hardening) |
+| #138 | post-#129 | P3 | Promote `release-smoke.yml` to required pre-traffic gate |
+| #140 | S4 | follow-up | `heartbeat-billing-gate.test.ts` integration test (6 gate branches) |
+| #144 | S4 | P3 | Full `/api/health` strip to `{ok, version}` for unauth (root endpoint) |
+| #156 | S4.5 follow | follow-up | Switch S3.4 dept-status from `routines.status` to `workflows.status` once S4.5 lands |
+| #175 | S4 hardening | follow-up | `experiments.test.ts:251` ice_impact=11 parallel-fork TRUNCATE-cascade race (1/58 flake on Wave 3 integration verify; passed on retry) |
+
+### Session invariants discovered
+
+- **Worktree isolation has write-leak edge cases** — `Agent({isolation: "worktree"})` isolates the branch state but file modifications to existing tracked files can appear in the parent checkout's `git status`. Defense: always run `git diff --name-only HEAD` before committing to confirm scope.
+- **Agent self-named branches when parent ignored explicit branch instruction** — TC-4's worktree landed on auto-generated `worktree-agent-<id>` instead of the requested `feat/tc-4-auth-canary-slos`. Branch name is descriptive only; integration still works via worktree path.
+- **Gemini preview-pool 429s repeat across same-day capacity windows** — `gemini-3.1-pro-preview` AND `gemini-3-pro-preview` both 429 within minutes of each other (and within hours of yesterday's same pattern). Drop directly to `gemini-2.5-pro` for FounderOS reviews until capacity event clears.
+
+---
+
+## 🟡 2026-05-05 AM — Council retro PASS WITH CONDITIONS · pre-S3 trust closure shipped (historical)
 
 **Status:** Sprint 1 + Sprint 2 shipped on `feat/s1-workspace-home`. CI billing block (#129) RESOLVED. Council `2026-05-05T13:42:57Z` ran adversarial retro on BYO Runner + product audit (PARTIAL mode — Gemini 429 across `gemini-3.1-pro-preview` and `gemini-2.5-pro` fallback; Codex `gpt-5.4` healthy R1+R2 self-check). Verdict **PASS WITH CONDITIONS** on BYO Runner; 2 new P1s + 3 new P2s to close before Sprint 3 dispatch. User chose B (carry findings as parallel work, NOT defer Sprint 3). Pre-S3 trust closure underway — see "🛠 In flight" below.
 
