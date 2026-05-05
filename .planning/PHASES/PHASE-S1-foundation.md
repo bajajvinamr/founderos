@@ -41,30 +41,34 @@ Atomic-PR-sized. Each has PM (intent), Engineering (file paths + interface), QA 
 
 ---
 
-### Ticket S1.1 — Workspace Home as "Company HQ"
+### Ticket S1.1 — Workspace Home as "Company HQ" (AMEND, not refactor)
 
-**PM intent**: Founder lands on `/dashboard` and feels they walked into their HQ. Three modules visible: Daily Founder Brief (placeholder for S3), Department Status (green/yellow/red), Decision Inbox.
+**Audit finding 2026-05-05**: existing `Dashboard.tsx` (455 lines) already mounts `<FounderBriefing />`, `<CompanyPulseWidget />`, `<CompanyMemoryCard />`, `<CompanyProvidersWidget />`, `<PendingOutcomesBanner />`, `<PermissionCoachCard />` plus 4 metric cards + 4 charts + recent runs/activity/tasks. **Don't refactor — amend.**
 
-**Engineering**:
-- Refactor `ui/src/pages/Dashboard.tsx` into a 3-module layout
-  - Top: Daily Founder Brief card (placeholder copy + "Brief generates daily at 7am — check back tomorrow" empty state until S3.1 lands)
-  - Middle: Department Status grid (one card per active department; reads agent count + recent failure count + last-update timestamp from existing APIs)
-  - Bottom: Decision Inbox (embed `<DecisionsInbox compact />` — needs a `compact` prop added)
-- New component: `ui/src/components/DepartmentStatusCard.tsx`
-  - Props: `{ departmentId, agentCount, healthState: 'green'|'yellow'|'red', lastUpdate, unresolvedTasks }`
-  - Health rules: red = any agent in `error` state OR > 5 unresolved approvals; yellow = > 2 stalled workflows; else green
-- Right rail (`CompanyPulseWidget`) remains on right — confirm it renders alongside the new module stack on `lg:` breakpoint
+**PM intent**: Workspace home reinforces "you walked into your company HQ" by adding department-status visibility + embedded decision inbox to what already works.
+
+**Engineering** (additive only):
+- Add `<DepartmentStatusGrid />` section between `<CompanyProvidersWidget />` and the agent-empty banner
+  - One card per active workspace department (reads from `workspace_departments` after S1.7; fallback to hardcoded list pre-S1.7)
+  - Card props: `{ departmentId, label, agentCount, healthState: 'green'|'yellow'|'red'|'grey', unresolvedApprovals, lastActivityTs }`
+  - Health rules: `red` = any agent in `error` state OR > 5 unresolved approvals · `yellow` = > 2 stalled workflows OR last activity > 24h ago · `grey` = no agents configured · else `green`
+  - In S1: read agent state via existing `agentsApi.list` + approvals via existing `approvalsApi.list`. Workflows table doesn't exist till S4.5 — return 0 stalled until then.
+- Add `<DecisionsInbox compact />` embed between metric cards and charts (depends on S1.6 — ship S1.6 first)
+- KEEP all existing modules (`FounderBriefing`, `CompanyPulseWidget`, `CompanyMemoryCard`, `CompanyProvidersWidget`, banners, metric cards, charts, recent rows)
+- The existing `<FounderBriefing />` IS the Daily Brief skeleton — its content generation lands in S3.3, not here
 - Add `briefShortcut` button to top bar (placeholder route `/brief` to be wired in S3)
 
 **QA**:
-- Snapshot test for empty-state Dashboard (no agents, no metrics) — should render the 3 modules without crashing
-- Snapshot test for populated Dashboard (3 agents, full metrics) — all 3 modules visible, right rail intact
-- Manual: 375px mobile renders modules stacked, right rail collapses below
+- Snapshot test on Dashboard with department grid added (existing modules intact)
+- Visual regression check: existing modules render in same vertical order
+- DepartmentStatusGrid empty state (no companies, no agents) renders without crash
+- 375px mobile: dept grid stacks, doesn't horizontal-overflow
 
 **Files**:
-- Edit: `ui/src/pages/Dashboard.tsx`, `ui/src/pages/DecisionsInbox.tsx` (add `compact` prop)
+- Edit: `ui/src/pages/Dashboard.tsx` (additive, ~5 new lines for the grid + decisions embed)
 - New: `ui/src/components/DepartmentStatusCard.tsx`, `ui/src/components/DepartmentStatusGrid.tsx`
 - New: `ui/src/components/__tests__/DepartmentStatusCard.test.tsx`
+- (Edit `DecisionsInbox` is in S1.6, not here)
 
 ---
 
@@ -168,26 +172,31 @@ Atomic-PR-sized. Each has PM (intent), Engineering (file paths + interface), QA 
 
 ---
 
-### Ticket S1.6 — Approval Inbox embed (Decision Inbox compact)
+### Ticket S1.6 — Approval Inbox embed (Decision Inbox compact) — SHIP FIRST
+
+**Why first**: S1.1 depends on this. Smallest atomic change in S1, lowest blast radius — good first-real-commit signal.
 
 **PM intent**: Approvals already exist as a full page; S1 makes them visible-by-default on the workspace home and CoS console. No more "out of sight, out of mind."
 
 **Engineering**:
 - Add `compact?: boolean` prop to `DecisionsInbox.tsx`
-  - Compact: max 5 items, "see all (N)" link to `/approvals`
-  - Full: existing behavior
-- Audit `Approvals.tsx` and `DecisionsInbox.tsx` — pick one as canonical (`DecisionsInbox` per current naming) and have the other route redirect or re-export
-- Smaller card variant in compact: title + age + 2 buttons (approve / open detail)
+  - Compact (`compact=true`): skip breadcrumb effect, skip page header + filter tabs, max 5 items rendered, "View all decisions →" link to `/approvals`
+  - Full (`compact=false` / undefined): existing behavior, no regression
+- Reuse `<ApprovalCard />` already imported in DecisionsInbox; same approve/reject mutation hooks
+- Compact + zero pending: minimal "All caught up" empty state (1 line, no big illustration)
+- The route component for `/approvals` keeps using `<DecisionsInbox />` with no prop = full mode → no behavior change for the existing route
+
+**Out of scope for S1.6**: consolidating `Approvals.tsx` vs `DecisionsInbox.tsx` — they coexist today; cleanup is S6 polish.
 
 **QA**:
-- Compact mode with 0 items → "All caught up" empty state
-- Compact mode with 8 items → 5 visible + "see all (3 more)" link
-- Full mode unchanged from today
+- Compact mode with 0 pending → "All caught up" line
+- Compact mode with 8 pending → 5 visible + "View all decisions →"
+- Compact mode skips breadcrumb (verify breadcrumb context unchanged when component mounts compact)
+- Full mode unchanged from today (existing tests still pass)
 
 **Files**:
 - Edit: `ui/src/pages/DecisionsInbox.tsx`
-- Edit: `ui/src/pages/Approvals.tsx` (consolidate or redirect — confirm via code review which is in active use)
-- Tests: `ui/src/pages/__tests__/DecisionsInbox.test.tsx` (compact case)
+- Tests: extend `ui/src/pages/__tests__/DecisionsInbox.test.tsx` if exists, else new file
 
 ---
 

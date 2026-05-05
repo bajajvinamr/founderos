@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "@/lib/router";
+import { Link, useSearchParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, CornerUpLeft } from "lucide-react";
+import { ShieldCheck, CornerUpLeft, ArrowRight } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { approvalsApi } from "../api/approvals";
 import { agentsApi } from "../api/agents";
@@ -17,6 +17,17 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import type { Approval, Agent } from "@founderos/shared";
 import type { ApprovalType } from "@founderos/shared";
+
+const COMPACT_MAX_ITEMS = 5;
+
+interface DecisionsInboxProps {
+  /**
+   * Compact mode for embedding inside Dashboard / department consoles.
+   * Skips breadcrumbs + page header + filter tabs. Caps to 5 items with
+   * a "View all decisions" link to the full /approvals route.
+   */
+  compact?: boolean;
+}
 
 type FilterTab = "all" | "budget" | "publish" | "hire" | "other";
 
@@ -71,7 +82,7 @@ function groupByDepartment(approvals: Approval[], agents: Agent[]): DepartmentGr
   return [...groups.values()].filter((g) => g.approvals.length > 0);
 }
 
-export function DecisionsInbox() {
+export function DecisionsInbox({ compact = false }: DecisionsInboxProps = {}) {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToast();
@@ -82,8 +93,9 @@ export function DecisionsInbox() {
   const activeFilter = (searchParams.get("filter") ?? "all") as FilterTab;
 
   useEffect(() => {
+    if (compact) return;
     setBreadcrumbs([{ label: "Decisions" }]);
-  }, [setBreadcrumbs]);
+  }, [setBreadcrumbs, compact]);
 
   const { data: allApprovals = [], isLoading } = useQuery({
     queryKey: queryKeys.approvals.list(selectedCompanyId!, "pending"),
@@ -147,11 +159,90 @@ export function DecisionsInbox() {
   const isMutating = approveMutation.isPending || rejectMutation.isPending;
 
   if (!selectedCompanyId) {
+    if (compact) return null;
     return <EmptyState icon={ShieldCheck} message="Select a company to view decisions." />;
   }
 
   if (isLoading) {
+    if (compact) {
+      return (
+        <div className="space-y-2">
+          <div className="h-4 w-40 bg-muted/40 animate-pulse rounded" />
+          <div className="h-16 w-full bg-muted/30 animate-pulse rounded" />
+        </div>
+      );
+    }
     return <PageSkeleton variant="approvals" />;
+  }
+
+  if (compact) {
+    const visible = pending.slice(0, COMPACT_MAX_ITEMS);
+    const overflow = pending.length - visible.length;
+
+    return (
+      <section aria-label="Decision Inbox" className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">
+              Decision Inbox
+            </p>
+            <p className="text-sm text-foreground tabular-nums">
+              {headlineText}
+            </p>
+          </div>
+          <Link
+            to="/approvals"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground no-underline"
+          >
+            View all decisions
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        {actionError && (
+          <p className="text-sm text-destructive">{actionError}</p>
+        )}
+
+        {visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground">All caught up. No decisions waiting.</p>
+        ) : (
+          <div className="grid gap-2">
+            {visible.map((approval) => {
+              const requesterAgent = approval.requestedByAgentId
+                ? (agents.find((a) => a.id === approval.requestedByAgentId) ?? null)
+                : null;
+              return (
+                <ApprovalCard
+                  key={approval.id}
+                  approval={approval}
+                  requesterAgent={requesterAgent}
+                  onApprove={() => approveMutation.mutate(approval.id)}
+                  onReject={() => rejectMutation.mutate(approval.id)}
+                  detailLink={`/approvals/${approval.id}`}
+                  isPending={isMutating}
+                  pendingAction={
+                    approveMutation.isPending
+                      ? "approve"
+                      : rejectMutation.isPending
+                        ? "reject"
+                        : null
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {overflow > 0 && (
+          <Link
+            to="/approvals"
+            className="inline-block text-xs text-muted-foreground hover:text-foreground no-underline"
+          >
+            +{overflow} more decision{overflow === 1 ? "" : "s"} →
+          </Link>
+        )}
+      </section>
+    );
   }
 
   return (
