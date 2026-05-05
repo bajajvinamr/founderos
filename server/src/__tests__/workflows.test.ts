@@ -617,4 +617,80 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
     // depends on template behavior; what this test asserts is dispatch fired.
     expect(persistedRun!.status).not.toBe("running");
   });
+
+  // ── G2. Onboarding emails actually call the transport (W0.2 BLOCK fix) ─────
+
+  it("G2. POST /runs → onboarding-emails autonomous → email transport receives 3 sends", async () => {
+    // Council 2026-05-05 W0.2 BLOCK fix verification.
+    //
+    // Before W0.2, sendOnboardingEmails was a "v1: Log intent only" stub that
+    // logger.info'd and returned without sending. Workflow status flipped to
+    // "completed" while customer inboxes stayed empty — buyer-trust break.
+    //
+    // After W0.2, sendOnboardingEmails calls EmailTransport.send() per action.
+    // In NODE_ENV=test, transport resolves to CaptureTransport which appends
+    // to an in-memory array. This test asserts the route → executor → template
+    // → transport chain is unbroken end-to-end.
+    const { resetEmailTransport, getCapturedEmails } = await import(
+      "../services/transports/email-transport.js"
+    );
+    resetEmailTransport(); // hard isolation across tests
+
+    await enableAutonomousEmail(db);
+
+    const app = buildApp(db, {}, [companyId]);
+
+    const [w] = await db
+      .insert(workflows)
+      .values({
+        companyId,
+        name: "Onboarding emails — real transport contract",
+        template: "onboarding-emails",
+        triggerKind: "event",
+        triggerSpec: {},
+        autonomyLevel: 4, // autonomous — flag enabled above; canRunAutonomously=true
+        status: "active",
+        config: {
+          contactEmail: "test-recipient@example.com",
+          contactName: "Test User",
+          companyName: "TestCo",
+          dashboardUrl: "https://app.example.com/dashboard",
+        },
+      })
+      .returning();
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/workflows/${w!.id}/runs`)
+      .send({ triggeredBy: { kind: "manual" } })
+      .expect(201);
+
+    expect(res.body.status).toBe("running");
+
+    // Wait for setImmediate dispatch + 3 transport.send() awaits + DB writes.
+    // 500ms is generous; capture mode is sync-fast (in-memory push only).
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const emails = getCapturedEmails();
+    // Onboarding template emits 3 emails (Day 0 / Day 2 / Day 7).
+    expect(emails).toHaveLength(3);
+    for (const email of emails) {
+      expect(email.to).toBe("test-recipient@example.com");
+      // Verify tags are threaded (workflow_id is the reconciliation key for webhooks).
+      expect(email.tags?.find((t) => t.name === "workflow_id")?.value).toBe(w!.id);
+      expect(email.tags?.find((t) => t.name === "template")?.value).toBe("onboarding-emails");
+    }
+    // Subjects should reference TestCo (companyName personalization).
+    expect(emails[0]!.subject).toContain("TestCo");
+    expect(emails[2]!.subject).toContain("TestCo");
+
+    // Run row should reflect "completed" (all 3 captures returned status="queued"
+    // → action.status="completed" → no failures → run.status="completed").
+    const [persistedRun] = await db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, res.body.id));
+    expect(persistedRun!.status).toBe("completed");
+
+    resetEmailTransport(); // restore for next test
+  });
 });

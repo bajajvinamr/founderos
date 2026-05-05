@@ -24,6 +24,7 @@ import {
 import { canRunAutonomously } from "../../workflow-autonomy.js";
 import { logActivity } from "../../activity-log.js";
 import { logger } from "../../../middleware/logger.js";
+import { getEmailTransport } from "../../transports/email-transport.js";
 
 export interface OnboardingEmailConfig {
   /** Email address of the new contact (from trigger event) */
@@ -130,22 +131,31 @@ export async function executeOnboardingEmailTemplate(
       { workflowId, runId },
       "onboarding-emails autonomous send triggered",
     );
+    // Council 2026-05-05 W0.2 fix — sendOnboardingEmails MUTATES action.status
+    // per result. Do NOT spread/.map(status:"completed") here — that would
+    // obliterate the per-action transport result the function just set.
+    // Persist actions as-is, then derive run status from action outcomes:
+    //   - any "failed"   → run = "failed"   (loud signal in UI; partial-send incidents)
+    //   - else "completed" or all queued → run = "completed"
     await sendOnboardingEmails(db, workflow, actions);
-    await updateWorkflowRunStatus(db, runId, "completed", {
-      actions: actions.map((a) => ({ ...a, status: "completed", executedAt: new Date().toISOString() })),
-    });
+    const anyFailed = actions.some((a) => a.status === "failed");
+    const successCount = actions.filter((a) => a.status === "completed").length;
+    const runStatus = anyFailed ? "failed" : "completed";
+    await updateWorkflowRunStatus(db, runId, runStatus, { actions });
 
     await logActivity(db, {
       companyId: workflow.companyId,
       actorType: "system",
       actorId: "workflow-executor",
-      action: "onboarding_emails_sent",
+      action: anyFailed ? "onboarding_emails_partial_failure" : "onboarding_emails_sent",
       entityType: "workflow_run",
       entityId: workflowId,
       workflowId,
       details: {
         recipientEmail: config.contactEmail,
         emailCount: 3,
+        successCount,
+        failureCount: actions.length - successCount,
       },
     });
   } else if (workflow.autonomyLevel === 3) {
@@ -169,10 +179,25 @@ export async function executeOnboardingEmailTemplate(
 }
 
 /**
- * sendOnboardingEmails — actually dispatch the 3 emails
+ * sendOnboardingEmails — dispatch the 3 emails via the configured transport
  *
- * In v1, this is mocked. In v2, integrate with Resend or HubSpot.
- * For now, just log intent; tests can spy on this function.
+ * Council 2026-05-05 W0.2 BLOCK fix — replaced the "v1: Log intent only"
+ * stub with real EmailTransport.send(). Mode is resolved per-process:
+ * Resend in prod (when RESEND_API_KEY set), CaptureTransport in tests + dev
+ * fallback. See services/transports/email-transport.ts for the full contract.
+ *
+ * Action status semantics:
+ *   - "completed"   — transport accepted (Resend returned 200/201 with an id;
+ *                     OR capture-mode unconditionally for dev/test)
+ *   - "failed"      — transport rejected synchronously; reason captured
+ *   - "pending"     — initial state; only reached if a send is skipped (e.g.
+ *                     non-send_email action types in this loop)
+ *
+ * Note: Resend's accept ≠ delivery. The Resend webhook receiver (W0.2c, next
+ * wake) listens for email.delivered / email.bounced events and updates the
+ * action status to its terminal state. Until that lands, "completed" here
+ * means "transport accepted" — sufficient for the founder-facing UI to stop
+ * showing fake success on a 100%-of-the-time-undelivered workflow.
  */
 async function sendOnboardingEmails(
   db: Db,
@@ -180,23 +205,57 @@ async function sendOnboardingEmails(
   actions: OnboardingEmailAction[],
 ): Promise<void> {
   const config = (workflow.config as unknown) as OnboardingEmailConfig;
+  const transport = getEmailTransport();
+  const fromAddress = process.env.RESEND_FROM_ADDRESS ?? "founderos@resend.dev";
 
   for (const action of actions) {
     if (action.type !== "send_email") continue;
 
-    // v1: Log intent only. Real send happens in a separate email-send job.
-    logger.info(
-      { workflowId: workflow.id, day: action.payload.day, to: action.payload.recipientEmail },
-      "onboarding email queued for send",
-    );
+    const result = await transport.send({
+      to: action.payload.recipientEmail,
+      from: fromAddress,
+      subject: action.payload.subject,
+      text: action.payload.bodyText,
+      html: action.payload.bodyHtml,
+      tags: [
+        { name: "workflow_id", value: workflow.id },
+        { name: "template", value: "onboarding-emails" },
+        { name: "day", value: String(action.payload.day) },
+      ],
+    });
 
-    // TODO: v2 integration
-    // const emailResult = await emailSender.send({
-    //   to: action.payload.recipientEmail,
-    //   subject: action.payload.subject,
-    //   text: action.payload.bodyText,
-    //   html: action.payload.bodyHtml,
-    // });
+    const nowIso = new Date().toISOString();
+    if (result.status === "queued") {
+      action.status = "completed";
+      action.executedAt = nowIso;
+      // Persist provider id into payload for webhook reconciliation.
+      (action.payload as unknown as Record<string, unknown>).providerMessageId = result.id;
+      (action.payload as unknown as Record<string, unknown>).transportMode = transport.mode;
+      logger.info(
+        {
+          workflowId: workflow.id,
+          day: action.payload.day,
+          to: action.payload.recipientEmail,
+          providerMessageId: result.id,
+          mode: transport.mode,
+        },
+        "onboarding email accepted by transport",
+      );
+    } else {
+      action.status = "failed";
+      action.executedAt = nowIso;
+      (action.payload as unknown as Record<string, unknown>).failureReason = result.reason;
+      logger.error(
+        {
+          workflowId: workflow.id,
+          day: action.payload.day,
+          to: action.payload.recipientEmail,
+          reason: result.reason,
+          mode: transport.mode,
+        },
+        "onboarding email rejected by transport",
+      );
+    }
   }
 }
 

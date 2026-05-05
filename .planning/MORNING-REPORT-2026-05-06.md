@@ -20,6 +20,38 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 ## Issues recorded today
 
+### [01:30:00 UTC] [MED] [W0.2 onboarding] Resend "queued" ≠ delivered — webhook receiver lands in next wake
+
+**What happened:** After replacing `"v1: Log intent only"` stub with real `EmailTransport.send()`, the action status transitions to "completed" when the transport returns a `queued` result. But Resend's accept-with-id ≠ confirmed delivery. The customer might have a typo'd email or a bounced address; we'd still report "completed" to the founder UI.
+
+**What I tried:** Fully solving this requires a Resend webhook receiver subscribed to `email.delivered` / `email.bounced` events that updates each action's terminal state by `providerMessageId`. That's ~120 lines of code (route handler + signature verification + DB update) — doesn't fit in this wake's scope while keeping commits atomic.
+
+**Workaround applied:** Emit "completed" provisionally when the transport accepts. Persisted `providerMessageId` + `transportMode` into `action.payload` for later webhook reconciliation. Logged a clear note in the template's docstring: "completed here means transport accepted; webhook receiver lands in W0.2c."
+
+**Status:** DEFERRED to next wake (W0.2c). Once webhook lands, action.status becomes a 3-stage walk: `pending → completed-provisional → completed-confirmed | bounced | failed`. The schema already supports this via the actions JSONB column.
+
+**Files touched:** `server/src/services/workflows/templates/onboarding-emails.ts` (the docstring note), `server/src/services/transports/email-transport.ts` (the SendEmailResult.status JSDoc).
+
+**Next-action recommendation for Vinamr:** No action. The next wake will land the webhook + the schema enrichment. If Vinamr wants the demo to show "delivered" definitively at handover, the webhook is essential — surface this to keep priority high.
+
+---
+
+### [01:30:00 UTC] [LOW] [W0.2 onboarding] Pre-existing template bug: parent flow obliterated per-action status with .map()
+
+**What happened:** While wiring the transport, found that `executeOnboardingEmailTemplate` called `sendOnboardingEmails(actions)` then immediately `updateWorkflowRunStatus(runId, "completed", { actions: actions.map(a => ({ ...a, status: "completed", executedAt: ... })) })` — force-stamping ALL action statuses to "completed" regardless of what `sendOnboardingEmails` did. So even with a real transport that marked individual actions "failed", the spread would have overwritten them.
+
+**What I tried:** Removed the `.map()` overwrite. Now persists actions as-is from the transport, then derives run-level status: any action.status === "failed" → run.status = "failed"; else "completed". Activity log records `successCount` + `failureCount` for partial-failure incident response.
+
+**Workaround applied:** Fixed inline as part of W0.2 commit. Added comment referencing council 2026-05-05 W0.2 fix to flag for future reviewers.
+
+**Status:** WORKED-AROUND. Fix shipped.
+
+**Files touched:** `server/src/services/workflows/templates/onboarding-emails.ts:128-156`.
+
+**Next-action recommendation for Vinamr:** No action. activation-nudge.ts + upsell.ts likely have the same pattern (SDE-D and SDE-F's parallel agents almost certainly copy-pasted the structure); they'll get the same fix during their wiring in the next wake.
+
+---
+
 ### [01:15:00 UTC] [HIGH] [W0.1] Deviated from LRP cross-cutting "BullMQ" default for workflow execution dispatch
 
 **What happened:** The LRP's cross-cutting decisions specify "Workflow runtime: BullMQ + plain async." For W0.1 (wire route → executor), BullMQ would have been ~60min of work (new queue + worker + boot wiring + Redis-stub test setup). Fire-and-forget `setImmediate` was ~15min.
@@ -70,13 +102,11 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 ## Headline summary
 
-**Wave 0 W0.1 closed.** The route → executor wiring was the highest-risk fix in the BLOCK queue (council 2026-05-05 P1 #1). Dispatcher now fires on every POST `/runs` where `initialStatus === "running"`. The new G1 contract test asserts the dispatch by observing the run's status moving off "running" within 300ms — passes against embedded postgres.
+**Wave 0 W0.1 + W0.2-onboarding closed.** Two of four BLOCK P1s shipped today — route → executor wired (commit cb1a879), and onboarding-emails template now uses a real EmailTransport (CaptureTransport in tests/dev, ResendTransport in prod when RESEND_API_KEY set). Trade-off and incidental cleanup logged below.
 
-Trade-off (HIGH severity): chose synchronous setImmediate over BullMQ for time-to-close-BLOCK. Crash-safety gap noted; document references S6 polish window for promotion.
+W0.2 split: onboarding-emails done in this commit; activation-nudge + upsell + Resend webhook receiver in the next wake. Per-template wiring is mechanically similar but each has its own action shape (onboarding=3 emails, activation-nudge=1 nudge, upsell=1 with Stripe checkout link); each gets its own commit + test.
 
-One incidental cleanup (MED): deleted an untracked stale PostHog polling file that was blocking typecheck.
-
-Next: W0.2 — replace `"v1: Log intent only"` template stubs with real Resend transport.
+Next: W0.2-activation-nudge → W0.2-upsell → W0.2-resend-webhook → W0.3 (token TTL) → W0.4 (env var fix).
 
 ---
 
