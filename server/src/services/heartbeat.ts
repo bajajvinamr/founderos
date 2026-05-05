@@ -19,8 +19,10 @@ import {
   projects,
   projectWorkspaces,
 } from "@founderos/db";
-import { conflict, notFound } from "../errors.js";
+import { conflict, notFound, paymentRequired } from "../errors.js";
 import { logger } from "../middleware/logger.js";
+import { isBillingGateEnabled } from "../middleware/billing-gate.js";
+import { subscriptionService } from "./subscription.js";
 import { publishLiveEvent } from "./live-events.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, runningProcesses } from "../adapters/index.js";
@@ -2934,6 +2936,48 @@ export function heartbeatService(db: Db) {
         finishedAt: new Date(),
       });
     };
+
+    // Heartbeat-layer billing gate (2026-05-05 council follow-up #132).
+    // Route-layer billing-gate.ts middleware only covers /agents/:id/wakeup
+    // and /heartbeat/invoke. Service-layer wake paths — issue assignment
+    // (issues.ts:840, issues.ts:1411), approval-driven (approvals.ts:164),
+    // comment-driven (issues-comments.ts:291), checkout (issues-execution.ts:290),
+    // plugin internal (plugin-host-services.ts:887/1017) — all bypassed
+    // route middleware before this gate. Enforce here so every wake path
+    // inherits server-side billing enforcement.
+    //
+    // "system" actorType (cron timers via tickTimers, reapers, plugin internal)
+    // bypasses — those are maintenance, not user-initiated paid compute. The
+    // explicit `bypassBilling: true` opt is reserved for future internal
+    // machinery that can't pass actorType="system" for unrelated reasons.
+    //
+    // Soft-default mirrors route-layer: gate only runs when
+    // FOUNDEROS_BILLING_GATE_ENABLED=1. With flag off, this is a no-op.
+    if (
+      isBillingGateEnabled() &&
+      !opts.bypassBilling &&
+      opts.requestedByActorType !== "system"
+    ) {
+      let active = false;
+      try {
+        active = await subscriptionService(db).isSubscriptionActive();
+      } catch (err) {
+        // Fail CLOSED on lookup error — same posture as billing-gate.ts:109-119.
+        // An exception during subscription resolution is the failure mode an
+        // attacker would try to provoke; inactive is safer than fail-open.
+        logger.error(
+          { err, agentId, companyId: agent.companyId },
+          "billing-gate (heartbeat): isSubscriptionActive threw — failing CLOSED",
+        );
+      }
+      if (!active) {
+        await writeSkippedRequest("billing.inactive");
+        throw paymentRequired(
+          "An active subscription is required for this action. Visit /settings/billing to upgrade.",
+          { reason: "subscription_inactive" },
+        );
+      }
+    }
 
     let projectId = readNonEmptyString(enrichedContextSnapshot.projectId);
     if (!projectId && issueId) {

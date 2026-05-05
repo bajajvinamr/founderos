@@ -20,6 +20,17 @@
  * embedded Postgres just to assert the 402 branch — same pattern the
  * rate-limit tests use. Wiring up the live subscription service is
  * covered by subscription-idempotency.test.ts elsewhere.
+ *
+ * NOTE — defense-in-depth (2026-05-05 council #132): a parallel gate now
+ * lives inside `services/heartbeat.ts::enqueueWakeup` (search for
+ * "billing.inactive"). It uses the same `isBillingGateEnabled()` flag and
+ * same `subscriptionService(db).isSubscriptionActive()` lookup, but throws
+ * `paymentRequired()` instead of writing 402 directly. It catches the 5+
+ * service-layer wake call sites that bypass route middleware (issue
+ * assignment, approval-driven wakes, comment-driven wakes, plugin
+ * internal). Integration coverage for that path lives in heartbeat-billing-
+ * gate.test.ts (TODO — task created at #132 follow-up; embedded-PG fixture
+ * required, not a quick addition).
  */
 
 import express from "express";

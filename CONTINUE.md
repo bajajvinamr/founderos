@@ -1,43 +1,62 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-05 (later) by Claude (S2 shipped + CI billing block surfaced)_
+_Last updated: 2026-05-05 (council retro + pre-S3 trust closure) by Claude_
 
-## 🚧 2026-05-05 — Sprint 2 SHIPPED · Sprint 3 BLOCKED on CI billing
+## 🟡 2026-05-05 — Council retro PASS WITH CONDITIONS · pre-S3 trust closure in flight
 
-**Status:** Sprint 1 + Sprint 2 both complete on `feat/s1-workspace-home` (32 commits past origin's last sync). PR [#38](https://github.com/bajajvinamr/founderos/pull/38) retitled to `feat(s1+s2): Sprint 1 Foundation + Sprint 2 Integrations`. **CI infrastructure is broken account-wide and cannot be fixed in code.** Sprint 3 dispatch is HELD until CI is restored, per the user's `CI broken → blocker` guardrail.
+**Status:** Sprint 1 + Sprint 2 shipped on `feat/s1-workspace-home`. CI billing block (#129) RESOLVED. Council `2026-05-05T13:42:57Z` ran adversarial retro on BYO Runner + product audit (PARTIAL mode — Gemini 429 across `gemini-3.1-pro-preview` and `gemini-2.5-pro` fallback; Codex `gpt-5.4` healthy R1+R2 self-check). Verdict **PASS WITH CONDITIONS** on BYO Runner; 2 new P1s + 3 new P2s to close before Sprint 3 dispatch. User chose B (carry findings as parallel work, NOT defer Sprint 3). Pre-S3 trust closure underway — see "🛠 In flight" below.
 
-### What shipped today
+### ✅ Closed by R1/R2 file:line verification (CLAUDE.md drift corrected)
 
-| Sprint | Tickets | Commits | Council |
+The 2026-05-03 council BLOCK cluster shipped fixes that earlier CONTINUE.md/CLAUDE.md still described as open. Council 2026-05-05 R2 self-check verified all 5 closures with file:line proof:
+
+| Domain | Status | Proof (verified) |
+|---|---|---|
+| Stripe webhook idempotency | CLOSED | `subscription.ts:90-103` upserts on `stripeSubscriptionId`; `instance_subscription.ts:16` unique index |
+| Composio cross-org leak | CLOSED | `composio-skill-bridge.ts:96-113` requires `connectedAccountId` |
+| Silent run stranding (`executeRun.catch`) | CLOSED | `heartbeat.ts:1571/2635/2685` all `setRunStatus("failed")` |
+| `/api/health/deep` admin auth | CLOSED | `health.ts:132-133` `assertInstanceAdmin` |
+| Fly migration `release_command` | CLOSED | `fly.toml:32-43` release_command + rolling strategy |
+
+Full council log + new findings: `~/.gstack/projects/founderos/decisions.md` 2026-05-05 entry.
+
+### 🛠 In flight — Pre-S3 trust closure (BLOCKERS before Sprint 3 dispatch)
+
+| # | Status | Severity | Item | Effort |
+|---|---|---|---|---|
+| #132 | ✅ DONE | P1 | `billingGate` pushed to `heartbeat.wakeup()/invoke()` layer (defense in depth) — closes 5 ungated wake paths: `issues.ts:840`, `issues.ts:1411`, `approvals.ts:164`, `issues-comments.ts:289`, `issues-execution.ts:290`, `plugin-host-services.ts:887/1017` | ~3h |
+| #133 | ✅ DONE | P2 | `deploy-prod.yml` probe switched `/api/health/deep` → `/api/readyz` (the deep endpoint now requires admin; would auto-rollback every prod deploy after #129 cleared) | ~30min |
+| #134 | ✅ DONE | n/a | Reconcile CONTINUE.md + CLAUDE.md against shipped fixes (this commit) | ~5min |
+
+### 📋 Carry-along tickets (run alongside Sprint 3, NOT blocking dispatch)
+
+| # | Sprint | Severity | Item |
 |---|---|---|---|
-| S1 | S1.1–S1.10 (10 foundation tickets, 2 migrations idx 74+75) | feat/s1-workspace-home base + 7 commits | n/a |
-| S2 | S2.1, S2.2, S2.3, S2.4, S2.5, S2.6, S2.7, S2.8, S2.10 + S1.10 long-tail | 109cd22 + b46489d on top, plus 8 merge commits | R1 BLOCK → R2 PASS on schema delta (events table + connector_health) |
+| #135 | S3 mid | P1 | `runner_tokens.expiresAt` (default 90d) + rotation endpoint + device fingerprint — long-lived bearer blast radius |
+| #136 | S4 | P2 | Session resume fallback when `~/.claude/sessions/<sid>/` missing on second machine |
+| #137 | S4 | P2 | Runner stdout per-line + per-batch byte caps (DoS hardening) |
+| #138 | post-#129 | P3 | Promote `release-smoke.yml` to required pre-traffic gate |
+| #139 | S3 drive-by | P3 | Strip `/api/health` ROOT response to `{ok, version}` for unauth callers |
+| #140 | S4 | follow-up | `heartbeat-billing-gate.test.ts` integration test (embedded-PG fixture covering all 6 gate branches) |
 
-Verification (all local — CI is down):
-- ✅ `pnpm typecheck` clean across all 6 packages (db, server, ui, cli, plugin-sdk, plugin-examples)
-- ✅ `pnpm install --frozen-lockfile` exits 0
-- ✅ Sprint 1: 10/10 onboarding-bootstrap-atomicity, 9/9 departments
-- ✅ Sprint 2 schema: 4/4 event-ingest, 14/14 integration-health
-- ⚠️ S2 ingestion: 10 test failures across 3 suites — all pre-existing agent test plumbing bugs (tasks #126/#127/#128), NOT regressions from integration
+### Next-session resume protocol
 
-### 🔴 BLOCKER — GitHub Actions billing exhausted
+1. Verify pre-S3 commit lands cleanly (CI green now that #129 is unblocked).
+2. Push, open PR for the trust-closure (#132+#133+#134), merge once CI passes.
+3. Begin Sprint 3 dispatch: `.planning/PHASES/PHASE-S3-cos-growth.md` — 10 tickets (CoS console fill-in + Growth dept). Same parallel-agent pattern as S2.
+4. Watch for Sprint 3 wake-path tickets to inherit the `heartbeat.wakeup()` billing gate automatically (no per-route middleware to remember).
 
-CI has been red on EVERY branch since 2026-05-02T01:32:07Z (last green run, 3 days ago). Verified 2026-05-05:
-- All 7 distinct workflows fail at runner-allocation phase (empty `steps[]`, ~9-15s job duration vs 60-180s expected)
-- Log blobs return `BlobNotFound` 404 — workflow never reaches an executable step
-- Local `pnpm install --frozen-lockfile` + full `pnpm typecheck` succeed cleanly
-- Diagnosis: GitHub Actions minutes/billing exhausted at the org/account level
+### Vanta-Sync 2026-05-05 — invariants captured
 
-Tracked as **task #129 (BLOCKER)**. CLAUDE.md updated to reflect the wider scope (was previously noted as only `release-main.yml` blocked).
+7 staging entries added to `~/.claude/rules/vinamr-invariants.staging.md`:
+- Drizzle ORM (3): `.where().where()` REPLACES not ANDs; `_journal.json` parallel-branch idx; singleton init in tests
+- Composio (1): v3 actual surface vs invented `executeToolForWorkspace`
+- Postgres (3, new section): nullable dedup + `ON CONFLICT DO NOTHING` silent loss; CHECK as TS-union backstop; single multi-clause ALTER TABLE for lock minimization
+- 3 entries scored ≥0.65 (Drizzle cluster) — review via `vanta-extract-score list-staging` before promoting to global
+- Project CLAUDE.md updated with FounderOS-specific test-fixture API + singleton init + synthetic dedup-key contract
+- 1 council finding auto-attributed: Codex P3 from 2026-05-05 R1 ("4 separate ALTER TABLE in 0079") → resolved by commit 6ddb51e
 
-**ACTION REQUIRED FROM VINAMR:**
-1. Check https://github.com/settings/billing/spending — Actions minutes status.
-2. Check org-level billing if repo is org-owned.
-3. Top up minutes OR upgrade plan.
-4. Once unblocked, push an empty commit on `feat/s1-workspace-home` to force CI re-trigger:
-   `git commit --allow-empty -m "chore: re-trigger CI" && git push`
-
-### Sprint 2 follow-up tasks (carry forward, none are merge-blockers)
+### Sprint 2 follow-up tasks (still applicable, not merge-blockers)
 
 | # | Severity | Task |
 |---|---|---|
@@ -49,23 +68,6 @@ Tracked as **task #129 (BLOCKER)**. CLAUDE.md updated to reflect the wider scope
 | #126 | Test fix | hubspot-ingest 5 failures — `companies_issue_prefix_idx` unique violation in test cleanup; use unique-per-test prefix |
 | #127 | Test fix | linkedin-ingest 4 failures — vi.fn mock chains expect double-`.where()` (production code now uses `.where(and(eq, eq))`) |
 | #128 | Test fix | posthog-connector 1 failure — singleton `initEventIngest(mockDb)` not called in test setup |
-
-### Next-session resume protocol (when CI is unblocked)
-
-1. Verify CI is green: `gh pr checks 38` should show passing/queued, not all-FAIL.
-2. Triage tasks #126/#127/#128 if you want a clean test sweep before merging — these are 30-60min total to fix.
-3. Merge PR #38 to main once required checks pass.
-4. Begin Sprint 3 dispatch: read `.planning/PHASES/PHASE-S3-cos-growth.md` for the 10 tickets (CoS console fill-in + Growth dept). Same parallel-agent pattern as S2 — 4 wave-1 agents, then unblocked downstream.
-
-### Vanta-Sync 2026-05-05 — invariants captured
-
-7 staging entries added to `~/.claude/rules/vinamr-invariants.staging.md`:
-- Drizzle ORM (3): `.where().where()` REPLACES not ANDs; `_journal.json` parallel-branch idx; singleton init in tests
-- Composio (1): v3 actual surface vs invented `executeToolForWorkspace`
-- Postgres (3, new section): nullable dedup + `ON CONFLICT DO NOTHING` silent loss; CHECK as TS-union backstop; single multi-clause ALTER TABLE for lock minimization
-- 3 entries scored ≥0.65 (Drizzle cluster) — review via `vanta-extract-score list-staging` before promoting to global
-- Project CLAUDE.md updated with FounderOS-specific test-fixture API + singleton init + synthetic dedup-key contract
-- 1 council finding auto-attributed: Codex P3 from 2026-05-05 R1 ("4 separate ALTER TABLE in 0079") → resolved by commit 6ddb51e
 
 ---
 
