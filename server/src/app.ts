@@ -31,6 +31,7 @@ import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { instanceInvitesRoutes } from "./routes/instance-invites.js";
 import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { integrationHealthRoutes } from "./routes/integration-health.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
 import { conversationRoutes } from "./routes/conversations.js";
