@@ -33,6 +33,7 @@ import { assertBoard } from "./authz.js";
 import { logger } from "../middleware/logger.js";
 import { runPostSignupBootstrap } from "../auth/post-signup-hook.js";
 import {
+  instanceSettingsService,
   issueService,
   logActivity,
   validateAnthropicKey,
@@ -93,6 +94,12 @@ const bootstrapSchema = z.object({
     finance: charterSchema,
   }),
   companyName: z.string().min(1).max(120).optional(),
+  // S-TC1 (council 2026-05-05 P1) — explicit telemetry consent decision
+  // from the final wizard step. Optional for backwards compatibility with
+  // older clients (e.g. CI smoke tests); when omitted, defaults to false
+  // (do NOT enable telemetry without explicit consent — that's the whole
+  // point of this fix).
+  telemetryEnabled: z.boolean().optional().default(false),
 });
 
 const firstDecisionsSchema = z.object({
@@ -219,6 +226,11 @@ function buildServerFirstDecisions(bottlenecks: string[]) {
 export function onboardingRoutes(db: Db) {
   const router = Router();
   const issues = issueService(db);
+  // S-TC1 — used to persist the founder's telemetry consent decision into
+  // instance_settings.general.telemetryConsent. Operates on the same
+  // singleton row that the /settings/general admin toggle reads/writes,
+  // so the wizard answer and the admin UI stay in sync.
+  const settings = instanceSettingsService(db);
 
   /**
    * POST /api/onboarding/bootstrap
@@ -332,6 +344,29 @@ export function onboardingRoutes(db: Db) {
       const result = await bootstrapCompanyOnboarding(db, bootstrapInput, {
         actorUserId,
       });
+
+      // S-TC1 (council 2026-05-05 P1) — persist the founder's telemetry
+      // consent decision. We do this OUTSIDE the bootstrap transaction:
+      // a failure here MUST NOT bring down onboarding, but it also MUST
+      // NOT silently flip default behavior. The default in
+      // `loadConfig()` is OFF, so on failure the system stays OFF — the
+      // safe direction for a privacy gate.
+      try {
+        const decidedAt = new Date().toISOString();
+        await settings.updateGeneral({
+          telemetryConsent: {
+            enabled: input.telemetryEnabled,
+            decided: true,
+            decidedAt,
+          },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, telemetryEnabled: input.telemetryEnabled },
+          "onboarding: failed to persist telemetry consent — defaulting to OFF",
+        );
+      }
+
       // S3.10 — strip the firstRunPromise from the wire response. It exists
       // on the result object so tests + workers can await the magic-moment
       // orchestrator; the founder's wizard polls

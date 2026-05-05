@@ -142,6 +142,12 @@ export interface OnboardingDraft {
   autonomyLevel: AutonomyLevel;
   charters: AgentCharterMap;
   firstDecisionId: string | null;
+  /**
+   * S-TC1 — Telemetry consent. Default false (council 2026-05-05 P1 fix).
+   * The founder must explicitly tap "Allow anonymous telemetry" on the
+   * dedicated step at the end of the wizard for this to flip true.
+   */
+  telemetryEnabled: boolean;
 }
 
 export interface OnboardingBootstrapResponse {
