@@ -19,8 +19,9 @@
  *     because external network calls hold tx resources for too long.
  */
 
+import { and, eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
-import { workspaceDepartments } from "@founderos/db";
+import { integrations, workspaceDepartments } from "@founderos/db";
 import type { AgentRole } from "@founderos/shared";
 import {
   accessService,
@@ -32,6 +33,17 @@ import {
   projectService,
   secretService,
 } from "./index.js";
+import { logger } from "../middleware/logger.js";
+import { runFirstRunForCompany } from "./onboarding/first-run.js";
+
+/**
+ * S3.10 — Magic activation gate (10-min first-value). When a founder finishes
+ * onboarding with at least this many integrations connected, we kick off the
+ * first-run orchestrator (parallel backfill → agent warmup → daily brief →
+ * inbox announcement). Below the threshold there is too little signal to
+ * generate a useful brief, so we skip and let the 7am cron handle it.
+ */
+const FIRST_RUN_INTEGRATION_THRESHOLD = 2;
 
 // S1.9 — onboarding always provisions these 5 core departments. Migration
 // 0075 backfills them for already-existing companies; new companies get
@@ -94,6 +106,13 @@ export type BootstrapResult = {
   agentIdsBySlot: Record<AgentSlot, string>;
   goalId: string | null;
   projectId: string;
+  /**
+   * S3.10 — first-run orchestrator promise. Set after the bootstrap
+   * transaction commits. Tests can await it; the production HTTP handler
+   * leaves it un-awaited (fire-and-forget) and the UI polls
+   * /api/companies/:companyId/first-run-progress for status.
+   */
+  firstRunPromise?: Promise<unknown | null>;
 };
 
 function clampAutonomy(raw: number): number {
@@ -138,7 +157,7 @@ export async function bootstrapCompanyOnboarding(
   input: BootstrapInput,
   context: BootstrapContext,
 ): Promise<BootstrapResult> {
-  return db.transaction(async (tx) => {
+  const result: BootstrapResult = await db.transaction(async (tx) => {
     // tx is structurally compatible with Db for query operations.
     // Cast lets the existing service factories re-bind to tx without
     // touching their signatures.
@@ -313,4 +332,63 @@ export async function bootstrapCompanyOnboarding(
       projectId: project.id,
     };
   });
+
+  // ── S3.10 — magic activation gate ────────────────────────────────────────
+  //
+  // Outside the transaction so a slow first-run does not hold tx locks. The
+  // promise is returned (not voided) so a caller — usually a test, sometimes
+  // a worker that wants to deliver a synchronous "first brief ready" toast
+  // — can await it. The HTTP route handler in routes/onboarding.ts treats
+  // the returned promise as fire-and-forget (`void result.firstRunPromise`)
+  // because the founder's wizard is already showing the loading screen.
+  result.firstRunPromise = maybeTriggerFirstRun(db, result.companyId);
+
+  return result;
+}
+
+/**
+ * Evaluates the integration gate and (when ≥ threshold) kicks off the
+ * first-run orchestrator. Returns a promise that resolves once the run
+ * completes — or resolves immediately to `null` when the gate did not fire.
+ */
+async function maybeTriggerFirstRun(
+  db: Db,
+  companyId: string,
+): Promise<unknown | null> {
+  try {
+    const connectedRows = await db
+      .select({ id: integrations.id })
+      .from(integrations)
+      .where(
+        and(
+          eq(integrations.companyId, companyId),
+          eq(integrations.status, "connected"),
+        ),
+      );
+    if (connectedRows.length < FIRST_RUN_INTEGRATION_THRESHOLD) {
+      logger.info(
+        {
+          companyId,
+          connected: connectedRows.length,
+          threshold: FIRST_RUN_INTEGRATION_THRESHOLD,
+        },
+        "onboarding-bootstrap: skipping first-run — too few integrations connected",
+      );
+      return null;
+    }
+
+    return await runFirstRunForCompany(db, companyId).catch((err: unknown) => {
+      logger.error(
+        { err, companyId },
+        "onboarding-bootstrap: first-run orchestrator threw",
+      );
+      return null;
+    });
+  } catch (err) {
+    logger.warn(
+      { err, companyId },
+      "onboarding-bootstrap: failed to evaluate first-run gate (non-fatal)",
+    );
+    return null;
+  }
 }
