@@ -74,6 +74,7 @@ import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { authWebhookRoutes } from "./routes/auth-webhook.js";
+import { resendWebhookRoutes } from "./routes/resend-webhook.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -248,6 +249,12 @@ export async function createApp(
     // secret case explicitly.
     app.use(authWebhookRoutes(db, { webhookSecret: opts.supabaseWebhookSecret }));
   }
+  // Resend webhook receiver — same fail-closed pattern as Supabase above.
+  // Mounted unconditionally so missing-secret produces a logged 503 instead
+  // of a silent 404. Council 2026-05-05 W0.2c — closes the
+  // accept != deliver buyer-trust gap. Route is unauthenticated and verifies
+  // the Svix signature against RESEND_WEBHOOK_SECRET.
+  app.use(resendWebhookRoutes(db));
   if (opts.betterAuthHandler) {
     app.all("/api/auth/{*authPath}", opts.betterAuthHandler);
   }
