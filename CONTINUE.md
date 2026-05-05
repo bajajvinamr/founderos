@@ -1,6 +1,88 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-05 (PM, EXPANDED council BLOCK + Sprint 3 shipped + trust-closure in flight) by Claude_
+_Last updated: 2026-05-06 (AM, S4 Wave 1 shipped + S4.5 council BLOCK closed + Wave 2 dispatched) by Claude_
+
+## 🟢 2026-05-06 AM — Trust-closure DONE · S4 Wave 1 shipped · S4.5 council BLOCK closed · Wave 2 in flight
+
+**Status:** `feat/trust-closure` is now a 5-commit ladder past `1dcc7d1`. Branch HEAD `134fde1`. All known P1 BLOCK findings from THREE adversarial council rounds (R1 trust-closure, R2 self-reaction, S4.5 council) are closed with verification. Sprint 4 Wave 1 (S4.1 + S4.5) merged. Wave 2 (S4.2 / S4.6 / S4.7 / S4.9) dispatched in 4 parallel worktrees on Haiku/Sonnet. Tests: 98/98 across 7 affected batteries; typecheck clean across server + ui + cli; migrations clean (idx 0..84 contiguous).
+
+### Branch ladder (top → bottom)
+
+| SHA | Type | What |
+|---|---|---|
+| `134fde1` | merge | SDE-A's S4.1 (content briefs schema + intake) merged with stub-vs-real conflict resolution. Tiebreaker `desc(id)` added to ordering to defeat same-microsecond `now()` race. |
+| `52f1f7d` | fix | Council BLOCK fix on S4.5: (1) `assertStrictCompanyMembership` no instance-admin bypass on autonomy-write paths, (2) autonomy flag re-checked at run creation (kill switch now works), (3) `LogActivityInput.workflowId` + `lineageRefs` populated. Plus R2 carry: hubspot `connectionId` threaded from cron → service for multi-admin determinism. |
+| `c5478fe` | feat | SDE-A: S4.1 content_briefs table + Zod validators + intake API + 19 integration tests. UNIQUE(id, company_id) per TC-3 pattern; CHECK on status enum. |
+| `b1b1e55` | fix | Council R1 PARTIAL fix: TC-1 telemetry consent was COSMETIC — DB write but boot only read file config. Added `reinitTelemetryFromInstanceSettings(db)` hooked from boot post-DB + onboarding consent persist + settings PATCH. C2: hubspot service `eq(status, "active")` defense in depth. |
+| `086faab` | feat | SDE-B: S4.5 lifecycle CRM workflow registry + 31 tests (18 integration + 13 unit). LANDED VIA WORKTREE LEAK — agent committed straight to feat/trust-closure instead of its worktree branch. Council #154 caught BLOCK retroactively. |
+
+### Council 2026-05-06 — S4.5 verdict BLOCK (closed by `52f1f7d`)
+
+Council on `086faab` ran PARTIAL (Codex `gpt-5.4` healthy; Gemini 429 capacity exhausted on `gemini-2.5-pro` — third consecutive Gemini outage in 24h). Codex returned **3 P1 BLOCKs + 2 P2s**:
+
+| ID | Sev | Surface | Status |
+|---|---|---|---|
+| S4.5-P1A | P1 | `routes/authz.ts:21` `assertCompanyAccess` instance-admin bypass on workflow writes | ✅ FIXED — added `assertStrictCompanyMembership` |
+| S4.5-P1B | P1 | `routes/workflows.ts:350` autonomy flag not re-checked at POST /runs (kill switch was future-only) | ✅ FIXED — re-call `canRunAutonomously(db, workflow)` per run |
+| S4.5-P1C | P1 | `services/activity-log.ts:45` `workflow_id` column never populated despite S1.8 schema | ✅ FIXED — extended `LogActivityInput` with `workflowId` + `lineageRefs`, plumbed from S4.5 service |
+| S4.5-P2A | P2 | `routes/workflows.ts:71` `triggerSpec: z.record(z.unknown())` free-form | 📋 deferred — discriminated validator follow-up |
+| S4.5-P2B | P2 | `0087.sql:110` redundant single-column FK on workflow_runs | 📋 deferred — composite FK supersedes; cosmetic |
+
+Council ledger entry written. Run artifact at `~/.vanta/council-runs.jsonl` ts=`2026-05-06T00:00:00.000Z`. Findings hashed in `~/.vanta/council-feedback.jsonl`.
+
+### Council 2026-05-05 R1 + R2 — verdict BLOCK→closed (closed by `b1b1e55` + `52f1f7d`)
+
+Council on `1dcc7d1` (trust-closure pre-S4.5 state) found:
+- **C1 P2 BLOCK**: TC-1 telemetry consent was cosmetic — UI wrote to DB, boot only read file config. Singleton `initTelemetry()` early-returned on subsequent calls. The trust contract ("no telemetry until you flip it on") was broken on opt-in.
+- **C2 P2**: hubspot service re-selected by (companyId, appName) without `status="active"` filter — manual triggers could bind to revoked rows.
+- **C3 P3**: CI threshold drift (PR claims 75%, enforced 65%).
+- **C4 P3**: Sentry alert rules dashboard-only, no code provisioning.
+
+R2 self-reaction (Codex re-read its R1 + the fix code) added one more residual:
+- **C-R2 P2**: hubspot multi-admin scenario — when multiple active rows exist (different userIds), `.limit(1)` picks arbitrary row. Cron has the right `connectionId` but throws it away. Fix: thread `connectionId` from cron → service.
+
+### Sprint 4 Wave 2 dispatch (4 background agents, in flight)
+
+| Agent | Ticket | Model | Workscope |
+|---|---|---|---|
+| SDE-C | #160 S4.2 | Sonnet | Multi-format content generator + content_drafts table (idx 85) — LLM-heavy |
+| SDE-D | #161 S4.6 | Haiku | Onboarding email workflow template (no new schema) |
+| SDE-E | #162 S4.7 | Haiku | Activation nudge workflow template (no new schema) |
+| SDE-F | #163 S4.9 | Haiku | Upsell workflow template + Stripe checkout integration |
+
+All four were briefed with the post-council invariants:
+- `assertStrictCompanyMembership` for autonomy-write paths (no instance-admin cross-tenant bypass)
+- `canRunAutonomously()` re-check at SEND time, not just at workflow registration
+- Pass `workflowId` to every `logActivity` call from workflow-context code
+- TC-3 composite FK pattern for any new per-company table
+- Drizzle `and(eq, eq)` invariant; never `eq && eq` or `.where().where()`
+
+### Session invariants discovered (NEW)
+
+- **Worktree leak now lands COMMITS on parent branch** — SDE-B's S4.5 commit `086faab` appeared directly on `feat/trust-closure` instead of staying in its worktree branch. The leak goes deeper than file-level: the agent harness's worktree isolation can leak commits too. Defense: explicit pre-commit `git diff --name-only HEAD` check, and assume commits to the parent branch are possible. The council #154 caught it retroactively, but ideally we run council BEFORE the commit lands.
+- **Single-microsecond `now()` race in test fixtures** — `created_at timestamptz NOT NULL DEFAULT now()` on rapid back-to-back inserts produces equal timestamps. ORDER BY `created_at DESC` alone is non-deterministic in tests. Always add a tiebreaker (e.g., `desc(id)`) on user-facing list endpoints.
+- **Codex P1 finding on TC-1 was a TRUST-CONTRACT VIOLATION, not a bug** — the fix shipped, the schema flipped, the UI was added, but the runtime never read the persisted state. PR narrative claimed P1 closed; reality was the toggle was inert. The lesson: TEST THE WIRE, not the schema. Adding the consent UI without a runtime hydration test left the regression invisible.
+
+### Next-session resume protocol
+
+1. Wait for SDE-C/D/E/F (Wave 2) completions. Each will commit to its worktree branch and report. Anticipate worktree-leak: check `git status` after each completion before merging.
+2. Council on S4.8 (#155 — churn rescue + autonomous customer email loop) is REQUIRED before S4.8 dispatch. That ticket is the demo-line — autonomously emailing customers with churn rescue offers. Maximum council scrutiny.
+3. After Wave 2 lands: dispatch Wave 3 (S4.8 + S4.3 + S4.4) and Wave 4 (S4.10).
+4. After Sprint 4 closes: open PR for trust-closure + Sprint 4 combined, then move to Sprint 5 (Finance dept) per `.planning/PHASES/PHASE-S5-finance.md`.
+5. Keep watching Gemini capacity — three 429 events in 24h. The full council mode may not be available until tomorrow. PARTIAL council with Codex still produces verdicts; document mode in every ledger entry.
+
+### Carry-along tickets (deferred from this session)
+
+| # | Severity | Item |
+|---|---|---|
+| #176 | P2 | TC-7 — extend cross-tenant regression test pattern to composio_connections + apply TC-3 composite FK pattern |
+| #135 | P1 | runner_tokens.expiresAt + rotation + device fingerprint (Sprint 3 carry) |
+| follow-up | P2 | S4.5 P2A — discriminated validator for triggerSpec by triggerKind |
+| follow-up | P2 | S4.5 P2B — drop redundant single-column FK from 0087.sql:110 (composite supersedes) |
+| follow-up | P3 | C3 — align CI coverage threshold 65→75 (or update narrative) |
+| follow-up | P3 | C4 — Sentry alert rules in code (not dashboard-only) for drift resistance |
+
+---
 
 ## 🔴 2026-05-05 PM — Council EXPANDED BLOCK · Sprint 3 shipped · trust-closure dispatched
 
