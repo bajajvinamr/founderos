@@ -1,6 +1,74 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-04 by Claude (self-serve hardening sprint — 7 PRs merged)_
+_Last updated: 2026-05-05 by Claude (DoubtBuddy 6-sprint roadmap pivot)_
+
+## 2026-05-05 — Roadmap pivot to DoubtBuddy 6-sprint MVP — PR #37 OPEN
+
+**What happened**: Re-read the buyer's actual scope contract (`/Users/vinamr/Downloads/FounderOS -DoubtBuddy.md`, 4054 lines). The 2026-05-04 self-serve provisioning roadmap was misaligned. The $4k buyer (who will resell as SaaS) was sold an **AI Company OS** with 6 named departments, not per-customer Fly app provisioning. Pivoted planning to 6-sprint MVP per DoubtBuddy spec.
+
+**Branch**: `feat/doubtbuddy-6-sprint-plan` → PR #37
+**Architecture**: STAY on existing arch B (single-tenant deployed-per-customer, multi-tenant-shaped schema). No provisioning automation in scope.
+
+### Planning artifacts shipped (PR #37)
+
+| File | Purpose |
+|---|---|
+| `.planning/PROJECT.md` | North star = AI Company OS, key metric = MRR lift in 30d |
+| `.planning/ROADMAP.md` | 6-sprint S1-S6 table with cross-cutting decisions pre-resolved |
+| `.planning/PHASES/PHASE-S1-foundation.md` | 10 tickets — workspace shell, dept-driven UX, KPI rail |
+| `.planning/PHASES/PHASE-S2-integrations.md` | 10 tickets — Stripe/PostHog/LinkedIn/Notion/Slack/HubSpot data layer |
+| `.planning/PHASES/PHASE-S3-cos-growth.md` | 10 tickets — Daily Brief, KPI anomaly, experiments, funnel |
+| `.planning/PHASES/PHASE-S4-content-crm.md` | 10 tickets — Multi-format content gen, lifecycle workflows |
+| `.planning/PHASES/PHASE-S5-finance.md` | 10 tickets — Revenue cockpit, scenarios, runway forecast |
+| `.planning/PHASES/PHASE-S6-ops-polish.md` | 10 tickets — Permissions matrix, mobile brief, MVP cutover |
+| `LONG_RUNNING_PROMPT.md` | Autonomous-execution prompt — paste at start of next session |
+| `.planning/ARCHIVE-2026-05-04-self-serve-provisioning.md` | Old plan preserved for v2 reference |
+
+**60 tickets total** across 6 sprints. Each ticket has PM intent / Engineering breakdown (file paths, schemas) / QA acceptance.
+
+### Audit discovery — phase docs need amendment before S1 execution
+
+While preparing S1 implementation, audited `ui/src/pages/Dashboard.tsx` (455 lines). Existing Dashboard ALREADY has substantial structure:
+- `<FounderBriefing />` mounted (this is the "Daily Founder Brief" placeholder S1.1 specs)
+- `<CompanyPulseWidget />` mounted (KPI right rail) — already reads `company.metrics`
+- `<CompanyMemoryCard />`, `<CompanyProvidersWidget />`, `<PendingOutcomesBanner />`, `<PermissionCoachCard />`
+- 4 metric cards, 4 charts, recent runs, recent activity, recent tasks
+
+**S1.1 phase doc says "refactor into 3 modules"** — that's WRONG given current state. The right reframe:
+- KEEP all existing Dashboard modules
+- ADD: `<DepartmentStatusGrid />` as a new section
+- ADD: `<DecisionsInbox compact />` embed (S1.6 prerequisite)
+- DECIDE per session: trim charts/metric cards or leave (lean toward leave for v1)
+
+`<FounderBriefing />` is the existing Daily Brief skeleton — its content generation (KPI movements, top 3 actions) is what S3.3 builds out. So the S3 work is "fill in FounderBriefing's data" not "build a new Daily Brief screen."
+
+**Action for next session**: amend PHASE-S1-foundation.md ticket S1.1 + S1.6 to reflect "amend, don't replace" before any code. Other S1 tickets (S1.2 CoS console, S1.3 right-rail propagation, S1.4 Alerts page, S1.7 dept registry, S1.9 onboarding step, S1.10 tenant-agnostic copy) are correctly scoped.
+
+### Active branch state
+
+- **PR #37 open**: `feat/doubtbuddy-6-sprint-plan` — 11 files, 2817 insertions
+- **Branch `feat/s1-workspace-home`**: created off planning branch, no commits yet
+- `ui/.env.production` is untracked (env file — never commit)
+
+### Next-session resume protocol
+
+```
+cd ~/Projects/founderos
+# paste LONG_RUNNING_PROMPT.md ## THE PROMPT section
+```
+
+The agent will:
+1. Read `.planning/PROJECT.md`, `ROADMAP.md`, this CONTINUE.md
+2. See the audit discovery above; amend S1.1+S1.6 phase doc first
+3. Run `/council` if S1.7 (schema migration) is the next ticket
+4. Begin atomic ticket-by-ticket execution
+
+### Carry-overs (still pending)
+
+- Task #67 — runner token security review
+- Task #76 — `ui/src/api/approvals.test.ts:184` 409 error path failure (pre-existing, quarantined)
+
+---
 
 ## 2026-05-04 — Self-serve hardening sprint — ALL 7 PRs MERGED
 
