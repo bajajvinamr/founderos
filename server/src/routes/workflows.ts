@@ -59,8 +59,11 @@ import {
   pauseWorkflow,
   listWorkflowRuns,
   createWorkflowRun,
+  executeWorkflowTemplate,
+  setRunStatus,
 } from "../services/workflows.js";
 import { canRunAutonomously } from "../services/workflow-autonomy.js";
+import { logger } from "../middleware/logger.js";
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -391,6 +394,44 @@ export function workflowRoutes(db: Db) {
           actions: [],
         },
       });
+
+      // Council 2026-05-05 W0.1 BLOCK fix — wire route → executor.
+      // Before this commit, the route created the workflow_run row and returned
+      // 201 immediately; executeWorkflowTemplate was only invoked from tests.
+      // Result: founder UI showed "succeeded" but no template ever executed.
+      //
+      // Dispatch model — synchronous fire-and-forget via setImmediate. The
+      // request returns immediately so the founder UI is responsive. The
+      // executor runs on the next event-loop tick, on the same node.
+      //
+      // Trade-offs (logged in MORNING-REPORT-2026-05-06.md as HIGH severity):
+      //   - Crash-safety gap: if the server crashes BETWEEN createWorkflowRun
+      //     and the setImmediate tick, the run is stuck at "running" forever.
+      //   - Deviates from LRP cross-cutting default "BullMQ + plain async".
+      //   - Acceptable for the staging-only client demo (deploys are infrequent
+      //     and re-runs are explicit). Replace with BullMQ in S6 polish.
+      //
+      // Only dispatch when initialStatus === "running" — pending_approval runs
+      // are dispatched separately by the approval workflow when the human acts.
+      if (initialStatus === "running") {
+        setImmediate(() => {
+          executeWorkflowTemplate(db, workflow, run).catch(async (err) => {
+            const reason = err instanceof Error ? err.message : String(err);
+            logger.error(
+              { runId: run.id, workflowId: workflow.id, err },
+              "executeWorkflowTemplate threw — marking run failed",
+            );
+            try {
+              await setRunStatus(db, run.id, "failed", { error: reason });
+            } catch (statusErr) {
+              logger.error(
+                { runId: run.id, err: statusErr },
+                "setRunStatus failed; run may be stuck at 'running'",
+              );
+            }
+          });
+        });
+      }
 
       res.status(201).json(run);
     },

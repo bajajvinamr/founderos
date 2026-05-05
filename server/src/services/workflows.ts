@@ -347,6 +347,37 @@ export async function executeWorkflowTemplate(
   }
 }
 
+/**
+ * setRunStatus — minimal status-update helper for the route-level dispatch
+ * failure path. Templates own their own success/intermediate updates via
+ * their private updateWorkflowRunStatus helpers; this one is for the case
+ * where the dispatcher itself throws BEFORE a template gets to set state.
+ *
+ * Council 2026-05-05 W0.1 fix — without this, a thrown error inside the
+ * setImmediate dispatch leaves the run stuck at "running" forever.
+ */
+export async function setRunStatus(
+  db: Db,
+  runId: string,
+  status: WorkflowRunStatus,
+  details?: { error?: string; reason?: string },
+): Promise<void> {
+  const updates: { status: WorkflowRunStatus; completedAt?: Date | null } = { status };
+  if (status === "completed" || status === "failed") {
+    updates.completedAt = new Date();
+  }
+  await db
+    .update(workflowRuns)
+    .set(updates)
+    .where(eq(workflowRuns.id, runId));
+  if (details?.error || details?.reason) {
+    logger.warn(
+      { runId, status, ...details },
+      "workflow_run status set via setRunStatus",
+    );
+  }
+}
+
 // ── Activate / pause helpers (convenience wrappers used by template code) ─────
 
 export async function activateWorkflow(

@@ -44,7 +44,7 @@
 import express from "express";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { companies, createDb, workflows, workflowRuns } from "@founderos/db";
 import {
   getEmbeddedPostgresTestSupport,
@@ -563,5 +563,58 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
     expect(res.body.workflows).toHaveLength(1);
     expect(res.body.workflows[0].name).toBe("A");
     expect(res.body.meta.total).toBe(1);
+  });
+
+  // ── G. Dispatcher invocation (W0.1 council 2026-05-05 BLOCK fix) ───────────
+
+  it("G1. POST /runs actually dispatches executeWorkflowTemplate (not just creates row)", async () => {
+    // The 2026-05-05 council found: routes/workflows.ts created the run row
+    // and returned 201 immediately, but executeWorkflowTemplate was only
+    // called from tests — never from the live route handler. Founder UI
+    // showed "succeeded" without any template execution. This test is the
+    // contract: POSTing to /runs must cause the dispatcher to fire.
+    //
+    // Observable signal: run.status moves OFF "running" after setImmediate
+    // flush. The dispatched executor (template handler OR error catch) is
+    // the only code path that updates the status post-creation.
+    const app = buildApp(db, {}, [companyId]);
+
+    const [w] = await db
+      .insert(workflows)
+      .values({
+        companyId,
+        name: "Dispatcher contract test",
+        template: "onboarding-emails",
+        triggerKind: "event",
+        triggerSpec: {},
+        autonomyLevel: 2, // draft — template gates real sends; status still moves
+        status: "active",
+        config: {},
+      })
+      .returning();
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/workflows/${w!.id}/runs`)
+      .send({ triggeredBy: { kind: "manual" } })
+      .expect(201);
+
+    expect(res.body.status).toBe("running"); // route returns row pre-dispatch
+
+    // Wait for setImmediate to flush + the dispatcher's await chain to settle.
+    // 300ms is generous for embedded-pg + the onboarding-emails template
+    // path which does at most a couple of DB writes before updating status.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const [persistedRun] = await db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, res.body.id));
+
+    expect(persistedRun).toBeDefined();
+    // The dispatcher MUST have moved the status off "running" — either to
+    // completed (template succeeded), failed (template threw + setRunStatus
+    // catch), or pending_approval (template gated). The exact terminal state
+    // depends on template behavior; what this test asserts is dispatch fired.
+    expect(persistedRun!.status).not.toBe("running");
   });
 });
