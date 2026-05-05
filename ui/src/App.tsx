@@ -80,6 +80,7 @@ const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ de
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
 const WeeklyWrap = lazy(() => import("./pages/WeeklyWrap").then((m) => ({ default: m.WeeklyWrap })));
+const DailyBrief = lazy(() => import("./pages/DailyBrief").then((m) => ({ default: m.DailyBrief })));
 const Conversations = lazy(() => import("./pages/Conversations").then((m) => ({ default: m.Conversations })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
@@ -280,6 +281,7 @@ function boardRoutes() {
       <Route path="audit" element={<AuditLog />} />
       <Route path="alerts" element={<Alerts />} />
       <Route path="weekly" element={<WeeklyWrap />} />
+      <Route path="brief" element={<DailyBrief />} />
       <Route path="conversations" element={<Conversations />} />
       <Route path="conversations/:convId" element={<Conversations />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
@@ -609,6 +611,7 @@ export function App() {
               wiring that completes the contract. */}
           <Route path="hire" element={<UnprefixedBoardRedirect />} />
           <Route path="weekly" element={<UnprefixedBoardRedirect />} />
+          <Route path="brief" element={<UnprefixedBoardRedirect />} />
           <Route path="decisions" element={<UnprefixedBoardRedirect />} />
           <Route path="departments" element={<UnprefixedBoardRedirect />} />
           <Route path="departments/:dept" element={<UnprefixedBoardRedirect />} />

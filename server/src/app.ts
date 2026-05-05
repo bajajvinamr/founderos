@@ -44,6 +44,8 @@ import { decisionOutcomeRoutes } from "./routes/decision-outcomes.js";
 import { createDecisionFollowupCron } from "./services/decision-followup-cron.js";
 import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
 import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
+import { dailyBriefRoutes } from "./routes/daily-briefs.js";
+import { createDailyFounderBriefCron } from "./jobs/daily-founder-brief.js";
 import { billingRoutes } from "./routes/billing.js";
 import { stripeBackfillRoutes } from "./routes/stripe-backfill.js";
 import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
@@ -335,6 +337,7 @@ export async function createApp(
   api.use(companyProviderRoutes(db));
   api.use(decisionOutcomeRoutes(db));
   api.use(weeklyWrapRoutes(db));
+  api.use(dailyBriefRoutes(db));
   api.use(permissionCoachRoutes(db));
   api.use(agentHandoffRoutes(db));
   api.use(composioRoutes(db));
@@ -509,6 +512,8 @@ export async function createApp(
   weeklyWrapDeliveryCron.start();
   const linkedinSyncCron = createLinkedInSyncCron({ db });
   linkedinSyncCron.start();
+  const dailyFounderBriefCron = createDailyFounderBriefCron({ db });
+  dailyFounderBriefCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       runInCronContext("feedback-export-flush", () => {
@@ -548,6 +553,7 @@ export async function createApp(
     decisionFollowupCron.stop();
     weeklyWrapDeliveryCron.stop();
     linkedinSyncCron.stop();
+    dailyFounderBriefCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();
