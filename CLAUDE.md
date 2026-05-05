@@ -17,7 +17,7 @@ Current deploys:
 - **Server:** Node 24 + Express + Drizzle ORM. Entry `server/src/index.ts`.
 - **UI:** React 19 + Vite + Tailwind + shadcn. Entry `ui/src/main.tsx`.
 - **Shared:** `packages/shared` (types + validators + API path constants), `packages/db` (schema + migrations), `packages/adapters` (Claude/Codex/Cursor adapters), `packages/plugins`.
-- **DB:** Postgres (Supabase prod, Fly MPG for API); embedded PGlite locally when `DATABASE_URL` unset.
+- **DB:** Postgres — Fly Managed Postgres for canonical app data; Supabase for auth identity (`auth.users` JWT issuer + OAuth + email confirm); embedded PostgreSQL locally when `DATABASE_URL` unset (auto-selected via `packages/db/src/runtime-config.ts`).
 - **Validation:** Zod at every boundary → `z.infer` for types. No hand-written request types.
 
 ## Commands you'll actually run
@@ -25,7 +25,7 @@ Current deploys:
 | What | Command |
 |---|---|
 | Install | `pnpm install` |
-| Dev | `pnpm dev` (uses embedded PGlite if no `DATABASE_URL`) |
+| Dev | `pnpm dev` (uses embedded PostgreSQL if no `DATABASE_URL`) |
 | Typecheck all | `pnpm typecheck` |
 | Test all | `pnpm -w run test` (NOT `pnpm test` — that's a workspace script) |
 | Lint | `pnpm lint` |
