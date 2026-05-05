@@ -436,6 +436,217 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
     });
   });
 
+  // ─── W0.3 (council 2026-05-05) ─ Token TTL + rotation ────────────────────
+
+  describe("W0.3 — issuance TTL", () => {
+    it("defaults to 90-day expiresAt and surfaces it in response + DB row", async () => {
+      const company = await makeCompany("TTL Default Co");
+      const app = adminApp("admin-user");
+
+      const res = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "default-ttl" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.expiresAt).toBeTruthy();
+      const expiresAt = new Date(res.body.expiresAt);
+      const expectedMs = Date.now() + 90 * 86_400_000;
+      // Allow ±10s drift for test latency between handler clock + assertion clock.
+      expect(Math.abs(expiresAt.getTime() - expectedMs)).toBeLessThan(10_000);
+
+      // Persist matches response.
+      const [row] = await db
+        .select({ expiresAt: runnerTokens.expiresAt })
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, res.body.tokenId));
+      expect(row.expiresAt).not.toBeNull();
+    });
+
+    it("honors expiresInDays override and clamps to [1,365]", async () => {
+      const company = await makeCompany("TTL Override Co");
+      const app = adminApp("admin-user");
+
+      const ok = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "30-day", expiresInDays: 30 });
+      expect(ok.status).toBe(201);
+      const dt = new Date(ok.body.expiresAt).getTime();
+      expect(Math.abs(dt - (Date.now() + 30 * 86_400_000))).toBeLessThan(10_000);
+
+      const tooLong = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "no", expiresInDays: 366 });
+      expect(tooLong.status).toBe(400);
+
+      const tooShort = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "no", expiresInDays: 0 });
+      expect(tooShort.status).toBe(400);
+    });
+
+    it("expiresInDays: null preserves indefinite-token escape hatch", async () => {
+      const company = await makeCompany("TTL Indefinite Co");
+      const app = adminApp("admin-user");
+
+      const res = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "indefinite", expiresInDays: null });
+      expect(res.status).toBe(201);
+      expect(res.body.expiresAt).toBeNull();
+
+      const [row] = await db
+        .select({ expiresAt: runnerTokens.expiresAt })
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, res.body.tokenId));
+      expect(row.expiresAt).toBeNull();
+    });
+
+    it("list endpoint surfaces expiresAt + expiresInDays for both active and revoked", async () => {
+      const company = await makeCompany("TTL List Co");
+      const app = adminApp("admin-user");
+
+      await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "active-90d" });
+      const indefinite = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "indefinite", expiresInDays: null });
+      expect(indefinite.body.expiresAt).toBeNull();
+
+      const res = await request(app).get(`/api/companies/${company.id}/runner-tokens`);
+      expect(res.status).toBe(200);
+      const tokens = res.body.tokens as Array<{
+        label: string;
+        expiresAt: string | null;
+        expiresInDays: number | null;
+      }>;
+      const dated = tokens.find((t) => t.label === "active-90d");
+      const ind = tokens.find((t) => t.label === "indefinite");
+      expect(dated?.expiresInDays).toBeGreaterThanOrEqual(89);
+      expect(dated?.expiresInDays).toBeLessThanOrEqual(90);
+      expect(ind?.expiresAt).toBeNull();
+      expect(ind?.expiresInDays).toBeNull();
+    });
+  });
+
+  describe("POST /api/companies/:id/runner-tokens/:tokenId/rotate — rotation", () => {
+    it("mints new token, revokes old, sets rotatedFromTokenId chain", async () => {
+      const company = await makeCompany("Rotate Active Co");
+      const app = adminApp("admin-user");
+
+      const old = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "rotate-me" });
+      expect(old.status).toBe(201);
+
+      const rotated = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens/${old.body.tokenId}/rotate`)
+        .send({ deviceFingerprint: "host-laptop-sha256-abc" });
+
+      expect(rotated.status).toBe(201);
+      expect(rotated.body.token).toMatch(/^fos_[A-Za-z0-9]{32}$/);
+      expect(rotated.body.token).not.toBe(old.body.token);
+      expect(rotated.body.rotatedFromTokenId).toBe(old.body.tokenId);
+      expect(rotated.body.label).toBe("rotate-me"); // carried over
+      expect(rotated.body.expiresAt).toBeTruthy();
+
+      // DB chain + revocation invariants.
+      const [oldRow] = await db
+        .select()
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, old.body.tokenId));
+      const [newRow] = await db
+        .select()
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, rotated.body.tokenId));
+      expect(oldRow.revokedAt).not.toBeNull();
+      expect(newRow.revokedAt).toBeNull();
+      expect(newRow.rotatedFromTokenId).toBe(old.body.tokenId);
+      expect(newRow.deviceFingerprint).toBe("host-laptop-sha256-abc");
+    });
+
+    it("recovery path: rotates a revoked token without 409", async () => {
+      const company = await makeCompany("Rotate Revoked Co");
+      const app = adminApp("admin-user");
+
+      const old = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "incident-revoked" });
+      await request(app).delete(
+        `/api/companies/${company.id}/runner-tokens/${old.body.tokenId}`,
+      );
+
+      const [revokedAtBefore] = await db
+        .select({ revokedAt: runnerTokens.revokedAt })
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, old.body.tokenId));
+      const beforeMs = revokedAtBefore.revokedAt!.getTime();
+
+      const rotated = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens/${old.body.tokenId}/rotate`)
+        .send({});
+      expect(rotated.status).toBe(201);
+      expect(rotated.body.rotatedFromTokenId).toBe(old.body.tokenId);
+
+      // The original revokedAt timestamp (incident time) must be preserved —
+      // rotation does not re-stamp it.
+      const [revokedAtAfter] = await db
+        .select({ revokedAt: runnerTokens.revokedAt })
+        .from(runnerTokens)
+        .where(eq(runnerTokens.id, old.body.tokenId));
+      expect(revokedAtAfter.revokedAt!.getTime()).toBe(beforeMs);
+    });
+
+    it("returns 404 when oldTokenId belongs to a different company (cross-tenant)", async () => {
+      const companyA = await makeCompany("Rotate Tenant A");
+      const companyB = await makeCompany("Rotate Tenant B");
+      const app = adminApp("admin-user");
+
+      const inA = await request(app)
+        .post(`/api/companies/${companyA.id}/runner-tokens`)
+        .send({ label: "in-A" });
+
+      // Try rotating it via Company B's URL.
+      const res = await request(app)
+        .post(`/api/companies/${companyB.id}/runner-tokens/${inA.body.tokenId}/rotate`)
+        .send({});
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("runner_token_not_found");
+    });
+
+    it("writes runner.token.rotated audit log with old/new linkage", async () => {
+      const company = await makeCompany("Rotate Audit Co");
+      const app = adminApp("admin-user");
+
+      const old = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens`)
+        .send({ label: "audit-rotate" });
+      const rotated = await request(app)
+        .post(`/api/companies/${company.id}/runner-tokens/${old.body.tokenId}/rotate`)
+        .send({});
+      expect(rotated.status).toBe(201);
+
+      const audits = await db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.companyId, company.id));
+      const rotateRows = audits.filter((a) => a.action === "runner.token.rotated");
+      expect(rotateRows).toHaveLength(1);
+      const row = rotateRows[0];
+      expect(row.entityId).toBe(rotated.body.tokenId);
+      expect(row.details).toMatchObject({
+        oldTokenId: old.body.tokenId,
+        newTokenId: rotated.body.tokenId,
+        rotatedByUserId: "admin-user",
+        oldTokenWasRevoked: false,
+      });
+      expect((row.details as { tokenPreview: string }).tokenPreview).toMatch(/^fos_\w{4}…$/);
+      // Plaintext tokens MUST NEVER appear in audit details.
+      expect(JSON.stringify(row.details)).not.toContain(rotated.body.token);
+      expect(JSON.stringify(row.details)).not.toContain(old.body.token);
+    });
+  });
+
   // ─── Runner-job surface ───────────────────────────────────────────────────
 
   describe("GET /api/runner/jobs/next — long-poll", () => {
