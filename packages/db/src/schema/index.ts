@@ -137,3 +137,10 @@ export {
   type DailyBriefOpportunity,
   type DailyBriefTopAction,
 } from "./daily_briefs.js";
+export {
+  contentBriefs,
+  CONTENT_BRIEF_STATUSES,
+  type ContentBrief,
+  type ContentBriefInsert,
+  type ContentBriefStatus,
+} from "./content_briefs.js";

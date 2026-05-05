@@ -582,6 +582,13 @@
       "when": 1779800000000,
       "tag": "0085_tenant_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0086_content_briefs",
+      "breakpoints": true
     }
   ]
 }

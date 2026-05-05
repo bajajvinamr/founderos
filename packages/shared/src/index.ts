@@ -690,6 +690,18 @@ export {
   createManualAgentReviewSchema,
   type GenerateAgentReview,
   type CreateManualAgentReview,
+  CONTENT_BRIEF_ANGLES,
+  CONTENT_BRIEF_STATUSES,
+  createContentBriefSchema,
+  updateContentBriefSchema,
+  transitionContentBriefSchema,
+  listContentBriefsQuerySchema,
+  type ContentBriefAngle,
+  type ContentBriefStatusValue,
+  type CreateContentBrief,
+  type UpdateContentBrief,
+  type TransitionContentBrief,
+  type ListContentBriefsQuery,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
