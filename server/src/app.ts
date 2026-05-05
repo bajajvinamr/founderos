@@ -78,6 +78,7 @@ import { createPluginEventBus } from "./services/plugin-event-bus.js";
 import { setPluginEventBus } from "./services/activity-log.js";
 import { createDailyDigestCron } from "./services/daily-digest-cron.js";
 import { createEmailSender } from "./services/email-sender.js";
+import { createLinkedInSyncCron } from "./services/linkedin-sync-cron.js";
 import { createPluginDevWatcher } from "./services/plugin-dev-watcher.js";
 import { createPluginHostServiceCleanup } from "./services/plugin-host-service-cleanup.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
@@ -502,6 +503,8 @@ export async function createApp(
     publicUrl: process.env.FOUNDEROS_PUBLIC_URL,
   });
   weeklyWrapDeliveryCron.start();
+  const linkedinSyncCron = createLinkedInSyncCron({ db });
+  linkedinSyncCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       runInCronContext("feedback-export-flush", () => {
@@ -540,6 +543,7 @@ export async function createApp(
     if (feedbackExportTimer) clearInterval(feedbackExportTimer);
     decisionFollowupCron.stop();
     weeklyWrapDeliveryCron.stop();
+    linkedinSyncCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();
