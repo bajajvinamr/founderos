@@ -582,6 +582,20 @@
       "when": 1779800000000,
       "tag": "0085_tenant_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1779850000000,
+      "tag": "0086_content_briefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0087_lifecycle_crm_workflows",
+      "breakpoints": true
     }
   ]
 }

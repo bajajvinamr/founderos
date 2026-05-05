@@ -1,0 +1,9 @@
+-- 2026-05-05 — Content briefs schema (S4.1, idx=83)
+--
+-- SDE-A ticket #152. This file is a merge-coordination stub.
+-- SDE-A's branch (feat/s4.1-content-brief) owns the actual DDL.
+-- When branches merge, SDE-A's version replaces this stub.
+-- The stub exists so that pnpm --filter @founderos/db check:migrations
+-- sees a contiguous file+journal sequence (idx 82→83→84).
+--
+-- DO NOT add DDL here. SDE-A owns this migration slot.

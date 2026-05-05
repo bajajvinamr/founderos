@@ -137,3 +137,23 @@ export {
   type DailyBriefOpportunity,
   type DailyBriefTopAction,
 } from "./daily_briefs.js";
+export {
+  workflows,
+  workflowRuns,
+  WORKFLOW_TEMPLATES,
+  WORKFLOW_TRIGGER_KINDS,
+  WORKFLOW_STATUSES,
+  WORKFLOW_RUN_STATUSES,
+  AUTONOMY_LEVELS,
+  type WorkflowTemplate,
+  type WorkflowTriggerKind,
+  type WorkflowStatus,
+  type WorkflowRunStatus,
+  type AutonomyLevel,
+  type WorkflowTriggerSpec,
+  type WorkflowAction,
+  type Workflow,
+  type WorkflowInsert,
+  type WorkflowRun,
+  type WorkflowRunInsert,
+} from "./workflows.js";
