@@ -36,6 +36,9 @@ import {
   type WorkflowRunStatus,
 } from "@founderos/db";
 import { logActivity } from "./activity-log.js";
+import { executeOnboardingEmailTemplate } from "./workflows/templates/onboarding-emails.js";
+import { executeUpsellTemplate } from "./workflows/templates/upsell.js";
+import { logger } from "../middleware/logger.js";
 
 // ── List / get ────────────────────────────────────────────────────────────────
 
@@ -311,6 +314,37 @@ export async function createWorkflowRun(
   });
 
   return run;
+}
+
+// ── Template execution ───────────────────────────────────────────────────────────
+
+/**
+ * executeWorkflowTemplate — dispatch to the appropriate template handler.
+ *
+ * Called after a workflow_run is created. Routes the run to the template's
+ * implementation (onboarding-emails, activation-nudge, etc.) which decides
+ * whether to send immediately (autonomy=4), queue for approval (autonomy=3),
+ * or draft-only (autonomy <= 2).
+ */
+export async function executeWorkflowTemplate(
+  db: Db,
+  workflow: Workflow,
+  workflowRun: WorkflowRun,
+): Promise<void> {
+  switch (workflow.template) {
+    case "onboarding-emails":
+      await executeOnboardingEmailTemplate(db, workflow, workflowRun);
+      break;
+    case "upsell":
+      await executeUpsellTemplate(db, workflow, workflowRun);
+      break;
+    // Future templates: activation-nudge, churn-rescue
+    default:
+      logger.warn(
+        { template: workflow.template, workflowId: workflow.id },
+        "unknown workflow template",
+      );
+  }
 }
 
 // ── Activate / pause helpers (convenience wrappers used by template code) ─────
