@@ -20,6 +20,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   // as a company prefix, producing "No company matches prefix DEPARTMENTS" etc.
   "departments",
   "weekly",
+  "brief",
   "decisions",
   "conversations",
   "hire",

@@ -16,6 +16,7 @@ import {
   Plug,
   Calendar,
   MessageSquare,
+  Sun,
 } from "lucide-react";
 import { DEPARTMENTS } from "../lib/departments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -120,6 +121,7 @@ export function Sidebar() {
             badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
             alert={inboxBadge.failedRuns > 0}
           />
+          <SidebarNavItem to="/brief" label="Brief" icon={Sun} />
           <SidebarNavItem to="/weekly" label="Weekly" icon={Calendar} />
           <SidebarNavItem to="/conversations" label="Conversations" icon={MessageSquare} />
           <SidebarNavItem
