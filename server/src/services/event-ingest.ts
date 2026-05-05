@@ -5,12 +5,18 @@
  * Notion, Slack, HubSpot) to persist normalized event rows.
  *
  * Deduplication strategy:
- *   UNIQUE (company_id, source, source_event_id) NULLS NOT DISTINCT
- *   - If source_event_id is provided: INSERT … ON CONFLICT DO NOTHING … RETURNING
- *     detects replays — no row returned means the event already exists, so we
- *     SELECT the existing row and return it with deduplicated: true.
- *   - If source_event_id is null: the NULLS NOT DISTINCT constraint allows
- *     multiple NULL rows (events with no dedup key are always inserted).
+ *   UNIQUE (company_id, source, dedup_key) — dedup_key NOT NULL.
+ *   Callers MUST provide a dedupKey for every event:
+ *     - Source has a natural ID? Use it (Stripe `evt_*`, PostHog event uuid).
+ *     - Source has no natural ID (Slack messages, custom events)? Synthesize
+ *       one — e.g. `${channel}:${ts}:${user}` for Slack.
+ *
+ *   Why NOT NULL instead of NULLS NOT DISTINCT: pairing a nullable dedup
+ *   column with this service's ON CONFLICT DO NOTHING semantics produces
+ *   silent data loss — a second null-keyed event for the same (company,
+ *   source) deduplicates to the first row instead of inserting, with no
+ *   error surfaced to the caller. Required key + DB CHECK on source eliminates
+ *   that footgun entirely.
  *
  * BullMQ derive queue (events.derive):
  *   Stubbed for v1. Set EVENTS_DERIVE_QUEUE_ENABLED=true to enable.
@@ -23,7 +29,7 @@
  *   Expected import: `import { getQueue, QUEUE_NAMES } from "../lib/queues.js"`
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { events, type EventSource } from "@founderos/db";
 import { logger } from "../middleware/logger.js";
@@ -45,7 +51,12 @@ export interface IngestEventInput {
   source: EventSource;
   entityType: string;
   eventName: string;
-  sourceEventId?: string;
+  /**
+   * REQUIRED — dedup key for the event. When the source provides a natural
+   * ID (Stripe evt_*, PostHog event uuid), pass it directly. When it doesn't
+   * (Slack messages, custom events), synthesize one. Empty string is rejected.
+   */
+  dedupKey: string;
   occurredAt: Date;
   payload: unknown;
 }
@@ -69,9 +80,10 @@ export function eventIngestService(db: Db) {
    * Idempotently ingest a normalized event row.
    *
    * @returns { eventId, deduplicated }
-   *   - `deduplicated: true`  — (companyId, source, sourceEventId) already existed;
+   *   - `deduplicated: true`  — (companyId, source, dedupKey) already existed;
    *                             returns the original row's id.
    *   - `deduplicated: false` — first write; returns the new row's id.
+   * @throws if `dedupKey` is empty/whitespace — callers must always supply one.
    */
   async function ingestEvent(input: IngestEventInput): Promise<IngestEventResult> {
     const {
@@ -79,10 +91,17 @@ export function eventIngestService(db: Db) {
       source,
       entityType,
       eventName,
-      sourceEventId,
+      dedupKey,
       occurredAt,
       payload,
     } = input;
+
+    if (!dedupKey || dedupKey.trim() === "") {
+      throw new Error(
+        `event-ingest: dedupKey is required (companyId=${companyId} source=${source} eventName=${eventName}). ` +
+          `Sources without a natural ID must synthesize one — e.g. for Slack: \`${"${channel}:${ts}:${user}"}\`.`,
+      );
+    }
 
     // Attempt insert; the dedup UNIQUE constraint causes a no-op on conflict.
     const inserted = await db
@@ -92,7 +111,7 @@ export function eventIngestService(db: Db) {
         source,
         entityType,
         eventName,
-        sourceEventId: sourceEventId ?? null,
+        dedupKey,
         occurredAt,
         payload: payload as Record<string, unknown>,
       })
@@ -117,11 +136,8 @@ export function eventIngestService(db: Db) {
       return { eventId, deduplicated: false };
     }
 
-    // INSERT returned no rows → UNIQUE conflict occurred.
-    // The constraint is UNIQUE NULLS NOT DISTINCT (company_id, source, source_event_id),
-    // so NULLs are treated as equal — only one null-sourceEventId row is allowed per
-    // (companyId, source) tuple. Build the WHERE clause accordingly.
-    const sourceIdIsNull = sourceEventId == null;
+    // INSERT returned no rows → UNIQUE conflict on (company_id, source, dedup_key).
+    // dedupKey is NOT NULL so the lookup is a straightforward equality match.
     const existing = await db
       .select({ id: events.id })
       .from(events)
@@ -129,9 +145,7 @@ export function eventIngestService(db: Db) {
         and(
           eq(events.companyId, companyId),
           eq(events.source, source),
-          sourceIdIsNull
-            ? isNull(events.sourceEventId)
-            : eq(events.sourceEventId, sourceEventId!),
+          eq(events.dedupKey, dedupKey),
         ),
       )
       .limit(1);
@@ -140,7 +154,7 @@ export function eventIngestService(db: Db) {
       // Should be unreachable: if INSERT conflicted the row must exist.
       throw new Error(
         `event-ingest: dedup conflict but existing row not found ` +
-          `(companyId=${companyId} source=${source} sourceEventId=${String(sourceEventId)})`,
+          `(companyId=${companyId} source=${source} dedupKey=${dedupKey})`,
       );
     }
 
