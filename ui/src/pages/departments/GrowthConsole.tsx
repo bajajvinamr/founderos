@@ -26,6 +26,8 @@ import type {
   PostHogChannelsPayload,
 } from "../../api/integration-data";
 import { agentsInDepartment } from "../../lib/departments";
+import { experimentsApi, type Experiment as ApiExperiment } from "../../api/experiments";
+import { ExperimentCard as ApiExperimentCard } from "../../components/ExperimentCard";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -587,14 +589,27 @@ function PaidTab({ pushToast }: { pushToast: (input: { title: string; body: stri
 
 function ExperimentsTab({
   experiments,
+  apiExperiments,
+  ownerName,
   pushToast,
 }: {
   experiments: Experiment[];
+  apiExperiments: ApiExperiment[] | null | undefined;
+  ownerName: string;
   pushToast: (input: { title: string; body: string }) => void;
 }) {
-  const sorted = [...experiments].sort((a, b) => iceTotal(b) - iceTotal(a));
-  const running = sorted.filter((e) => e.status === "running").length;
-  const highIce = sorted.filter((e) => iceTotal(e) >= 20).length;
+  // Prefer real API rows when present; fall back to mocks for the empty
+  // workspace so the tab is never blank pre-Wave-5 LLM flow.
+  const useApi = !!(apiExperiments && apiExperiments.length > 0);
+
+  const sortedMock = [...experiments].sort((a, b) => iceTotal(b) - iceTotal(a));
+  const running = useApi
+    ? apiExperiments!.filter((e) => e.status === "running").length
+    : sortedMock.filter((e) => e.status === "running").length;
+  const highIce = useApi
+    ? apiExperiments!.filter((e) => (e.iceScore ?? 0) >= 50).length
+    : sortedMock.filter((e) => iceTotal(e) >= 20).length;
+  const total = useApi ? apiExperiments!.length : sortedMock.length;
 
   return (
     <div className="space-y-5">
@@ -602,11 +617,12 @@ function ExperimentsTab({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-md border border-border bg-card px-4 py-3">
         <p className="text-[12px] text-muted-foreground tabular-nums">
           Total experiments:{" "}
-          <span className="text-foreground font-medium">{sorted.length}</span>
+          <span className="text-foreground font-medium">{total}</span>
           <span className="mx-2 text-muted-foreground/40">·</span>
           Running: <span className="text-foreground font-medium">{running}</span>
           <span className="mx-2 text-muted-foreground/40">·</span>
-          ICE ≥ 20: <span className="text-foreground font-medium">{highIce}</span>
+          {useApi ? "ICE ≥ 50" : "ICE ≥ 20"}:{" "}
+          <span className="text-foreground font-medium">{highIce}</span>
         </p>
         <Button
           size="sm"
@@ -624,11 +640,17 @@ function ExperimentsTab({
       </div>
 
       {/* Grid */}
-      {sorted.length === 0 ? (
+      {total === 0 ? (
         <EmptyState icon={FlaskConical} message="No experiments yet. Propose the first one." />
+      ) : useApi ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {apiExperiments!.map((exp) => (
+            <ApiExperimentCard key={exp.id} experiment={exp} ownerName={ownerName} />
+          ))}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sorted.map((exp) => (
+          {sortedMock.map((exp) => (
             <ExperimentCard key={exp.id} exp={exp} />
           ))}
         </div>
@@ -724,6 +746,15 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
     retry: false,
   });
 
+  // Experiments — Sprint 3 S3.5 wiring. Returns the full list sorted by ICE
+  // server-side; UI just renders. Empty result falls back to mock cards.
+  const { data: apiExperiments } = useQuery({
+    queryKey: ["experiments", companyId],
+    queryFn: () => experimentsApi.list(companyId!),
+    enabled: !!companyId,
+    retry: false,
+  });
+
   // ── Empty-state gate ──────────────────────────────────────────────────────
   const deptAgents = agentsInDepartment("growth", agents);
   const hasTeammates = deptAgents.length > 0;
@@ -745,8 +776,11 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
 
   const runningCount = experiments.filter((e) => e.status === "running").length;
 
+  const experimentsTabCount = apiExperiments && apiExperiments.length > 0
+    ? apiExperiments.length
+    : experiments.length;
   const tabItems = [
-    { value: "experiments", label: `Experiments · ${experiments.length}` },
+    { value: "experiments", label: `Experiments · ${experimentsTabCount}` },
     { value: "channels", label: `Channels · ${MOCK_CHANNELS.length}` },
     { value: "funnel", label: "Funnel" },
     { value: "paid", label: "Paid" },
@@ -799,7 +833,16 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
         ) : (
           <>
             {activeTab === "experiments" && (
-              <ExperimentsTab experiments={experiments} pushToast={pushToast} />
+              <ExperimentsTab
+                experiments={experiments}
+                apiExperiments={apiExperiments}
+                ownerName={
+                  growthTeammates.length > 0
+                    ? (growthTeammates[0].name ?? "Growth teammate")
+                    : "Growth teammate"
+                }
+                pushToast={pushToast}
+              />
             )}
             {activeTab === "channels" && (
               <div className="space-y-3">

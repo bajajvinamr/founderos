@@ -103,3 +103,14 @@ export {
   type EventInsert,
   type EventSource,
 } from "./events.js";
+export {
+  experiments,
+  EXPERIMENT_DEPARTMENTS,
+  EXPERIMENT_STATUSES,
+  EXPERIMENT_CHANNELS,
+  type Experiment,
+  type ExperimentInsert,
+  type ExperimentDepartment,
+  type ExperimentStatus,
+  type ExperimentChannel,
+} from "./experiments.js";
