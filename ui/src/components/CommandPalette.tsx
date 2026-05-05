@@ -8,6 +8,7 @@ import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
 import { queryKeys } from "../lib/queryKeys";
+import { DEPARTMENTS } from "../lib/departments";
 import {
   CommandDialog,
   CommandEmpty,
@@ -28,6 +29,7 @@ import {
   History,
   SquarePen,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import { Identity } from "./Identity";
 import { agentUrl, projectUrl } from "../lib/utils";
@@ -174,6 +176,33 @@ export function CommandPalette() {
             <History className="mr-2 h-4 w-4" />
             Activity
           </CommandItem>
+          <CommandItem onSelect={() => go("/approvals")}>
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            Decision Inbox
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* S1.5 — Department-level navigation. Cmd-K → "growth" → enter
+            jumps to /departments/growth. Same DEPARTMENTS list as the
+            sidebar / DepartmentStatusGrid so renames stay in sync. */}
+        <CommandGroup heading="Departments">
+          {DEPARTMENTS.map((dept) => {
+            const Icon = dept.icon;
+            return (
+              <CommandItem
+                key={dept.id}
+                onSelect={() => go(`/departments/${dept.id}`)}
+              >
+                <Icon className="mr-2 h-4 w-4" />
+                {dept.label}
+                <span className="text-xs text-muted-foreground ml-2 hidden sm:inline">
+                  {dept.sublabel}
+                </span>
+              </CommandItem>
+            );
+          })}
         </CommandGroup>
 
         {visibleIssues.length > 0 && (
