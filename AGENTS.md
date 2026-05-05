@@ -33,7 +33,7 @@ Before making changes, read in this order:
 
 ## 4. Dev Setup (Auto DB)
 
-Use embedded PGlite in dev by leaving `DATABASE_URL` unset.
+Use embedded PostgreSQL in dev by leaving `DATABASE_URL` unset. (Runtime auto-selects embedded-postgres via `packages/db/src/runtime-config.ts`.) See [doc/DATABASE.md](./doc/DATABASE.md) for the three supported modes (embedded, Docker, hosted).
 
 ```sh
 pnpm install
@@ -55,7 +55,7 @@ curl http://localhost:3100/api/companies
 Reset local dev DB:
 
 ```sh
-rm -rf data/pglite
+rm -rf ~/.founderos/instances/default/db
 pnpm dev
 ```
 

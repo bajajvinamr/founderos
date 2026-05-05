@@ -726,7 +726,7 @@ Required UX behaviors:
 
 - Node 20+
 - `DATABASE_URL` optional
-- if unset, auto-use PGlite and push schema
+- if unset, auto-use embedded PostgreSQL and push schema (see [doc/DATABASE.md](../doc/DATABASE.md))
 
 ## 15.2 Migrations
 
