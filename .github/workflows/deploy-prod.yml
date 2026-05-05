@@ -255,6 +255,40 @@ jobs:
           path: ${{ runner.temp }}/smoke-results.json
           retention-days: 14
 
+  # ─── 4b. Post-deploy auth canary trigger ─────────────────────────────
+  # Fire a repository_dispatch event so e2e-synthetic.yml runs the auth
+  # round-trip canary (sign-in → /api/companies → board) within ~30s of
+  # the new release going live. POST-traffic, deliberately — pre-traffic
+  # gating is /api/readyz only, per council #133. If the canary fails,
+  # the incident issue + Slack page fires from e2e-synthetic.yml; we do
+  # NOT block the deploy on it (already live). The canary is a "is auth
+  # still alive after the release" detector, not a gate.
+  trigger-auth-canary:
+    name: Trigger auth canary (post-deploy)
+    needs: smoke
+    if: ${{ needs.smoke.result == 'success' && github.event.inputs.skip_smoke != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Dispatch auth-canary-trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              event_type: "auth-canary-trigger",
+              client_payload: {
+                trigger: "deploy-prod",
+                sha: context.sha,
+                run_id: context.runId.toString(),
+              },
+            });
+            core.info("Fired auth-canary-trigger repository_dispatch — e2e-synthetic.yml will run the auth round-trip against prod.");
+
   # ─── 5. Rollback on smoke or readiness probe failure ────────────────
   # /api/readyz replaced /api/health/deep as the deploy gate on 2026-05-05
   # (council #133) — deep is now admin-gated and a public CI curl returns

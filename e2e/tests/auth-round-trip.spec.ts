@@ -1,20 +1,32 @@
 /**
- * Auth round-trip spec — env-gated.
+ * Auth round-trip spec — env-gated, prod-safe canary.
  *
  * Proves the full Clerk/Supabase login → dashboard flow against the live
  * deployment. Mocked unit tests can prove the auth client *intends* to sign
  * in correctly, but only this spec proves the actual round-trip with the
  * Supabase project's real JWT pipeline.
  *
- * Why env-gated: the spec needs a real Supabase user, and we don't want to
- * commit credentials. Set `FOUNDEROS_E2E_TEST_USER_EMAIL` and
- * `FOUNDEROS_E2E_TEST_USER_PASSWORD` in the runner that calls this spec.
+ * Used as the production auth canary: scheduled in
+ * `.github/workflows/e2e-synthetic.yml` (every 15 min) and on every
+ * post-deploy hook (`.github/workflows/deploy-prod.yml` →
+ * `repository_dispatch`) to fail loud + page on-call when prod auth breaks.
  *
- * Usage:
- *   FOUNDEROS_E2E_TEST_USER_EMAIL=test@founderos.dev \
- *   FOUNDEROS_E2E_TEST_USER_PASSWORD='REDACTED' \
- *   FOUNDEROS_E2E_BASE_URL=https://founderos-bice.vercel.app \
+ * Env-gated to keep credentials out of the repo. Two interchangeable env
+ * variable names supported (CANARY_USER_* preferred for new wiring,
+ * FOUNDEROS_E2E_TEST_USER_* kept for backward-compat with existing local
+ * dev workflows). CANARY_USER_* wins when both are present.
+ *
+ *   CANARY_USER_EMAIL=canary@founderos.dev \
+ *   CANARY_USER_PASSWORD='REDACTED' \
+ *   FOUNDEROS_E2E_BASE_URL=https://founderos.fly.dev \
  *     pnpm e2e -- --grep "auth-round-trip"
+ *
+ * Canary user contract — see docs/runbooks/auth-canary.md:
+ *   - Pre-created Supabase user (email-confirmed, NOT a fresh signup).
+ *   - At least one company assigned, so post-auth lands on /{PREFIX}/dashboard.
+ *   - Password rotated quarterly (docs/runbooks/secret-rotation.md).
+ *   - Tagged `is_canary=true` in `public."user".metadata` so we can exclude
+ *     it from product analytics.
  *
  * What this spec proves:
  *   1. The /auth page renders the email/password form (post-PR #18 Clerk
@@ -27,20 +39,29 @@
  *      authenticated mode authz logic accepts the JWT).
  *
  * What this spec does NOT do:
- *   - Sign up a new user (would mutate prod). Use a pre-created throwaway.
+ *   - Sign up a new user (would mutate prod). Uses a pre-created canary.
  *   - Test password reset (separate spec; covered by /auth/forgot, /auth/reset).
  *   - Test OAuth (different flow, different cred handling).
  */
 import { expect, test } from "../fixtures";
 
-const TEST_EMAIL = process.env.FOUNDEROS_E2E_TEST_USER_EMAIL ?? "";
-const TEST_PASSWORD = process.env.FOUNDEROS_E2E_TEST_USER_PASSWORD ?? "";
+// CANARY_USER_* is the canonical name (used by GitHub Actions + Fly secrets).
+// FOUNDEROS_E2E_TEST_USER_* kept as a fallback for local dev that already had
+// it set. CANARY_USER_* wins when both are present.
+const TEST_EMAIL =
+  process.env.CANARY_USER_EMAIL?.trim() ||
+  process.env.FOUNDEROS_E2E_TEST_USER_EMAIL?.trim() ||
+  "";
+const TEST_PASSWORD =
+  process.env.CANARY_USER_PASSWORD ||
+  process.env.FOUNDEROS_E2E_TEST_USER_PASSWORD ||
+  "";
 const HAVE_CREDS = TEST_EMAIL.length > 0 && TEST_PASSWORD.length > 0;
 
 test.describe("[auth-round-trip] sign-in flow against live Supabase", () => {
   test.skip(
     !HAVE_CREDS,
-    "FOUNDEROS_E2E_TEST_USER_EMAIL + FOUNDEROS_E2E_TEST_USER_PASSWORD must be set",
+    "CANARY_USER_EMAIL + CANARY_USER_PASSWORD (or FOUNDEROS_E2E_TEST_USER_*) must be set — see docs/runbooks/auth-canary.md",
   );
 
   test("[auth-round-trip] /auth renders the email + password form", async ({
