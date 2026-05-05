@@ -29,6 +29,7 @@ import {
 import { integrationService } from "../services/integrations.js";
 import { ingestEvent } from "../services/event-ingest.js";
 import { logger } from "../middleware/logger.js";
+import { posthogWebhookLimiter } from "../middleware/rate-limit.js";
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
@@ -134,6 +135,12 @@ export function postHogRoutes(db: Db) {
    */
   router.post(
     "/integrations/posthog/webhook",
+    // 120 req/min per IP — closes CodeQL "Missing rate limiting" finding.
+    // The HMAC verification still rejects bad signatures (line 174), but
+    // a wrong-signature flood costs DB read + HMAC compute per request
+    // without this limiter. PostHog batches events on busy workspaces so
+    // 120/min is more permissive than Stripe's 60/min.
+    posthogWebhookLimiter,
     async (req: Request, res: Response): Promise<void> => {
       const companyId = req.query["companyId"];
       if (typeof companyId !== "string" || !companyId) {

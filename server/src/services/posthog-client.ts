@@ -110,8 +110,49 @@ export function verifyPostHogWebhookSignature(
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/**
+ * Validate that a host string is an HTTPS posthog.com URL.
+ *
+ * Closes the CodeQL "Server-side request forgery" critical finding on the
+ * PostHog client. `config.host` is user-controlled (founders set it in
+ * integration config — `https://us.posthog.com` / `https://eu.posthog.com`
+ * for cloud, custom subdomain for PostHog Cloud Enterprise). Without this
+ * check, an authenticated founder could set host to `http://169.254.169.254/...`
+ * (cloud metadata) or `http://localhost:54329/...` (internal Postgres) and
+ * have the server fetch it carrying their PostHog API key.
+ *
+ * Allowlist: HTTPS only, hostname must end with `.posthog.com` (matches
+ * us.posthog.com, eu.posthog.com, app.posthog.com, *.cloud.posthog.com, etc.)
+ *
+ * Self-hosted PostHog support requires a separate "trusted hosts" allowlist
+ * scoped per-instance — out of scope for v1 of the connector.
+ */
+function validatePostHogHost(host: string): URL {
+  let url: URL;
+  try {
+    url = new URL(host);
+  } catch {
+    throw new Error(
+      `PostHog host must be a valid URL. Got: ${host}. Use https://us.posthog.com or https://eu.posthog.com.`,
+    );
+  }
+  if (url.protocol !== "https:") {
+    throw new Error(
+      `PostHog host must use HTTPS. Got protocol: ${url.protocol}.`,
+    );
+  }
+  if (!url.hostname.endsWith(".posthog.com") && url.hostname !== "posthog.com") {
+    throw new Error(
+      `PostHog host must be a posthog.com domain. Got: ${url.hostname}. Self-hosted instances are not yet supported.`,
+    );
+  }
+  return url;
+}
+
 export function createPostHogClient(config: PostHogConfig): PostHogClient {
-  const baseUrl = (config.host ?? "https://us.posthog.com").replace(/\/$/, "");
+  const rawHost = config.host ?? "https://us.posthog.com";
+  const validatedUrl = validatePostHogHost(rawHost);
+  const baseUrl = `${validatedUrl.origin}${validatedUrl.pathname}`.replace(/\/$/, "");
   const authHeaders = { Authorization: `Bearer ${config.apiKey}` };
 
   async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
