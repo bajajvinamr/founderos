@@ -227,6 +227,7 @@ export type {
   InstanceGeneralSettings,
   InstanceSettings,
   BackupRetentionPolicy,
+  TelemetryConsent,
   Agent,
   AgentAccessState,
   AgentChainOfCommandEntry,
@@ -425,6 +426,7 @@ export {
   WEEKLY_RETENTION_PRESETS,
   MONTHLY_RETENTION_PRESETS,
   DEFAULT_BACKUP_RETENTION,
+  DEFAULT_TELEMETRY_CONSENT,
 } from "./types/instance.js";
 
 export {
@@ -435,6 +437,7 @@ export {
 export {
   instanceGeneralSettingsSchema,
   patchInstanceGeneralSettingsSchema,
+  telemetryConsentSchema,
   type PatchInstanceGeneralSettings,
   instanceExperimentalSettingsSchema,
   patchInstanceExperimentalSettingsSchema,

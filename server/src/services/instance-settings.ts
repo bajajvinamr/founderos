@@ -3,6 +3,7 @@ import { companies, instanceSettings } from "@founderos/db";
 import {
   DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
   DEFAULT_BACKUP_RETENTION,
+  DEFAULT_TELEMETRY_CONSENT,
   instanceGeneralSettingsSchema,
   type InstanceGeneralSettings,
   instanceExperimentalSettingsSchema,
@@ -24,6 +25,7 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
       feedbackDataSharingPreference:
         parsed.data.feedbackDataSharingPreference ?? DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
       backupRetention: parsed.data.backupRetention ?? DEFAULT_BACKUP_RETENTION,
+      telemetryConsent: parsed.data.telemetryConsent ?? DEFAULT_TELEMETRY_CONSENT,
     };
   }
   return {
@@ -31,6 +33,8 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
     keyboardShortcuts: false,
     feedbackDataSharingPreference: DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
     backupRetention: DEFAULT_BACKUP_RETENTION,
+    // Default OFF — see council 2026-05-05 P1.
+    telemetryConsent: DEFAULT_TELEMETRY_CONSENT,
   };
 }
 
