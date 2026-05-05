@@ -62,6 +62,27 @@ type NonCoreDepartmentId = (typeof NON_CORE_DEPARTMENT_IDS)[number];
 export const AGENT_SLOTS = ["cos", "growth", "content", "finance"] as const;
 export type AgentSlot = (typeof AGENT_SLOTS)[number];
 
+/**
+ * Council 2026-05-05 P2 (TC-2) — Analytics integrations required to populate
+ * the GrowthConsole on a paid plan. The list is intentionally narrow: the S3
+ * demo metric ("32% of signups from LinkedIn") needs paid-conversion (Stripe),
+ * funnel events (PostHog), and source attribution (LinkedIn). Slack / Notion /
+ * HubSpot are useful but do not satisfy the analytics-milestone gate — they
+ * power different surfaces (Inbox / docs / CRM).
+ *
+ * Used in two places:
+ *   1. `server/src/routes/onboarding.ts` — bootstrap rejects when active
+ *      subscription + no flag in this set is true.
+ *   2. `ui/src/pages/departments/AnalyticsConnectPrompt.tsx` — the matching
+ *      UI surface lists exactly these three connectors.
+ */
+export const ANALYTICS_INTEGRATION_KEYS = [
+  "stripe",
+  "posthog",
+  "linkedin",
+] as const;
+export type AnalyticsIntegrationKey = (typeof ANALYTICS_INTEGRATION_KEYS)[number];
+
 const SLOT_TO_ROLE: Record<AgentSlot, AgentRole> = {
   cos: "ceo",
   growth: "cmo",

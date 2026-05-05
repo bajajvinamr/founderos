@@ -38,8 +38,10 @@ import {
   logActivity,
   validateAnthropicKey,
 } from "../services/index.js";
+import { subscriptionService } from "../services/subscription.js";
 import {
   AGENT_SLOTS,
+  ANALYTICS_INTEGRATION_KEYS,
   bootstrapCompanyOnboarding,
   type BootstrapInput,
 } from "../services/onboarding-bootstrap.js";
@@ -319,6 +321,57 @@ export function onboardingRoutes(db: Db) {
         if (!keyCheck.valid) {
           throw unprocessable(
             `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
+          );
+        }
+      }
+
+      // S-TC2 (council 2026-05-05 P2 — analytics milestone for paid users).
+      //
+      // The "10-min first value" S3 demo metrics ("32% of signups from
+      // LinkedIn") require Stripe + PostHog + LinkedIn. Pre-fix, the
+      // `integrations` field defaulted to `{}` and onboarding completed
+      // without any analytics intent — leaving GrowthConsole to fall back
+      // to MOCK data on a paid surface. The fix: for active subscriptions,
+      // require the founder to commit to wiring at least ONE analytics
+      // connector before bootstrap completes.
+      //
+      // Trial / free users skip this gate — onboarding must NOT dead-end
+      // a brand-new founder on day 1. The matching UI side of the gate is
+      // in `ui/src/pages/departments/GrowthConsole.tsx`: paid + no
+      // integrations yet = explicit AnalyticsConnectPrompt, never mocks.
+      const isPaid = await subscriptionService(db)
+        .isSubscriptionActive()
+        .catch((err) => {
+          // Failure to read billing status is NON-fatal here. We log and
+          // proceed as "free" — the conservative direction for an
+          // onboarding gate is to let the founder through, not to block
+          // them on a billing-API outage. The trust-gate's downstream
+          // counterpart (GrowthConsole) reads billing status on its own
+          // and will refuse to render mocks if `isPaid` is true at the
+          // time of dashboard render.
+          logger.warn(
+            { err },
+            "onboarding: billing-status check failed — treating as free for milestone gate",
+          );
+          return false;
+        });
+
+      if (isPaid) {
+        const integrationsFlags = input.integrations ?? {};
+        const hasAnalytics = ANALYTICS_INTEGRATION_KEYS.some(
+          (key) => integrationsFlags[key] === true,
+        );
+        if (!hasAnalytics) {
+          throw unprocessable(
+            "An analytics integration is required before completing onboarding on a paid plan",
+            {
+              code: "ANALYTICS_INTEGRATION_REQUIRED",
+              acceptedKinds: [...ANALYTICS_INTEGRATION_KEYS],
+              hint:
+                "Pick at least one of Stripe, PostHog, or LinkedIn during onboarding " +
+                "so we can populate the GrowthConsole with real numbers instead of " +
+                "showing sample data on a paid surface.",
+            },
           );
         }
       }
