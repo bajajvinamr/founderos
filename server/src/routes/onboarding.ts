@@ -332,7 +332,38 @@ export function onboardingRoutes(db: Db) {
       const result = await bootstrapCompanyOnboarding(db, bootstrapInput, {
         actorUserId,
       });
-      res.status(201).json(result);
+      // S3.10 — strip the firstRunPromise from the wire response. It exists
+      // on the result object so tests + workers can await the magic-moment
+      // orchestrator; the founder's wizard polls
+      // GET /api/companies/:companyId/first-run-progress for status.
+      const {
+        firstRunPromise: _firstRunPromise,
+        ...wireResult
+      } = result;
+      void _firstRunPromise;
+      res.status(201).json(wireResult);
+    },
+  );
+
+  /**
+   * GET /api/companies/:companyId/first-run-progress
+   *
+   * S3.10 — surfaces in-memory first-run progress for the dashboard's
+   * "Generating your first executive brief…" UI. Returns null when the
+   * gate did not fire (< 2 integrations) or the progress map evicted the
+   * row after a long idle period (server restart).
+   */
+  router.get(
+    "/companies/:companyId/first-run-progress",
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      requireCompanyAccess(req, companyId);
+      const { getFirstRunProgress } = await import(
+        "../services/onboarding/first-run.js"
+      );
+      const progress = getFirstRunProgress(companyId);
+      res.json({ progress });
     },
   );
 
