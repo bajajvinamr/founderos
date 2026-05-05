@@ -103,3 +103,14 @@ export {
   type EventInsert,
   type EventSource,
 } from "./events.js";
+export {
+  insights,
+  INSIGHT_DEPARTMENTS,
+  INSIGHT_KINDS,
+  INSIGHT_STATUSES,
+  type Insight,
+  type InsightInsert,
+  type InsightDepartment,
+  type InsightKind,
+  type InsightStatus,
+} from "./insights.js";
