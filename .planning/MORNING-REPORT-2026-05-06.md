@@ -10,15 +10,31 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 | Area | State |
 |---|---|
-| Wave 0 progress | W0.1 ✅ · W0.2 ✅ · W0.3a ✅ (TTL middleware) · W0.3b next (rotation+UI) · W0.4 queued |
-| Branch | `feat/trust-closure` (HEAD: `b24c63a` — runner_tokens TTL + middleware expiry gate) |
-| Tests | 50/50 W0.2 surface · 37/37 across all 3 runner test files |
-| Council BLOCK closure | 3.5/4 P1 fixes shipped (W0.1 + W0.2 + W0.2c + W0.3a). Final 0.5 = W0.3b rotation endpoint + W0.4 env-var fix. |
-| Loop pacing | Active; Wake 3 closed W0.2 fully + W0.3a on top — solid pace toward Day 1 close. |
+| Wave 0 progress | W0.1 ✅ · W0.2 ✅ · W0.3a ✅ (TTL middleware) · W0.3b ✅ (rotation+90d) · W0.4 ✅ (env-var+expiry hint) — **WAVE 0 CLOSED** |
+| Branch | `feat/trust-closure` (HEAD: `97ff663` — RunnerInstallDialog env-var fix + expiry hint) |
+| Tests | 50/50 W0.2 surface · 28/28 runner-routes (incl. 9 new W0.3) · 16/16 UI dialog+pill |
+| Council BLOCK closure | **4/4 P1 fixes shipped.** All council 2026-05-05 BLOCK findings closed across 6 atomic commits. |
+| Loop pacing | Wake 4 closed W0.3b + W0.4 — Wave 0 done within Day 1. Next: re-run /council on cumulative diff (task #191), then begin S4 Wave 3 dispatch. |
 
 ---
 
 ## Issues recorded today
+
+### [02:13:00 UTC] [LOW] [WAVE 0 CLOSED] All 4 P1 BLOCK findings shipped within Day 1
+
+**What happened:** Wake 4 closed W0.3b (rotation endpoint + 90-day default TTL) and W0.4 (RunnerInstallDialog env-var fix). Wave 0 closure pace beat the 7-day LRP estimate that allotted 1.5 days for runner-token TTL alone.
+
+**What I tried:** W0.3b — added `POST /companies/:id/runner-tokens/:tokenId/rotate` (atomic mint-new-then-revoke-old in a single `db.transaction`, preserves the original `revokedAt` timestamp on recovery rotations). Default 90-day TTL on issuance with `expiresInDays` override clamped to [1,365]; explicit `null` preserves the indefinite-token escape hatch for embedded test fixtures. List + status endpoints now surface `expiresAt` + derived `expiresInDays` for UI countdowns. W0.4 — fixed `FOUNDEROS_API_URL` → `FOUNDEROS_RUNNER_URL` in the install snippet (silent install break — the runner's `config.ts:36` reads only `FOUNDEROS_RUNNER_URL`); contract test pins the var name so a future rename can't drift again.
+
+**Workaround applied:** None — fixes shipped clean. Audit log now records `runner.token.rotated` with `oldTokenId` + `newTokenId` + `oldTokenWasRevoked` (audit signal: scheduled refresh vs incident recovery) + `tokenPreview` (first 8 chars only — plaintext NEVER in audit details, asserted by tests).
+
+**Status:** SHIPPED. Council 2026-05-05 BLOCK fully closed. Commits `386590d` (W0.3b) + `97ff663` (W0.4). Wave 0 cumulative diff spans 6 atomic commits ready for re-council pass (task #191).
+
+**Files touched:** `server/src/routes/runner.ts` (+143 lines: rotation handler, TTL helpers, expiresAt projections); `server/src/__tests__/runner-routes.test.ts` (+9 W0.3 tests, 28/28 pass); `ui/src/api/runner.ts` (extended types + `runnerApi.rotate()`); `ui/src/components/RunnerInstallDialog.tsx` (env-var fix + expiry hint); `ui/src/components/RunnerInstallDialog.test.tsx` (+ contract test for env-var name + expiry hint visibility); `ui/src/components/RunnerStatusPill.test.tsx` (fixture update for new required type fields, caught by tsc).
+
+**Next-action recommendation for Vinamr:** Run `/council` on the cumulative Wave 0 diff before merging (task #191). The diff touches auth + a hot path (`runner-tokens` polled every 5s) + a foreign env-var contract — exactly the surface where convergence-loop adversarial review pays off. Specific things to ask the council: (a) is the recovery-from-revoked-token rotation flow safe — could a leaked plaintext be rotated by an attacker who already has session admin? (no — rotation requires `assertInstanceAdmin`, same gate as issuance/revocation, so the attacker would already have full admin); (b) is the `oldTokenWasRevoked: false` audit signal sufficient to distinguish "scheduled refresh" from "operator panic-rotated under suspected leak" or do we need a separate `rotation_reason` field; (c) the indefinite-token escape hatch (`expiresInDays: null`) — should this be gated behind a separate `INSTANCE_ALLOW_INDEFINITE_RUNNER_TOKENS` flag for prod, or trust the assertInstanceAdmin gate.
+
+---
 
 ### [01:53:00 UTC] [LOW] [W0.2c shipped] Resend webhook receiver landed — 3-stage delivery walk now wired
 
