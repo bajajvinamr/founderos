@@ -16,6 +16,12 @@ export interface IssuedRunnerToken {
   token: string;
   label: string;
   createdAt: string;
+  /** W0.3 — null = indefinite (legacy escape hatch). */
+  expiresAt: string | null;
+  /** W0.3 — derived "Expires in N days" hint; null when expiresAt is null. */
+  expiresInDays: number | null;
+  /** W0.3 — present on rotation responses; null on first issuance. */
+  rotatedFromTokenId?: string | null;
 }
 
 export interface RunnerTokenSummary {
@@ -24,15 +30,27 @@ export interface RunnerTokenSummary {
   createdAt: string;
   lastSeenAt: string | null;
   online: boolean;
+  /** W0.3 — null = indefinite. */
+  expiresAt: string | null;
+  expiresInDays: number | null;
 }
 
 export interface RunnerTokenWithRevoke extends RunnerTokenSummary {
   revokedAt: string | null;
+  /** W0.3 — non-null for tokens minted via rotation. */
+  rotatedFromTokenId: string | null;
 }
 
 export const runnerApi = {
   issue: (companyId: string, label?: string) =>
     api.post<IssuedRunnerToken>(`/companies/${companyId}/runner-tokens`, { label: label ?? "" }),
+
+  /** W0.3b — rotate an existing token. Plaintext shown ONCE in the response. */
+  rotate: (companyId: string, tokenId: string) =>
+    api.post<IssuedRunnerToken>(
+      `/companies/${companyId}/runner-tokens/${tokenId}/rotate`,
+      {},
+    ),
 
   revoke: (companyId: string, tokenId: string) =>
     api.delete<void>(`/companies/${companyId}/runner-tokens/${tokenId}`),

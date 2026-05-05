@@ -204,10 +204,20 @@ function IssuedTokenBanner({
 }: IssuedTokenBannerProps) {
   const [copied, setCopied] = useState(false);
   const apiOrigin = apiBaseUrl ?? (typeof window !== "undefined" ? window.location.origin : "");
+  // W0.4 (council 2026-05-05) — env-var name MUST match `@founderos/runner`'s
+  // `config.ts:36` which reads `FOUNDEROS_RUNNER_URL`. The pre-W0.4 snippet
+  // exported `FOUNDEROS_API_URL` and the runner failed at startup with
+  // "FOUNDEROS_RUNNER_URL is required" — silent install break for every
+  // founder who copy-pasted the snippet. The contract test in
+  // RunnerInstallDialog.test.tsx pins this name; if `@founderos/runner`'s
+  // config-loader env name ever changes, both must move together.
+  const expiresInDays = token.expiresInDays;
   const installSnippet = [
     `npm install -g @founderos/runner`,
     `export FOUNDEROS_RUNNER_TOKEN="${token.token}"`,
-    apiOrigin ? `export FOUNDEROS_API_URL="${apiOrigin}"` : `export FOUNDEROS_API_URL="https://founderos.fly.dev"`,
+    apiOrigin
+      ? `export FOUNDEROS_RUNNER_URL="${apiOrigin}"`
+      : `export FOUNDEROS_RUNNER_URL="https://founderos.fly.dev"`,
     `founderos-runner start`,
   ].join("\n");
 
@@ -243,6 +253,15 @@ function IssuedTokenBanner({
         <p className="text-xs">
           We only store its hash. You won't be able to see this value again.
         </p>
+        {expiresInDays !== null && expiresInDays !== undefined && (
+          <p
+            data-testid="runner-issued-expiry"
+            className="text-xs"
+          >
+            Expires in {expiresInDays} {expiresInDays === 1 ? "day" : "days"}.
+            Rotate before it lapses to avoid downtime.
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
