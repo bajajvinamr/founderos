@@ -1,8 +1,58 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-06 (AM, S4 Wave 1 shipped + S4.5 council BLOCK closed + Wave 2 dispatched) by Claude_
+_Last updated: 2026-05-05 PM (council BLOCK on BYO Runner + Sprint 4 fake-delivery; 7-day LRP authored; "no hard halt + morning report" directive set) by Claude_
 
-## 🟢 2026-05-06 AM — Trust-closure DONE · S4 Wave 1 shipped · S4.5 council BLOCK closed · Wave 2 in flight
+## 🟧 2026-05-05 PM — 7-DAY AUTONOMOUS RUN AUTHORIZED (ends 2026-05-12)
+
+**Operator directive:** Vinamr 2026-05-05 — "complete till sprint 6, verify everything is there as promised in the doubtbuddy prd, run e2e testing, ensure 100% completion and ready to give to client." Amended same day: **"ensure no hard halt for all issues that happen record them for my eyes in the morning."**
+
+**Long-running prompt:** `LONG_RUNNING_PROMPT-7DAY.md` (root). Self-contained. Paste into a fresh `/loop` session to start.
+
+**To start the run** (in a fresh Claude Code session at `~/Projects/founderos`):
+```
+/loop please follow the instructions in LONG_RUNNING_PROMPT-7DAY.md
+```
+
+**Day-by-day plan** (lives in the LRP — summary):
+- Day 1 (today, 2026-05-05): **Wave 0** — close 2026-05-05 council BLOCK (4 P1 fixes)
+- Day 2 (2026-05-06): S4 Wave 3+4 (incl. S4.8 churn rescue with mandatory council)
+- Day 3 (2026-05-07): S5 Finance (10 tickets)
+- Day 4-5 (2026-05-08–09): S6 Ops + Polish (10 tickets)
+- Day 6 (2026-05-10): E2E suites + 5 new client-readiness specs
+- Day 7 (2026-05-11): PRD verification → `.planning/PRD-VERIFICATION.md`; client handover docs
+- Buffer (2026-05-12): final review + Vinamr-facing handover
+
+**Issue Recording Protocol — never halt, log everything:**
+- Every issue → `.planning/MORNING-REPORT-<YYYY-MM-DD>.md` with severity + workaround applied
+- One file per UTC day. CRIT entries near top. HIGH/MED/LOW below.
+- Vinamr reads at sunrise, triages.
+- The ONLY halts: live Stripe key flip, real customer data destruction, DNS transfer, force-push to main, `rm -rf` on user data — truly irreversible one-way doors.
+
+## 🔴 Council 2026-05-05 — verdict BLOCK on BYO Runner + Sprint 4 fake-delivery
+
+Mode: PARTIAL (Codex `gpt-5.4` healthy; Gemini `gemini-2.5-pro` HUNG at 15min — likely too many `@file` refs across the monorepo). Two rounds: R1 + R2 self-reaction.
+
+**4 P1 findings** (all become Wave 0 in the 7-day LRP):
+
+| W0 | Finding | Cite |
+|---|---|---|
+| W0.1 | **Workflow runs created but never executed.** Route returns 201; `executeWorkflowTemplate` only called from tests. | `routes/workflows.ts:380,395` → `services/workflows.ts:328` |
+| W0.2 | **Lifecycle CRM templates fake delivery.** `sendOnboardingEmails` is `"v1: Log intent only"`; mark completed without sending. **Buyer-trust break.** | `templates/onboarding-emails.ts:133,187` · `activation-nudge.ts:307` · `upsell.ts:139,188` |
+| W0.3 | **Indefinite bearer tokens.** `runner_tokens` has no `expires_at`. Lost laptop = permanent backdoor. | `schema/runner.ts:40` · `0072_runner_tables.sql:8` |
+| W0.4 | **Runner install env-var mismatch.** UI emits `FOUNDEROS_API_URL`; runner reads `FOUNDEROS_RUNNER_URL`. Install snippet broken. | `RunnerInstallDialog.tsx:208` · `byo-runner-smoke.md:72` · `packages/runner/src/config.ts:35` |
+
+Council ledger: `~/.gstack/projects/bajajvinamr-founderos/decisions.md` → `2026-05-05: BYO Runner adversarial retrospective`. Full verdict + alternatives ranked. Run artifact persisted via `vanta-council-run finish`.
+
+**5 P2 findings (deferred to S6 by 7-day LRP, not blocking):**
+- Runner audit-trail can lose/duplicate events
+- BYO runner adapter lacks prompt/skill parity with `claude_local`
+- `/api/health` still leaks `deploymentMode/authReady/bootstrapStatus` to unauth callers (CLAUDE.md said stripped — Codex R2 verified: NOT stripped)
+- Billing gate is default-OFF (`if (!enabled) { next(); return; }`) — never flipped in prod
+- Onboarding maps all adapter choices to `byo_runner`; landing copy promises Claude/Codex/Gemini
+
+**CLOSED — Codex R2 verified NOT issues:** Stripe webhook idempotency · Composio cross-org leak · `executeRun.catch` · Fly `release_command` · CSP headers · AI route rate limiting.
+
+## 🟢 2026-05-06 AM — Trust-closure DONE · S4 Wave 1 shipped · S4.5 council BLOCK closed · Wave 2 in flight (HISTORICAL CONTEXT)
 
 **Status:** `feat/trust-closure` is now a 5-commit ladder past `1dcc7d1`. Branch HEAD `134fde1`. All known P1 BLOCK findings from THREE adversarial council rounds (R1 trust-closure, R2 self-reaction, S4.5 council) are closed with verification. Sprint 4 Wave 1 (S4.1 + S4.5) merged. Wave 2 (S4.2 / S4.6 / S4.7 / S4.9) dispatched in 4 parallel worktrees on Haiku/Sonnet. Tests: 98/98 across 7 affected batteries; typecheck clean across server + ui + cli; migrations clean (idx 0..84 contiguous).
 
