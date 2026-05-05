@@ -93,6 +93,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build UI (head)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: pnpm --filter @founderos/ui build
 
       - name: Measure head bundle
@@ -105,6 +108,9 @@ jobs:
         id: bundle_base
         continue-on-error: true
         shell: bash
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
           BASE="${{ github.event.pull_request.base.sha }}"

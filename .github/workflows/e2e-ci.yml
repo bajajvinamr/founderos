@@ -77,8 +77,11 @@ jobs:
         # explicit Vite-time flag the built UI ships the legacy wizard
         # and the spec fails. Setting it here keeps the test as a real
         # signal of the V2 flow without requiring a separate dev build.
+        # VITE_SUPABASE_* required by ui/vite.config.ts strict guard.
         env:
           VITE_FOUNDEROS_ONBOARDING_V2: "true"
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: pnpm build
 
       # Boot the server FIRST so its embedded Postgres comes up on
