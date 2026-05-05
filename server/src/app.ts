@@ -64,6 +64,7 @@ import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
 import { departmentRoutes } from "./routes/departments.js";
 import { departmentStatusRoutes } from "./routes/department-status.js";
 import { experimentRoutes } from "./routes/experiments.js";
+import { funnelRoutes } from "./routes/funnel.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -321,6 +322,7 @@ export async function createApp(
   api.use(departmentRoutes(db));
   api.use(departmentStatusRoutes(db));
   api.use(experimentRoutes(db));
+  api.use(funnelRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(instanceInvitesRoutes(db));

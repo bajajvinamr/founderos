@@ -28,6 +28,7 @@ import type {
 import { agentsInDepartment } from "../../lib/departments";
 import { experimentsApi, type Experiment as ApiExperiment } from "../../api/experiments";
 import { ExperimentCard as ApiExperimentCard } from "../../components/ExperimentCard";
+import { FunnelDiagnostics } from "./growth/FunnelDiagnostics";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -875,10 +876,13 @@ export function GrowthConsole({ companyId, agents }: GrowthConsoleProps) {
                 )}
               </div>
             )}
-            {activeTab === "funnel" && (
-              <FunnelView
-                pushToast={pushToast}
-                posthogFunnel={posthogFunnelData ?? null}
+            {activeTab === "funnel" && companyId && (
+              <FunnelDiagnostics companyId={companyId} />
+            )}
+            {activeTab === "funnel" && !companyId && (
+              <EmptyState
+                icon={TrendingUp}
+                message="Funnel diagnostics need a company context. Pick a workspace from the sidebar."
               />
             )}
             {activeTab === "paid" && <PaidTab pushToast={pushToast} />}
