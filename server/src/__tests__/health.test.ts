@@ -53,4 +53,74 @@ describe("GET /health", () => {
       error: "database_unreachable",
     });
   });
+
+  // Council 2026-05-05 P3 — unauth callers must not receive recon-heavy fields.
+  // Verifies the bifurcation in routes/health.ts when req.actor.type === "none".
+  describe("unauth response shape (council 2026-05-05 P3)", () => {
+    it("omits deploymentExposure, features, and devServer for unauth callers", async () => {
+      const db = {
+        execute: vi.fn().mockResolvedValue([{ "?column?": 1 }]),
+        select: vi.fn(),
+      } as unknown as Db;
+      const app = express();
+      // No actor middleware → req.actor undefined → treated as unauth.
+      app.use(
+        "/health",
+        healthRoutes(db, {
+          deploymentMode: "local_trusted",
+          deploymentExposure: "public",
+          authReady: true,
+          companyDeletionEnabled: true,
+        }),
+      );
+
+      const res = await request(app).get("/health");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ status: "ok", version: serverVersion });
+      expect(res.body).not.toHaveProperty("deploymentExposure");
+      expect(res.body).not.toHaveProperty("features");
+      expect(res.body).not.toHaveProperty("devServer");
+      // UI-load-bearing fields kept for the unauth onboarding flow:
+      expect(res.body).toHaveProperty("deploymentMode");
+      expect(res.body).toHaveProperty("authReady");
+    });
+
+    it("returns full payload for authenticated callers", async () => {
+      const db = {
+        execute: vi.fn().mockResolvedValue([{ "?column?": 1 }]),
+        select: vi.fn(),
+      } as unknown as Db;
+      const app = express();
+      // Inject a board actor before mounting the route.
+      app.use((req, _res, next) => {
+        (req as unknown as { actor: { type: string; userId: string } }).actor = {
+          type: "board",
+          userId: "test-user",
+        };
+        next();
+      });
+      app.use(
+        "/health",
+        healthRoutes(db, {
+          deploymentMode: "local_trusted",
+          deploymentExposure: "public",
+          authReady: true,
+          companyDeletionEnabled: true,
+        }),
+      );
+
+      const res = await request(app).get("/health");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        status: "ok",
+        version: serverVersion,
+        deploymentMode: "local_trusted",
+        deploymentExposure: "public",
+        authReady: true,
+        features: { companyDeletionEnabled: true },
+      });
+    });
+  });
 });

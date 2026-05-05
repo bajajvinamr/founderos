@@ -33,7 +33,21 @@ export function healthRoutes(
 ) {
   const router = Router();
 
-  router.get("/", async (_req, res) => {
+  router.get("/", async (req, res) => {
+    // Council 2026-05-05 P3 — minimize reconnaissance surface for unauth
+    // callers. `deploymentExposure`, `features.*`, and `devServer` are not
+    // consumed by the UI in unauth paths (verified by grep against ui/src);
+    // strip them when the caller hasn't presented credentials. The remaining
+    // fields (`deploymentMode`, `authReady`, `bootstrapStatus`,
+    // `bootstrapInviteActive`) are UI-load-bearing for the unauth onboarding
+    // flow — App.tsx + InviteLanding read these BEFORE the user is signed in
+    // to decide signup-vs-login. The full strip to {ok, version} (per the
+    // council's literal recommendation) requires splitting bootstrap state
+    // to its own endpoint + updating UI consumers — tracked separately for
+    // Sprint 4. actorMiddleware always runs before this route, so `req.actor`
+    // is reliably populated; `type === "none"` means unauthenticated.
+    const isAuthed = req.actor?.type != null && req.actor.type !== "none";
+
     if (!db) {
       res.json({ status: "ok", version: serverVersion });
       return;
@@ -104,19 +118,29 @@ export function healthRoutes(
       });
     }
 
-    res.json({
-      status: "ok",
+    const baseResponse = {
+      status: "ok" as const,
       version: serverVersion,
+      // UI-load-bearing for unauth onboarding flow (App.tsx + InviteLanding):
       deploymentMode: opts.deploymentMode,
-      deploymentExposure: opts.deploymentExposure,
       authReady: opts.authReady,
       bootstrapStatus,
       bootstrapInviteActive,
-      features: {
-        companyDeletionEnabled: opts.companyDeletionEnabled,
-      },
-      ...(devServer ? { devServer } : {}),
-    });
+    };
+
+    if (isAuthed) {
+      res.json({
+        ...baseResponse,
+        deploymentExposure: opts.deploymentExposure,
+        features: {
+          companyDeletionEnabled: opts.companyDeletionEnabled,
+        },
+        ...(devServer ? { devServer } : {}),
+      });
+      return;
+    }
+
+    res.json(baseResponse);
   });
 
   // Deep health check: exercises the full stack.
