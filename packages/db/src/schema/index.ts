@@ -83,8 +83,10 @@ export {
 } from "./agent_handoffs.js";
 export {
   composioConnections,
+  CONNECTOR_SYNC_STATUSES,
   type ComposioConnection,
   type ComposioConnectionInsert,
+  type ConnectorSyncStatus,
 } from "./composio_connections.js";
 export {
   departments,
