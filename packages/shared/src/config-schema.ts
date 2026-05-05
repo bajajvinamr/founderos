@@ -99,8 +99,14 @@ export const secretsConfigSchema = z.object({
   }),
 });
 
+// Telemetry consent is OFF by default (council 2026-05-05 P1 fix). The
+// landing page promises "no telemetry unless you flip it on" — defaulting
+// to true would violate that contract on every fresh install. Operators
+// must explicitly opt in via the onboarding consent step or
+// /settings/general toggle. Re-flipping this back to `true` is a
+// trust-contract regression; see config-defaults.test.ts which guards it.
 export const telemetryConfigSchema = z.object({
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(false),
 }).default({});
 
 export const founderosConfigSchema = z

@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PatchInstanceGeneralSettings, BackupRetentionPolicy } from "@founderos/shared";
+import type {
+  PatchInstanceGeneralSettings,
+  BackupRetentionPolicy,
+  TelemetryConsent,
+} from "@founderos/shared";
 import {
   DAILY_RETENTION_PRESETS,
   WEEKLY_RETENTION_PRESETS,
   MONTHLY_RETENTION_PRESETS,
   DEFAULT_BACKUP_RETENTION,
+  DEFAULT_TELEMETRY_CONSENT,
 } from "@founderos/shared";
-import { LogOut, SlidersHorizontal } from "lucide-react";
+import { LogOut, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { authApi } from "@/api/auth";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { Button } from "../components/ui/button";
@@ -74,6 +79,8 @@ export function InstanceGeneralSettings() {
   const keyboardShortcuts = generalQuery.data?.keyboardShortcuts === true;
   const feedbackDataSharingPreference = generalQuery.data?.feedbackDataSharingPreference ?? "prompt";
   const backupRetention: BackupRetentionPolicy = generalQuery.data?.backupRetention ?? DEFAULT_BACKUP_RETENTION;
+  const telemetryConsent: TelemetryConsent =
+    generalQuery.data?.telemetryConsent ?? DEFAULT_TELEMETRY_CONSENT;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -305,6 +312,69 @@ export function InstanceGeneralSettings() {
             <code>"prompt"</code>. Unset and <code>"prompt"</code> both mean no default has been
             chosen yet.
           </p>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold">Anonymous usage telemetry</h2>
+              </div>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Off by default. Flip this on to share counters and event names
+                that help us see which agents and routines actually get used.
+                Never shares your code, agent prompts, or customer data.
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={telemetryConsent.enabled}
+              onCheckedChange={() =>
+                updateGeneralMutation.mutate({
+                  telemetryConsent: {
+                    enabled: !telemetryConsent.enabled,
+                    decided: true,
+                    decidedAt: new Date().toISOString(),
+                  },
+                })
+              }
+              disabled={updateGeneralMutation.isPending}
+              aria-label="Toggle anonymous usage telemetry"
+            />
+          </div>
+          <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+            <div>
+              <span className="font-medium text-foreground">Endpoint:</span>{" "}
+              <code className="break-all">
+                https://telemetry.founderos.ai/ingest
+              </code>
+            </div>
+            <div>
+              <span className="font-medium text-foreground">Events:</span>{" "}
+              install/company/agent/routine counters and the
+              <code> error.handler_crash</code> error code (no stack, no
+              prompts).
+            </div>
+            <div>
+              <span className="font-medium text-foreground">Identifier:</span>{" "}
+              random install UUID — not your email or any user account.
+            </div>
+            <div>
+              <span className="font-medium text-foreground">Retention:</span>{" "}
+              raw events purged after 30 days; aggregated counters retained 90
+              days.
+            </div>
+            {telemetryConsent.decided && telemetryConsent.decidedAt ? (
+              <p>
+                Decision recorded{" "}
+                {new Date(telemetryConsent.decidedAt).toLocaleString()}.
+              </p>
+            ) : (
+              <p>No decision recorded yet — defaulting to off.</p>
+            )}
+          </div>
         </div>
       </section>
 
