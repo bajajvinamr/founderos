@@ -533,6 +533,13 @@
       "when": 1779200100000,
       "tag": "0076_activity_log_workflow_id",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0077_events",
+      "breakpoints": true
     }
   ]
 }
