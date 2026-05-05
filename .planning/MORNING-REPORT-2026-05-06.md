@@ -10,11 +10,11 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 | Area | State |
 |---|---|
-| Wave 0 progress | W0.1 ✅ · W0.2 ✅ (3 templates + webhook) · W0.3 next · W0.4 queued |
-| Branch | `feat/trust-closure` (HEAD: `f2fdc10` — Resend webhook receiver) |
-| Tests | 50/50 across workflows.test.ts (21) + activation-nudge.test.ts (17) + resend-webhook.test.ts (12) |
-| Council BLOCK closure | 3/4 P1 fixes shipped (W0.1 dispatcher · W0.2 onboarding+upsell+nudge templates · W0.2c webhook) |
-| Loop pacing | Active; Wake 3 just landed W0.2 fully — heading to W0.3 token TTL |
+| Wave 0 progress | W0.1 ✅ · W0.2 ✅ · W0.3a ✅ (TTL middleware) · W0.3b next (rotation+UI) · W0.4 queued |
+| Branch | `feat/trust-closure` (HEAD: `b24c63a` — runner_tokens TTL + middleware expiry gate) |
+| Tests | 50/50 W0.2 surface · 37/37 across all 3 runner test files |
+| Council BLOCK closure | 3.5/4 P1 fixes shipped (W0.1 + W0.2 + W0.2c + W0.3a). Final 0.5 = W0.3b rotation endpoint + W0.4 env-var fix. |
+| Loop pacing | Active; Wake 3 closed W0.2 fully + W0.3a on top — solid pace toward Day 1 close. |
 
 ---
 
