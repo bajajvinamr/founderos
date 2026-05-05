@@ -211,30 +211,40 @@ jobs:
             exit 1
           fi
 
-      - name: Run deep health check
-        id: deep
+      # Readiness probe (replaces /api/health/deep as of council #133, 2026-05-05).
+      # /api/health/deep was switched to require instance-admin auth in the
+      # 2026-05-03 council — an unauthenticated curl from CI returns 401/403
+      # and would auto-rollback every prod deploy. /api/readyz is the
+      # canonical public deploy gate: 200 "ready" if DB reachable + auth
+      # bootstrapped (authenticated mode), 503 otherwise. Sufficient for
+      # deploy gating; the richer /api/health/deep payload is for oncall
+      # dashboards (admin-gated, viewed manually).
+      - name: Run readiness probe
+        id: ready
         timeout-minutes: 2
         run: |
           set +e
-          response="$(curl -sS -m 10 "$FLY_URL/api/health/deep")"
+          # -w "\n%{http_code}" appends the HTTP status code on a new line
+          # so we can split body from code without parsing JSON.
+          response="$(curl -sS -m 10 -w "\n%{http_code}" "$FLY_URL/api/readyz")"
           rc=$?
           set -e
 
           if [[ "$rc" -ne 0 ]]; then
-            echo "deep_health=fail" >> "$GITHUB_OUTPUT"
-            echo "deep_response=curl failed with rc=$rc" >> "$GITHUB_OUTPUT"
+            echo "ready_health=fail" >> "$GITHUB_OUTPUT"
+            echo "ready_response=curl failed with rc=$rc" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
-          # Check if response contains "ok" status
-          status="$(echo "$response" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("status","unknown"))' 2>/dev/null || echo "unknown")"
+          http_code="$(printf '%s' "$response" | tail -n1)"
+          body="$(printf '%s' "$response" | sed '$d')"
 
-          if [[ "$status" == "ok" ]]; then
-            echo "deep_health=pass" >> "$GITHUB_OUTPUT"
-            echo "deep_response=$response" >> "$GITHUB_OUTPUT"
+          if [[ "$http_code" == "200" ]] && [[ "$body" == "ready" ]]; then
+            echo "ready_health=pass" >> "$GITHUB_OUTPUT"
+            echo "ready_response=$body (http $http_code)" >> "$GITHUB_OUTPUT"
           else
-            echo "deep_health=fail" >> "$GITHUB_OUTPUT"
-            echo "deep_response=$response" >> "$GITHUB_OUTPUT"
+            echo "ready_health=fail" >> "$GITHUB_OUTPUT"
+            echo "ready_response=$body (http $http_code)" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
@@ -245,16 +255,12 @@ jobs:
           path: ${{ runner.temp }}/smoke-results.json
           retention-days: 14
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: deep-health-response
-          path: /tmp/deep-health-response.json
-          retention-days: 14
-
-  # ─── 5. Rollback on smoke or deep health failure ────────────────────
+  # ─── 5. Rollback on smoke or readiness probe failure ────────────────
+  # /api/readyz replaced /api/health/deep as the deploy gate on 2026-05-05
+  # (council #133) — deep is now admin-gated and a public CI curl returns
+  # 401/403, which would auto-rollback every deploy.
   rollback-on-fail:
-    name: Rollback Fly (smoke or deep health failed)
+    name: Rollback Fly (smoke or readiness probe failed)
     needs: [deploy-fly, smoke]
     if: ${{ failure() && (needs.smoke.result == 'failure') }}
     runs-on: ubuntu-24.04

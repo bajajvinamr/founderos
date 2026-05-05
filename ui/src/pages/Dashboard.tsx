@@ -20,6 +20,9 @@ import { CompanyMemoryCard } from "../components/CompanyMemoryCard";
 import { CompanyProvidersWidget } from "../components/CompanyProvidersWidget";
 import { PendingOutcomesBanner } from "../components/PendingOutcomesBanner";
 import { FounderBriefing } from "../components/FounderBriefing";
+import { DepartmentStatusGrid } from "../components/DepartmentStatusGrid";
+import { CapitalAllocationCard } from "../components/CapitalAllocationCard";
+import { DecisionsInbox } from "./DecisionsInbox";
 import { StatusIcon } from "../components/StatusIcon";
 import { PermissionCoachCard } from "../components/PermissionCoachCard";
 
@@ -221,6 +224,21 @@ export function Dashboard() {
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
       {selectedCompanyId && <PendingOutcomesBanner companyId={selectedCompanyId} />}
+
+      {/* S1.6 — Decision Inbox (compact) — pending approvals visible without
+          a click. Full inbox lives at /approvals. */}
+      <DecisionsInbox compact />
+
+      {/* S1.1 — Department Status grid. Health rollup per department:
+          green/yellow/red/grey based on agent state + open approvals +
+          last-heartbeat freshness. Click-through to /departments/:id. */}
+      {selectedCompanyId && <DepartmentStatusGrid companyId={selectedCompanyId} />}
+
+      {/* S1.2 — Capital Allocation placeholder (the 4th CoS dashboard
+          module per the PRD). Real ROI ranking lands when S2 integrations
+          sync and S3.8 channel-recommender runs. */}
+      <CapitalAllocationCard />
+
       <PermissionCoachCard companyId={selectedCompanyId} />
       <div data-tour="memory">
         <CompanyMemoryCard companyId={selectedCompanyId} />

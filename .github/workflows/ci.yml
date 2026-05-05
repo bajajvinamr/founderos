@@ -287,6 +287,11 @@ jobs:
           restore-keys: pnpm-store-${{ runner.os }}-node${{ env.NODE_VERSION }}-
       - run: pnpm install --frozen-lockfile
       - name: Build UI bundle
+        env:
+          # vite.config.ts hard-fails without these (added in 7221b88 P0 fix).
+          # Mirror deploy-prod.yml's secret refs so the bundle can be built in CI.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: pnpm --filter @founderos/ui build
       - name: Check bundle size against budget
         id: bundle

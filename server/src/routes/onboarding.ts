@@ -79,6 +79,13 @@ const bootstrapSchema = z.object({
   adapterChoice: z.enum(["claude_local", "anthropic_api", "skip"]).optional().default("anthropic_api"),
   anthropicKey: z.string().default(""),
   integrations: z.record(z.boolean()).optional().default({}),
+  // S1.9 — only NON-core departments are passed; the 5 core (chief-of-staff,
+  // growth, content, crm, finance) are always provisioned by business rule.
+  nonCoreDepartments: z
+    .array(z.enum(["engineering", "ops"]))
+    .optional()
+    .default([]),
+  autonomyLevel: z.number().int().min(1).max(4).optional().default(2),
   charters: z.object({
     cos: charterSchema,
     growth: charterSchema,
@@ -316,6 +323,8 @@ export function onboardingRoutes(db: Db) {
         adapterChoice: input.adapterChoice,
         anthropicKey: input.anthropicKey,
         integrations: input.integrations ?? {},
+        nonCoreDepartments: input.nonCoreDepartments ?? [],
+        autonomyLevel: input.autonomyLevel ?? 2,
         charters: input.charters,
         companyName,
       };

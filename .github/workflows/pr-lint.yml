@@ -43,7 +43,10 @@ jobs:
           echo "Consider breaking this into smaller, focused PRs for easier review."
 
       - name: Fail if too large
-        if: steps.diff.outputs.delta > 2000
+        if: steps.diff.outputs.delta > 2000 && !contains(github.event.pull_request.labels.*.name, 'size-bypass')
         run: |
           echo "❌ PR exceeds size limit: ${{ steps.diff.outputs.delta }} lines (max: 2000)"
+          echo ""
+          echo "If this PR genuinely needs to exceed the budget (multi-sprint ship,"
+          echo "atomic refactor, etc.), add the 'size-bypass' label and re-run this check."
           exit 1

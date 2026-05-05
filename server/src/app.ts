@@ -31,6 +31,8 @@ import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { instanceInvitesRoutes } from "./routes/instance-invites.js";
 import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { integrationHealthRoutes } from "./routes/integration-health.js";
+import { postHogRoutes } from "./routes/posthog-connector.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
 import { conversationRoutes } from "./routes/conversations.js";
@@ -42,6 +44,7 @@ import { createDecisionFollowupCron } from "./services/decision-followup-cron.js
 import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
 import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
 import { billingRoutes } from "./routes/billing.js";
+import { stripeBackfillRoutes } from "./routes/stripe-backfill.js";
 import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
 import { composioRoutes } from "./routes/composio.js";
 import { debugRoutes } from "./routes/debug.js";
@@ -57,6 +60,7 @@ import { digestRoutes } from "./routes/digest.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
 import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
+import { departmentRoutes } from "./routes/departments.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -74,6 +78,7 @@ import { createPluginEventBus } from "./services/plugin-event-bus.js";
 import { setPluginEventBus } from "./services/activity-log.js";
 import { createDailyDigestCron } from "./services/daily-digest-cron.js";
 import { createEmailSender } from "./services/email-sender.js";
+import { createLinkedInSyncCron } from "./services/linkedin-sync-cron.js";
 import { createPluginDevWatcher } from "./services/plugin-dev-watcher.js";
 import { createPluginHostServiceCleanup } from "./services/plugin-host-service-cleanup.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
@@ -310,11 +315,14 @@ export async function createApp(
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
+  api.use(departmentRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(instanceInvitesRoutes(db));
   api.use(templateRoutes(db));
   api.use(integrationRoutes(db));
+  api.use(integrationHealthRoutes(db));
+  api.use(postHogRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
   api.use(conversationRoutes(db));
@@ -328,6 +336,7 @@ export async function createApp(
   api.use(composioRoutes(db));
   api.use(debugRoutes());
   api.use("/billing", billingRoutes(db));
+  api.use(stripeBackfillRoutes());
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
   const pluginRegistry = pluginRegistryService(db);
@@ -494,6 +503,8 @@ export async function createApp(
     publicUrl: process.env.FOUNDEROS_PUBLIC_URL,
   });
   weeklyWrapDeliveryCron.start();
+  const linkedinSyncCron = createLinkedInSyncCron({ db });
+  linkedinSyncCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       runInCronContext("feedback-export-flush", () => {
@@ -532,6 +543,7 @@ export async function createApp(
     if (feedbackExportTimer) clearInterval(feedbackExportTimer);
     decisionFollowupCron.stop();
     weeklyWrapDeliveryCron.stop();
+    linkedinSyncCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();

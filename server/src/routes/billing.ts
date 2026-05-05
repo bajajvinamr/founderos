@@ -2,8 +2,94 @@ import { Router, type Request, type Response } from "express";
 import type { Db } from "@founderos/db";
 import { subscriptionService } from "../services/subscription.js";
 import { createStripeClient } from "../services/stripe-client.js";
+import { ingestEvent } from "../services/event-ingest.js";
 import { logger } from "../middleware/logger.js";
 import { billingWebhookLimiter } from "../middleware/rate-limit.js";
+
+// ---------------------------------------------------------------------------
+// Local type: Stripe events include `created` (Unix s) that the shared
+// StripeWebhookEvent interface doesn't expose. We extend it locally so we
+// can normalize occurredAt without modifying the shared interface.
+// ---------------------------------------------------------------------------
+
+interface StripeEventWithCreated {
+  id: string;
+  type: string;
+  created: number;
+  data: { object: Record<string, unknown> };
+}
+
+// ---------------------------------------------------------------------------
+// Entity-type mapping for Stripe event types → canonical entityType
+// ---------------------------------------------------------------------------
+
+type StripeEntityType = "customer" | "subscription" | "invoice" | "charge";
+
+function resolveEntityType(eventType: string): StripeEntityType {
+  if (eventType.startsWith("customer.subscription.")) return "subscription";
+  if (eventType.startsWith("customer.")) return "customer";
+  if (eventType.startsWith("invoice.")) return "invoice";
+  if (eventType.startsWith("charge.")) return "charge";
+  return "customer"; // fallback — unreachable for the 14 handled types
+}
+
+/**
+ * The 14 Stripe event types we ingest into the canonical events table.
+ * Subscription-level events are also handled by the existing subscription
+ * row idempotency logic (PR #33) — that logic runs first and is unaffected.
+ */
+const INGEST_EVENT_TYPES = new Set([
+  "customer.created",
+  "customer.updated",
+  "customer.deleted",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "customer.subscription.trial_will_end",
+  "invoice.created",
+  "invoice.finalized",
+  "invoice.paid",
+  "invoice.payment_failed",
+  "charge.succeeded",
+  "charge.failed",
+  "charge.refunded",
+]);
+
+/**
+ * Ingest a Stripe webhook event into the canonical events table.
+ *
+ * Non-throwing: errors are logged but do not abort webhook processing.
+ * The subscription row idempotency logic (PR #33) must succeed even if
+ * event ingestion fails.
+ *
+ * companyId: on the self-hosted single-tenant build there is exactly one
+ * company; resolved from FOUNDEROS_DEFAULT_COMPANY_ID. Multi-tenant builds
+ * will need to resolve via Stripe customer → company mapping.
+ */
+async function ingestStripeEvent(
+  event: StripeEventWithCreated,
+  companyId: string,
+): Promise<void> {
+  if (!INGEST_EVENT_TYPES.has(event.type)) return;
+
+  try {
+    await ingestEvent({
+      companyId,
+      source: "stripe",
+      entityType: resolveEntityType(event.type),
+      eventName: event.type,
+      dedupKey: event.id,
+      occurredAt: new Date(event.created * 1000),
+      payload: event.data.object,
+    });
+  } catch (err) {
+    // Non-fatal: subscription table upsert takes precedence.
+    logger.warn(
+      { err, eventId: event.id, eventType: event.type, companyId },
+      "stripe-ingest: failed to ingest event (non-fatal)",
+    );
+  }
+}
 
 export function billingRoutes(db: Db) {
   const router = Router();
@@ -108,7 +194,19 @@ export function billingRoutes(db: Db) {
         return;
       }
 
+      // Existing subscription-row idempotency logic (PR #33) — runs first so
+      // the billing gate reflects the latest subscription state even if event
+      // ingestion fails.
       await subService.handleStripeWebhook(event);
+
+      // Ingest into canonical events table for downstream KPI / analytics.
+      // Cast to StripeEventWithCreated: Stripe always includes `created` on
+      // the raw event object — constructWebhookEvent passes it through as
+      // unknown fields on the return value from the Stripe SDK.
+      const companyId =
+        process.env.FOUNDEROS_DEFAULT_COMPANY_ID ?? "default-company";
+      await ingestStripeEvent(event as unknown as StripeEventWithCreated, companyId);
+
       res.json({ received: true });
     } catch (error) {
       logger.error({ error }, "Webhook processing failed");

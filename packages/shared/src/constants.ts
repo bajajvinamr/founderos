@@ -757,6 +757,7 @@ export type PluginBridgeErrorCode = (typeof PLUGIN_BRIDGE_ERROR_CODES)[number];
 // ---------------------------------------------------------------------------
 
 export const INTEGRATION_KINDS = [
+  "stripe",
   "posthog",
   "hubspot",
   "slack",
@@ -780,6 +781,15 @@ export type IntegrationCatalogEntry = {
 };
 
 export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntry> = {
+  stripe: {
+    label: "Stripe",
+    description: "Subscriptions, MRR, churn. Your Finance dept reads this.",
+    website: "https://stripe.com",
+    keyLabel: "API key",
+    keyHint: "Developers → API keys → Secret key",
+    department: "finance",
+    authMethod: "api_key",
+  },
   posthog: {
     label: "PostHog",
     description: "Signups, activation, funnels. Your Growth dept reads this.",

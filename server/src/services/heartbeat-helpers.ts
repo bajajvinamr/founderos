@@ -373,6 +373,12 @@ export interface WakeupOptions {
   requestedByActorType?: "user" | "agent" | "system";
   requestedByActorId?: string | null;
   contextSnapshot?: Record<string, unknown>;
+  // Explicit opt-out for internal heartbeat machinery (timers, reapers,
+  // resumers) when actorType cannot be set to "system" for unrelated
+  // reasons. Default false. The 2026-05-05 council added the heartbeat-
+  // layer billing gate; "system" actor type already auto-bypasses, so
+  // this flag is reserved for forward-compatibility.
+  bypassBilling?: boolean;
 }
 
 export type UsageTotals = {

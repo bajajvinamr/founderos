@@ -83,6 +83,23 @@ export {
 } from "./agent_handoffs.js";
 export {
   composioConnections,
+  CONNECTOR_SYNC_STATUSES,
   type ComposioConnection,
   type ComposioConnectionInsert,
+  type ConnectorSyncStatus,
 } from "./composio_connections.js";
+export {
+  departments,
+  workspaceDepartments,
+  type Department,
+  type DepartmentInsert,
+  type WorkspaceDepartment,
+  type WorkspaceDepartmentInsert,
+} from "./departments.js";
+export {
+  events,
+  EVENT_SOURCES,
+  type Event,
+  type EventInsert,
+  type EventSource,
+} from "./events.js";

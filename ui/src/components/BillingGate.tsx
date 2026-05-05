@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import { branding } from "../branding";
 
 interface BillingStatus {
   active: boolean;
@@ -55,7 +56,7 @@ export function BillingGate({ children }: BillingGateProps) {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Subscription Required</CardTitle>
-          <CardDescription>Upgrade to continue using FounderOS</CardDescription>
+          <CardDescription>Upgrade to continue using {branding.productName}</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="mb-6 text-sm text-muted-foreground">

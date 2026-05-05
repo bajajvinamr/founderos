@@ -519,6 +519,34 @@
       "when": 1779100000000,
       "tag": "0074_subscription_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1779200000000,
+      "tag": "0075_departments",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1779200100000,
+      "tag": "0076_activity_log_workflow_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0077_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1779400000000,
+      "tag": "0079_connector_health",
+      "breakpoints": true
     }
   ]
 }

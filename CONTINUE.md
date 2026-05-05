@@ -1,6 +1,195 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-04 by Claude (self-serve hardening sprint — 7 PRs merged)_
+_Last updated: 2026-05-05 (council retro + pre-S3 trust closure) by Claude_
+
+## 🟡 2026-05-05 — Council retro PASS WITH CONDITIONS · pre-S3 trust closure in flight
+
+**Status:** Sprint 1 + Sprint 2 shipped on `feat/s1-workspace-home`. CI billing block (#129) RESOLVED. Council `2026-05-05T13:42:57Z` ran adversarial retro on BYO Runner + product audit (PARTIAL mode — Gemini 429 across `gemini-3.1-pro-preview` and `gemini-2.5-pro` fallback; Codex `gpt-5.4` healthy R1+R2 self-check). Verdict **PASS WITH CONDITIONS** on BYO Runner; 2 new P1s + 3 new P2s to close before Sprint 3 dispatch. User chose B (carry findings as parallel work, NOT defer Sprint 3). Pre-S3 trust closure underway — see "🛠 In flight" below.
+
+### ✅ Closed by R1/R2 file:line verification (CLAUDE.md drift corrected)
+
+The 2026-05-03 council BLOCK cluster shipped fixes that earlier CONTINUE.md/CLAUDE.md still described as open. Council 2026-05-05 R2 self-check verified all 5 closures with file:line proof:
+
+| Domain | Status | Proof (verified) |
+|---|---|---|
+| Stripe webhook idempotency | CLOSED | `subscription.ts:90-103` upserts on `stripeSubscriptionId`; `instance_subscription.ts:16` unique index |
+| Composio cross-org leak | CLOSED | `composio-skill-bridge.ts:96-113` requires `connectedAccountId` |
+| Silent run stranding (`executeRun.catch`) | CLOSED | `heartbeat.ts:1571/2635/2685` all `setRunStatus("failed")` |
+| `/api/health/deep` admin auth | CLOSED | `health.ts:132-133` `assertInstanceAdmin` |
+| Fly migration `release_command` | CLOSED | `fly.toml:32-43` release_command + rolling strategy |
+
+Full council log + new findings: `~/.gstack/projects/founderos/decisions.md` 2026-05-05 entry.
+
+### 🛠 In flight — Pre-S3 trust closure (BLOCKERS before Sprint 3 dispatch)
+
+| # | Status | Severity | Item | Effort |
+|---|---|---|---|---|
+| #132 | ✅ DONE | P1 | `billingGate` pushed to `heartbeat.wakeup()/invoke()` layer (defense in depth) — closes 5 ungated wake paths: `issues.ts:840`, `issues.ts:1411`, `approvals.ts:164`, `issues-comments.ts:289`, `issues-execution.ts:290`, `plugin-host-services.ts:887/1017` | ~3h |
+| #133 | ✅ DONE | P2 | `deploy-prod.yml` probe switched `/api/health/deep` → `/api/readyz` (the deep endpoint now requires admin; would auto-rollback every prod deploy after #129 cleared) | ~30min |
+| #134 | ✅ DONE | n/a | Reconcile CONTINUE.md + CLAUDE.md against shipped fixes (this commit) | ~5min |
+
+### 📋 Carry-along tickets (run alongside Sprint 3, NOT blocking dispatch)
+
+| # | Sprint | Severity | Item |
+|---|---|---|---|
+| #135 | S3 mid | P1 | `runner_tokens.expiresAt` (default 90d) + rotation endpoint + device fingerprint — long-lived bearer blast radius |
+| #136 | S4 | P2 | Session resume fallback when `~/.claude/sessions/<sid>/` missing on second machine |
+| #137 | S4 | P2 | Runner stdout per-line + per-batch byte caps (DoS hardening) |
+| #138 | post-#129 | P3 | Promote `release-smoke.yml` to required pre-traffic gate |
+| #139 | S3 drive-by | P3 | Strip `/api/health` ROOT response to `{ok, version}` for unauth callers |
+| #140 | S4 | follow-up | `heartbeat-billing-gate.test.ts` integration test (embedded-PG fixture covering all 6 gate branches) |
+
+### Next-session resume protocol
+
+1. Verify pre-S3 commit lands cleanly (CI green now that #129 is unblocked).
+2. Push, open PR for the trust-closure (#132+#133+#134), merge once CI passes.
+3. Begin Sprint 3 dispatch: `.planning/PHASES/PHASE-S3-cos-growth.md` — 10 tickets (CoS console fill-in + Growth dept). Same parallel-agent pattern as S2.
+4. Watch for Sprint 3 wake-path tickets to inherit the `heartbeat.wakeup()` billing gate automatically (no per-route middleware to remember).
+
+### Vanta-Sync 2026-05-05 — invariants captured
+
+7 staging entries added to `~/.claude/rules/vinamr-invariants.staging.md`:
+- Drizzle ORM (3): `.where().where()` REPLACES not ANDs; `_journal.json` parallel-branch idx; singleton init in tests
+- Composio (1): v3 actual surface vs invented `executeToolForWorkspace`
+- Postgres (3, new section): nullable dedup + `ON CONFLICT DO NOTHING` silent loss; CHECK as TS-union backstop; single multi-clause ALTER TABLE for lock minimization
+- 3 entries scored ≥0.65 (Drizzle cluster) — review via `vanta-extract-score list-staging` before promoting to global
+- Project CLAUDE.md updated with FounderOS-specific test-fixture API + singleton init + synthetic dedup-key contract
+- 1 council finding auto-attributed: Codex P3 from 2026-05-05 R1 ("4 separate ALTER TABLE in 0079") → resolved by commit 6ddb51e
+
+### Sprint 2 follow-up tasks (still applicable, not merge-blockers)
+
+| # | Severity | Task |
+|---|---|---|
+| #117 | Cleanup | Relocate S2.6 commits from `feat/s2-linkedin-read` → `feat/s2-notion-slack` |
+| #118 | Cleanup | Revert SDE-J's stray edits to `BoardClaim.tsx` + `legal/Security.tsx` |
+| #119 | Follow-up | Wire `IntegrationCard` into `Integrations.tsx` page |
+| #124 | QA | Verify Composio API call shapes against live sandbox (notion/slack/linkedin tool slugs + response shapes) |
+| #125 | Test rewrite | Rewrite slack/notion ingest test fixtures (currently `describe.skip`) — agent invented `{db, stop}` API; actual is `{connectionString, cleanup}` |
+| #126 | Test fix | hubspot-ingest 5 failures — `companies_issue_prefix_idx` unique violation in test cleanup; use unique-per-test prefix |
+| #127 | Test fix | linkedin-ingest 4 failures — vi.fn mock chains expect double-`.where()` (production code now uses `.where(and(eq, eq))`) |
+| #128 | Test fix | posthog-connector 1 failure — singleton `initEventIngest(mockDb)` not called in test setup |
+
+---
+
+## 📜 Earlier 2026-05-05 — S1 Foundation shipped, S2 Integrations in flight (superseded above)
+
+**Status:** Sprint 1 complete (PR #38), Sprint 2 in progress with 4 parallel agents on Wave 1.
+
+### Sprint 1 — DONE (PR [#38](https://github.com/bajajvinamr/founderos/pull/38))
+
+10 tickets shipped on `feat/s1-workspace-home` (+7 commits past `main`):
+
+| Ticket | Notes |
+|---|---|
+| S1.1 | DepartmentStatusGrid + compact DecisionsInbox on Dashboard (+9 unit tests) |
+| S1.2 | CapitalAllocationCard placeholder |
+| S1.3 | CompanyPulseWidget (KPI rail) on dept consoles |
+| S1.4 | `/alerts` page (escalations + approvals + S2.7/S3.2 placeholders) |
+| S1.5 | CommandPalette dept + decisions routes |
+| S1.6 | DecisionsInbox `compact` prop |
+| S1.7 | Department registry (migration 0075, idx 74, +9 integration tests) — rebased from wrong base mid-sprint |
+| S1.8 | activity_log workflow_id + lineage_refs (migration 0076, idx 75) |
+| S1.9 | Onboarding "choose departments" step (+3 bootstrap tests) |
+| S1.10 | Branding config + 6 core surfaces; long tail (~82 occurrences) tracked |
+
+Verification: DB+UI+server typecheck clean; 10/10 bootstrap tests pass; 9/9 departments tests pass.
+
+### Sprint 2 — Wave 1 in flight (4 parallel agents)
+
+Each agent is in an isolated git worktree on `feat/s1-workspace-home` base.
+
+| Agent | Ticket | Branch | Reserved |
+|---|---|---|---|
+| SDE-A (Sonnet) | S2.1 events table + ingestEvent service | feat/s2-events-table | migration 0077, idx 76 |
+| SDE-B (Sonnet) | S2.7 connector health + freshness | feat/s2-connector-health | migration 0079, idx 77 |
+| SDE-C (Haiku) | S2.8 retry queues + DLQ | feat/s2-dlq-retries | no migration (BullMQ only) |
+| SDE-D (Haiku) | S2.10 integrations page UX | feat/s2-integrations-ux | no migration (UI only) |
+
+**Wave 2** (5 ingestion agents) blocked on S2.1 landing — once `events` table + `ingestEvent` exist, dispatch S2.2 (Stripe), S2.3 (PostHog), S2.4 (LinkedIn), S2.5 (HubSpot), S2.6 (Notion+Slack).
+
+**Wave 3** (S2.9 KPI calc) blocked on Wave 2 — needs ingested data to compute against.
+
+### Lessons learned mid-sprint (apply to S2)
+
+- **Always specify branch base explicitly to sub-agents.** S1.7's agent branched from `main` instead of the integration branch `feat/s1-workspace-home`, requiring a 4-commit rebase mid-sprint. Wave 1 dispatch instructions explicitly state the base branch + verification step.
+- **Reserve migration numbers AND journal idx values up-front.** Both S1.7 and S1.8 independently appended at idx 74; the merge surfaced the collision. Wave 1 has 0077/idx76, 0079/idx77 reserved; 0078 left open as a buffer.
+- **Sub-agent token budgets vary.** SDE-1 (Haiku) ran out of budget mid-S1.10 sweep — created the foundation (branding.ts) and migrated 6 high-traffic files but left 82 occurrences across 37 lower-priority surfaces. Foundation-first design meant the partial work was still mergeable; long tail tracked separately. Pattern to repeat: brief Haiku for foundation tasks, accept partial sweeps.
+
+### Carry-forwards
+
+- Task #76 — pre-existing `ui/src/api/approvals.test.ts:184` 409 error path (separate issue)
+- Task #107 — S1.10 long tail sweep (82 hardcoded "FounderOS" occurrences)
+- Task #67 — runner token security review (deferred from M-series)
+
+---
+
+## 2026-05-05 — Roadmap pivot to DoubtBuddy 6-sprint MVP — PR #37 MERGED
+
+**What happened**: Re-read the buyer's actual scope contract (`/Users/vinamr/Downloads/FounderOS -DoubtBuddy.md`, 4054 lines). The 2026-05-04 self-serve provisioning roadmap was misaligned. The $4k buyer (who will resell as SaaS) was sold an **AI Company OS** with 6 named departments, not per-customer Fly app provisioning. Pivoted planning to 6-sprint MVP per DoubtBuddy spec.
+
+**Branch**: `feat/doubtbuddy-6-sprint-plan` → PR #37
+**Architecture**: STAY on existing arch B (single-tenant deployed-per-customer, multi-tenant-shaped schema). No provisioning automation in scope.
+
+### Planning artifacts shipped (PR #37)
+
+| File | Purpose |
+|---|---|
+| `.planning/PROJECT.md` | North star = AI Company OS, key metric = MRR lift in 30d |
+| `.planning/ROADMAP.md` | 6-sprint S1-S6 table with cross-cutting decisions pre-resolved |
+| `.planning/PHASES/PHASE-S1-foundation.md` | 10 tickets — workspace shell, dept-driven UX, KPI rail |
+| `.planning/PHASES/PHASE-S2-integrations.md` | 10 tickets — Stripe/PostHog/LinkedIn/Notion/Slack/HubSpot data layer |
+| `.planning/PHASES/PHASE-S3-cos-growth.md` | 10 tickets — Daily Brief, KPI anomaly, experiments, funnel |
+| `.planning/PHASES/PHASE-S4-content-crm.md` | 10 tickets — Multi-format content gen, lifecycle workflows |
+| `.planning/PHASES/PHASE-S5-finance.md` | 10 tickets — Revenue cockpit, scenarios, runway forecast |
+| `.planning/PHASES/PHASE-S6-ops-polish.md` | 10 tickets — Permissions matrix, mobile brief, MVP cutover |
+| `LONG_RUNNING_PROMPT.md` | Autonomous-execution prompt — paste at start of next session |
+| `.planning/ARCHIVE-2026-05-04-self-serve-provisioning.md` | Old plan preserved for v2 reference |
+
+**60 tickets total** across 6 sprints. Each ticket has PM intent / Engineering breakdown (file paths, schemas) / QA acceptance.
+
+### Audit discovery — phase docs need amendment before S1 execution
+
+While preparing S1 implementation, audited `ui/src/pages/Dashboard.tsx` (455 lines). Existing Dashboard ALREADY has substantial structure:
+- `<FounderBriefing />` mounted (this is the "Daily Founder Brief" placeholder S1.1 specs)
+- `<CompanyPulseWidget />` mounted (KPI right rail) — already reads `company.metrics`
+- `<CompanyMemoryCard />`, `<CompanyProvidersWidget />`, `<PendingOutcomesBanner />`, `<PermissionCoachCard />`
+- 4 metric cards, 4 charts, recent runs, recent activity, recent tasks
+
+**S1.1 phase doc says "refactor into 3 modules"** — that's WRONG given current state. The right reframe:
+- KEEP all existing Dashboard modules
+- ADD: `<DepartmentStatusGrid />` as a new section
+- ADD: `<DecisionsInbox compact />` embed (S1.6 prerequisite)
+- DECIDE per session: trim charts/metric cards or leave (lean toward leave for v1)
+
+`<FounderBriefing />` is the existing Daily Brief skeleton — its content generation (KPI movements, top 3 actions) is what S3.3 builds out. So the S3 work is "fill in FounderBriefing's data" not "build a new Daily Brief screen."
+
+**Action for next session**: amend PHASE-S1-foundation.md ticket S1.1 + S1.6 to reflect "amend, don't replace" before any code. Other S1 tickets (S1.2 CoS console, S1.3 right-rail propagation, S1.4 Alerts page, S1.7 dept registry, S1.9 onboarding step, S1.10 tenant-agnostic copy) are correctly scoped.
+
+### Active branch state
+
+- **PR #37 open**: `feat/doubtbuddy-6-sprint-plan` — 11 files, 2817 insertions
+- **Branch `feat/s1-workspace-home`**: created off planning branch, no commits yet
+- `ui/.env.production` is untracked (env file — never commit)
+
+### Next-session resume protocol
+
+```
+cd ~/Projects/founderos
+# paste LONG_RUNNING_PROMPT.md ## THE PROMPT section
+```
+
+The agent will:
+1. Read `.planning/PROJECT.md`, `ROADMAP.md`, this CONTINUE.md
+2. See the audit discovery above; amend S1.1+S1.6 phase doc first
+3. Run `/council` if S1.7 (schema migration) is the next ticket
+4. Begin atomic ticket-by-ticket execution
+
+### Carry-overs (still pending)
+
+- Task #67 — runner token security review
+- Task #76 — `ui/src/api/approvals.test.ts:184` 409 error path failure (pre-existing, quarantined)
+
+---
 
 ## 2026-05-04 — Self-serve hardening sprint — ALL 7 PRs MERGED
 

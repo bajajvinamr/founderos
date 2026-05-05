@@ -110,6 +110,36 @@ export const billingWebhookLimiter = rateLimit({
 });
 
 /**
+ * PostHog webhook limiter: 120 req/min per IP.
+ *
+ * Closes the CodeQL "Missing rate limiting" finding (S2.3 PostHog connector).
+ * The webhook route does HMAC verification but a wrong-signature flood still
+ * costs DB read + HMAC compute per request. Higher cap than Stripe (120 vs 60)
+ * because PostHog batches events and a real webhook can fire multiple times
+ * per minute on a busy workspace.
+ */
+export const posthogWebhookLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 120, // 120 requests per minute per IP
+  keyGenerator: (req: Request, res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    logger.warn(
+      {
+        ip: _req.ip,
+        path: _req.path,
+      },
+      `Rate limit exceeded: ${options.message}`,
+    );
+    res.status(429).json({
+      error: "Too many requests",
+      message: "Please try again later",
+    });
+  },
+});
+
+/**
  * Agent invocation limiter: 30/min per authenticated user
  *
  * Caps the rate at which an actor can trigger Claude/Anthropic-billed work

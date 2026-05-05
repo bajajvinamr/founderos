@@ -9,7 +9,11 @@ import {
   Zap,
   Landmark,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { queryKeys } from "../lib/queryKeys";
+import { integrationHealthApi, type KpiFreshness } from "../api/integration-health";
+import { timeAgo } from "../lib/timeAgo";
 
 /** Keep in sync with packages/db/src/schema/companies.ts → CompanyMetrics */
 type Delta = { dir: "up" | "down" | "flat"; text: string };
@@ -35,6 +39,8 @@ export type CompanyMetrics = {
 
 type PulseMetric = {
   label: string;
+  /** Key into KpiFreshness (for freshness indicator lookup). */
+  freshnessKey?: keyof KpiFreshness;
   value: string;
   delta?: Delta;
   sub?: string;
@@ -44,14 +50,26 @@ type PulseMetric = {
 interface CompanyPulseWidgetProps {
   companyName: string | undefined;
   metrics: CompanyMetrics | undefined | null;
+  /** When provided, freshness indicators are shown under each KPI tile. */
+  companyId?: string;
 }
 
 /**
  * Dashboard widget that surfaces business-level KPIs from the company's
  * stored metrics JSON. Pulls from DB via the company object — no hardcoded
  * per-company data.
+ *
+ * When `companyId` is supplied, also queries /api/companies/:id/kpi-freshness
+ * and renders a "synced Xm ago" badge under each KPI tile.
  */
-export function CompanyPulseWidget({ companyName, metrics }: CompanyPulseWidgetProps) {
+export function CompanyPulseWidget({ companyName, metrics, companyId }: CompanyPulseWidgetProps) {
+  const { data: freshness } = useQuery({
+    queryKey: queryKeys.integrationHealth.kpiFreshness(companyId ?? ""),
+    queryFn: () => integrationHealthApi.kpiFreshness(companyId!),
+    enabled: !!companyId,
+    staleTime: 60_000,
+  });
+
   if (!companyName || !metrics || isEmpty(metrics)) return null;
 
   const pulseMetrics = buildMetrics(metrics);
@@ -84,7 +102,11 @@ export function CompanyPulseWidget({ companyName, metrics }: CompanyPulseWidgetP
         {pulseMetrics.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {pulseMetrics.map((m) => (
-              <PulseCell key={m.label} metric={m} />
+              <PulseCell
+                key={m.label}
+                metric={m}
+                freshness={m.freshnessKey && freshness ? freshness[m.freshnessKey] : null}
+              />
             ))}
           </div>
         )}
@@ -131,9 +153,9 @@ function buildMetrics(m: CompanyMetrics): PulseMetric[] {
 
   // Revenue/funding signal
   if (m.arrCents && m.arrCents > 0) {
-    out.push({ label: "ARR", value: formatMoney(m.arrCents), delta: deltas.arr, sub: m.customersSigned ? `${m.customersSigned} paying accounts` : undefined, icon: DollarSign });
+    out.push({ label: "ARR", freshnessKey: "arr", value: formatMoney(m.arrCents), delta: deltas.arr, sub: m.customersSigned ? `${m.customersSigned} paying accounts` : undefined, icon: DollarSign });
   } else if (m.mrrCents && m.mrrCents > 0) {
-    out.push({ label: "MRR", value: formatMoney(m.mrrCents), delta: deltas.mrr, icon: DollarSign });
+    out.push({ label: "MRR", freshnessKey: "mrr", value: formatMoney(m.mrrCents), delta: deltas.mrr, icon: DollarSign });
   } else if (m.gmvMonthlyCents && m.gmvMonthlyCents > 0) {
     out.push({ label: "GMV / mo", value: formatMoney(m.gmvMonthlyCents), delta: deltas.gmvMonthly, sub: "marketplace volume", icon: DollarSign });
   } else if (m.fundingRaisedCents && m.fundingRaisedCents > 0) {
@@ -148,6 +170,7 @@ function buildMetrics(m: CompanyMetrics): PulseMetric[] {
   } else if (m.pipelineCount !== undefined && m.pipelineCount > 0) {
     out.push({
       label: "Pipeline",
+      freshnessKey: "pipeline",
       value: m.pipelineCount.toString(),
       delta: deltas.pipeline,
       sub: m.pipelineCents ? `${formatMoney(m.pipelineCents)} weighted` : (m.customersSigned ? `${m.customersSigned} signed` : undefined),
@@ -159,12 +182,12 @@ function buildMetrics(m: CompanyMetrics): PulseMetric[] {
 
   // Burn
   if (m.monthlyBurnCents !== undefined && m.monthlyBurnCents > 0) {
-    out.push({ label: "Monthly burn", value: formatMoney(m.monthlyBurnCents), delta: deltas.monthlyBurn, icon: Flame });
+    out.push({ label: "Monthly burn", freshnessKey: "burn", value: formatMoney(m.monthlyBurnCents), delta: deltas.monthlyBurn, icon: Flame });
   }
 
   // Runway or milestone
   if (m.runwayMonths !== undefined && m.runwayMonths > 0) {
-    out.push({ label: "Runway", value: `${m.runwayMonths} mo`, delta: deltas.runway, sub: m.nextMilestoneLabel ? `→ ${m.nextMilestoneLabel}` : undefined, icon: Clock });
+    out.push({ label: "Runway", freshnessKey: "runway", value: `${m.runwayMonths} mo`, delta: deltas.runway, sub: m.nextMilestoneLabel ? `→ ${m.nextMilestoneLabel}` : undefined, icon: Clock });
   } else if (m.nextMilestoneLabel) {
     out.push({ label: "Next", value: m.nextMilestoneLabel, icon: Zap });
   }
@@ -185,9 +208,48 @@ function formatCompact(n: number): string {
   return n.toString();
 }
 
-function PulseCell({ metric }: { metric: PulseMetric }) {
+// ---------------------------------------------------------------------------
+// Freshness badge
+// ---------------------------------------------------------------------------
+
+const FRESHNESS_THRESHOLDS = {
+  red: 60 * 60 * 1000,    // > 1h old
+  yellow: 15 * 60 * 1000, // > 15m old
+} as const;
+
+/** Returns the Tailwind colour class for a lastSyncAt timestamp. */
+export function freshnessColor(lastSyncAt: string | null): string {
+  if (!lastSyncAt) return "text-muted-foreground/60";
+  const age = Date.now() - new Date(lastSyncAt).getTime();
+  if (age > FRESHNESS_THRESHOLDS.red) return "text-red-500 dark:text-red-400";
+  if (age > FRESHNESS_THRESHOLDS.yellow) return "text-amber-500 dark:text-amber-400";
+  return "text-emerald-600 dark:text-emerald-400";
+}
+
+function FreshnessBadge({ entry }: { entry: { sourceLastSync: string | null } | null }) {
+  if (!entry) return null;
+  const { sourceLastSync } = entry;
+  const color = freshnessColor(sourceLastSync);
+  return (
+    <p className={cn("mt-1.5 text-[10px] tabular-nums", color)}>
+      {sourceLastSync ? `synced ${timeAgo(sourceLastSync)}` : "never synced"}
+    </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PulseCell
+// ---------------------------------------------------------------------------
+
+function PulseCell({
+  metric,
+  freshness,
+}: {
+  metric: PulseMetric;
+  freshness: { sourceLastSync: string | null } | null | undefined;
+}) {
   const Icon = metric.icon;
-  const Delta =
+  const DeltaIcon =
     metric.delta?.dir === "up"
       ? TrendingUp
       : metric.delta?.dir === "down"
@@ -212,13 +274,16 @@ function PulseCell({ metric }: { metric: PulseMetric }) {
         </div>
         {metric.delta && (
           <div className={cn("flex items-center gap-0.5 text-[11px] font-medium", deltaColor)}>
-            {Delta && <Delta className="h-3 w-3" />}
+            {DeltaIcon && <DeltaIcon className="h-3 w-3" />}
             <span>{metric.delta.text}</span>
           </div>
         )}
       </div>
       {metric.sub && (
         <div className="mt-1 text-[11px] text-muted-foreground leading-snug">{metric.sub}</div>
+      )}
+      {metric.freshnessKey && freshness !== undefined && (
+        <FreshnessBadge entry={freshness ?? null} />
       )}
     </div>
   );

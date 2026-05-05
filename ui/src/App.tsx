@@ -7,6 +7,7 @@ import { OnboardingWizard } from "./components/OnboardingWizard";
 import { FounderOnboardingWizard } from "./components/onboarding/FounderOnboardingWizard";
 import { authApi } from "./api/auth";
 import { useSupabaseAuth } from "./context/SupabaseAuthContext";
+import { branding } from "./branding";
 
 /**
  * Feature flag for the opinionated 6-step founder onboarding (Wave 15A).
@@ -53,6 +54,7 @@ const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => (
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
 const AuditLog = lazy(() => import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })));
+const Alerts = lazy(() => import("./pages/Alerts").then((m) => ({ default: m.Alerts })));
 const CompanySettings = lazy(() => import("./pages/CompanySettings").then((m) => ({ default: m.CompanySettings })));
 const CompanySkills = lazy(() => import("./pages/CompanySkills").then((m) => ({ default: m.CompanySkills })));
 const CompanyExport = lazy(() => import("./pages/CompanyExport").then((m) => ({ default: m.CompanyExport })));
@@ -95,8 +97,8 @@ function BootstrapPendingPage({ hasActiveInvite = false }: { hasActiveInvite?: b
         <h1 className="text-xl font-semibold">Instance setup required</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {hasActiveInvite
-            ? "No instance admin exists yet. A bootstrap invite is already active. Check your FounderOS startup logs for the first admin invite URL, or run this command to rotate it:"
-            : "No instance admin exists yet. Run this command in your FounderOS environment to generate the first admin invite URL:"}
+            ? `No instance admin exists yet. A bootstrap invite is already active. Check your ${branding.productName} startup logs for the first admin invite URL, or run this command to rotate it:`
+            : `No instance admin exists yet. Run this command in your ${branding.productName} environment to generate the first admin invite URL:`}
         </p>
         <pre className="mt-4 overflow-x-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
 {`pnpm founderos auth bootstrap-ceo`}
@@ -201,7 +203,7 @@ function BootSplash() {
       <div className="flex flex-col items-center gap-4">
         <div className="h-10 w-10 rounded-md bg-[var(--brand)] animate-pulse" />
         <div className="text-sm font-medium text-foreground/70 tracking-wide">
-          FounderOS
+          {branding.productName}
         </div>
       </div>
     </div>
@@ -276,6 +278,7 @@ function boardRoutes() {
       <Route path="integrations" element={<Integrations />} />
       <Route path="activity" element={<Activity />} />
       <Route path="audit" element={<AuditLog />} />
+      <Route path="alerts" element={<Alerts />} />
       <Route path="weekly" element={<WeeklyWrap />} />
       <Route path="conversations" element={<Conversations />} />
       <Route path="conversations/:convId" element={<Conversations />} />

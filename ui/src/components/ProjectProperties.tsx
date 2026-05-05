@@ -10,6 +10,7 @@ import { projectsApi } from "../api/projects";
 import { secretsApi } from "../api/secrets";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
+import { branding } from "../branding";
 import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -727,7 +728,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                     {codebase.effectiveLocalFolder}
                   </div>
                   {codebase.origin === "managed_checkout" && (
-                    <div className="text-[11px] text-muted-foreground">FounderOS-managed folder.</div>
+                    <div className="text-[11px] text-muted-foreground">{branding.productName}-managed folder.</div>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -759,7 +760,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
 
             {hasAdditionalLegacyWorkspaces && (
               <div className="text-[11px] text-muted-foreground">
-                Additional legacy workspace records exist on this project. FounderOS is using the primary workspace as the codebase view.
+                Additional legacy workspace records exist on this project. {branding.productName} is using the primary workspace as the codebase view.
               </div>
             )}
 

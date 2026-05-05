@@ -16,6 +16,12 @@ export const activityLog = pgTable(
     agentId: uuid("agent_id").references(() => agents.id),
     runId: uuid("run_id").references(() => heartbeatRuns.id),
     details: jsonb("details").$type<Record<string, unknown>>(),
+    workflowId: text("workflow_id"),
+    lineageRefs: jsonb("lineage_refs").$type<{
+      insightIds?: string[];
+      approvalIds?: string[];
+      eventIds?: string[];
+    }>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

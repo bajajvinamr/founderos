@@ -167,4 +167,11 @@ export const queryKeys = {
     forApproval: (companyId: string, approvalId: string) =>
       ["decision-outcomes", companyId, "for-approval", approvalId] as const,
   },
+  departments: {
+    list: (companyId: string) => ["departments", companyId] as const,
+  },
+  integrationHealth: {
+    list: (companyId: string) => ["integration-health", companyId] as const,
+    kpiFreshness: (companyId: string) => ["kpi-freshness", companyId] as const,
+  },
 };
