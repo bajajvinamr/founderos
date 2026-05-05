@@ -374,6 +374,13 @@ export function loadConfig(): Config {
     heartbeatSchedulerEnabled: process.env.HEARTBEAT_SCHEDULER_ENABLED !== "false",
     heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
     companyDeletionEnabled,
-    telemetryEnabled: fileConfig?.telemetry?.enabled ?? true,
+    // Telemetry consent is OFF by default (council 2026-05-05 P1 fix). The
+    // landing page promises "no telemetry unless you flip it on", so a
+    // fresh install MUST NOT post events to the ingest endpoint until an
+    // operator has explicitly opted in via the onboarding consent step or
+    // the /settings/general admin toggle. Both write `telemetry.enabled: true`
+    // into the file config, which is what flips this on. Regression test:
+    // server/src/__tests__/config-telemetry-defaults.test.ts guards this.
+    telemetryEnabled: fileConfig?.telemetry?.enabled === true,
   };
 }
