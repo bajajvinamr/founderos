@@ -70,26 +70,37 @@ export async function ingestSlackMessages(
 
   try {
     const composio = getComposioClient();
+    if (!composio) {
+      logger.warn(
+        { companyId, workspaceId },
+        "slack-ingest: Composio client not configured (COMPOSIO_API_KEY missing); skipping",
+      );
+      return { created: 0, deduplicated: 0 };
+    }
 
     // List channels the bot is in.
-    const listChannelsResponse = await composio.client.executeToolForWorkspace({
-      workspaceId,
+    // ⚠ Council 2026-05-05: Composio call shape needs human QA — see task #124.
+    const listChannelsResponse = await composio.executeTool({
+      userId: workspaceId,
       connectedAccountId,
-      toolName: "slack_list_channels",
-      executeRequest: {},
+      toolName: "SLACK_LIST_CHANNELS",
+      params: {},
     });
 
-    if (!listChannelsResponse || !listChannelsResponse.successfull) {
+    if (!listChannelsResponse.ok) {
       logger.warn(
-        { companyId, workspaceId, connectedAccountId },
+        { companyId, workspaceId, connectedAccountId, reason: listChannelsResponse.reason, message: listChannelsResponse.message },
         "slack-ingest: slack_list_channels returned unsuccessful",
       );
       return { created: 0, deduplicated: 0 };
     }
 
-    const channels = Array.isArray(listChannelsResponse.data)
-      ? listChannelsResponse.data
-      : listChannelsResponse.data?.channels || [];
+    const channelsOutput = listChannelsResponse.output as { channels?: unknown[] } | unknown[];
+    const channels = Array.isArray(channelsOutput)
+      ? channelsOutput
+      : Array.isArray(channelsOutput?.channels)
+      ? channelsOutput.channels
+      : [];
 
     if (!Array.isArray(channels)) {
       logger.warn(
@@ -102,14 +113,16 @@ export async function ingestSlackMessages(
     let created = 0;
     let deduplicated = 0;
 
-    for (const channel of channels) {
+    for (const rawChannel of channels) {
+      const channel = rawChannel as Record<string, unknown>;
       // Skip DMs and private channels
       if (!shouldIngestChannel(channel)) {
         continue;
       }
 
-      const channelId = channel.id as string;
-      const channelName = (channel.name as string) || "";
+      const channelId = String(channel.id ?? "");
+      const channelName = String(channel.name ?? "");
+      if (!channelId) continue;
 
       try {
         // Fetch messages from the last 24h (rolling window).
@@ -117,29 +130,31 @@ export async function ingestSlackMessages(
         const now = Math.floor(Date.now() / 1000);
         const oneDayAgo = now - 86400;
 
-        const messagesResponse =
-          await composio.client.executeToolForWorkspace({
-            workspaceId,
-            connectedAccountId,
-            toolName: "slack_fetch_messages",
-            executeRequest: {
-              channel_id: channelId,
-              oldest: String(oneDayAgo),
-              latest: String(now),
-            },
-          });
+        const messagesResponse = await composio.executeTool({
+          userId: workspaceId,
+          connectedAccountId,
+          toolName: "SLACK_FETCH_MESSAGES",
+          params: {
+            channel_id: channelId,
+            oldest: String(oneDayAgo),
+            latest: String(now),
+          },
+        });
 
-        if (!messagesResponse || !messagesResponse.successfull) {
+        if (!messagesResponse.ok) {
           logger.warn(
-            { companyId, channelId, channelName },
+            { companyId, channelId, channelName, reason: messagesResponse.reason, message: messagesResponse.message },
             "slack-ingest: slack_fetch_messages returned unsuccessful",
           );
           continue;
         }
 
-        const messages = Array.isArray(messagesResponse.data)
-          ? messagesResponse.data
-          : messagesResponse.data?.messages || [];
+        const messagesOutput = messagesResponse.output as { messages?: unknown[] } | unknown[];
+        const messages: unknown[] = Array.isArray(messagesOutput)
+          ? messagesOutput
+          : Array.isArray(messagesOutput?.messages)
+          ? messagesOutput.messages
+          : [];
 
         if (!Array.isArray(messages)) {
           logger.warn(
@@ -149,23 +164,24 @@ export async function ingestSlackMessages(
           continue;
         }
 
-        for (const message of messages) {
-          const text = (message.text as string) || "";
-          const userId = (message.user as string) || "";
-          const ts = (message.ts as string) || String(now);
+        for (const rawMessage of messages) {
+          const message = rawMessage as Record<string, unknown>;
+          const text = String(message.text ?? "");
+          const userId = String(message.user ?? "");
+          const ts = String(message.ts ?? now);
 
           // PII redaction: strip email addresses
           const redactedText = redactEmails(text);
 
           // Source event ID: channel_id + message timestamp (unique per channel)
-          const sourceEventId = `${channelId}:${ts}`;
+          const dedupKey = `${channelId}:${ts}`;
 
           const result = await ingestEvent({
             companyId,
             source: "slack",
             entityType: "message",
             eventName: "message.posted",
-            sourceEventId,
+            dedupKey,
             occurredAt: new Date(Math.floor(parseFloat(ts) * 1000)),
             payload: {
               channelId,

@@ -23,7 +23,7 @@ import {
   type PostHogRawEvent,
 } from "./posthog-client.js";
 import { decryptWithMasterKey } from "../secrets/local-encrypted-provider.js";
-import { ingestEvent } from "./event-ingest-stub.js";
+import { ingestEvent } from "./event-ingest.js";
 import { logger } from "../middleware/logger.js";
 
 export const POSTHOG_POLL_QUEUE = "posthog-poll";
@@ -134,7 +134,7 @@ export async function runPostHogPoll(
         source: "posthog",
         entityType: resolveEntityType(event.event),
         eventName: event.event,
-        sourceEventId: event.id,
+        dedupKey: event.id,
         occurredAt: new Date(event.timestamp),
         payload: {
           distinctId: event.distinct_id,

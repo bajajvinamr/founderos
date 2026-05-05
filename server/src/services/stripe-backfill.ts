@@ -4,7 +4,7 @@
  * `backfillCompanyStripe` paginates Stripe's REST API for subscriptions,
  * customers, and invoices, and pushes each item into the canonical events
  * table via ingestEvent. The events table's UNIQUE constraint on
- * (companyId, source, sourceEventId) makes every call idempotent — running
+ * (companyId, source, dedupKey) makes every call idempotent — running
  * the backfill twice produces the same row count as running it once.
  *
  * Pagination strategy:
@@ -26,7 +26,7 @@
 import Stripe from "stripe";
 import { logger } from "../middleware/logger.js";
 // TODO(S2.1): replace with real ingestEvent import once events table merges
-import { ingestEvent } from "./event-ingest-stub.js";
+import { ingestEvent } from "./event-ingest.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,7 +126,7 @@ async function backfillCustomers(
           source: "stripe",
           entityType: "customer",
           eventName: "customer.created",
-          sourceEventId: `backfill:customer:${customer.id}`,
+          dedupKey: `backfill:customer:${customer.id}`,
           occurredAt: new Date(customer.created * 1000),
           payload: customer,
         },
@@ -161,7 +161,7 @@ async function backfillSubscriptions(
           source: "stripe",
           entityType: "subscription",
           eventName: "customer.subscription.created",
-          sourceEventId: `backfill:subscription:${sub.id}`,
+          dedupKey: `backfill:subscription:${sub.id}`,
           occurredAt: new Date(sub.created * 1000),
           payload: sub,
         },
@@ -196,7 +196,7 @@ async function backfillInvoices(
           source: "stripe",
           entityType: "invoice",
           eventName: "invoice.created",
-          sourceEventId: `backfill:invoice:${invoice.id}`,
+          dedupKey: `backfill:invoice:${invoice.id}`,
           occurredAt: new Date(invoice.created * 1000),
           payload: invoice,
         },
@@ -227,11 +227,11 @@ async function ingestItem(
   } catch (err) {
     const msg =
       err instanceof Error
-        ? `${input.sourceEventId}: ${err.message}`
-        : `${input.sourceEventId}: unknown error`;
+        ? `${input.dedupKey}: ${err.message}`
+        : `${input.dedupKey}: unknown error`;
     result.errors.push(msg);
     logger.warn(
-      { err, sourceEventId: input.sourceEventId, companyId: input.companyId },
+      { err, dedupKey: input.dedupKey, companyId: input.companyId },
       "stripe-backfill: item ingest failed (continuing)",
     );
   }

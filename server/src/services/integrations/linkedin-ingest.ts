@@ -9,7 +9,7 @@
  *   - CRITICAL: threads `connectedAccountId` from workspace's Composio connection
  *     to prevent cross-org leaks (PR #30). Every runComposioTool call includes it.
  *   - Recurring: every 1 hour, fetch posts from last 30 days + daily follower snapshots
- *   - Dedup: sourceEventId = `<post_id>:<snapshot_date>` for metrics snapshots
+ *   - Dedup: dedupKey = `<post_id>:<snapshot_date>` for metrics snapshots
  *   - Rate limiting: exponential backoff (1s, 4s, 16s) on 429/503, then give up
  *
  * Composio LinkedIn tool slugs (discovered via composio.tools.list({ toolkits: ['linkedin'] })):
@@ -24,8 +24,8 @@
 
 import type { Db } from "@founderos/db";
 import { composioConnections } from "@founderos/db";
-import { eq } from "drizzle-orm";
-import { ingestEvent, type IngestEventInput } from "../event-ingest-stub.js";
+import { and, eq } from "drizzle-orm";
+import { ingestEvent, type IngestEventInput } from "../event-ingest.js";
 import { executeTool } from "../composio-client.js";
 import { logger } from "../../middleware/logger.js";
 
@@ -143,8 +143,12 @@ export async function linkedinIngestService(
   const connections = await db
     .select()
     .from(composioConnections)
-    .where(eq(composioConnections.companyId, companyId))
-    .where(eq(composioConnections.appName, "linkedin"))
+    .where(
+      and(
+        eq(composioConnections.companyId, companyId),
+        eq(composioConnections.appName, "linkedin"),
+      ),
+    )
     .limit(1);
 
   if (connections.length === 0) {
@@ -228,14 +232,14 @@ export async function linkedinIngestService(
 
         // Emit event with metrics snapshot
         const snapshotDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-        const sourceEventId = `${post.id}:${snapshotDate}`;
+        const dedupKey = `${post.id}:${snapshotDate}`;
 
         const ingestPayload: IngestEventInput = {
           companyId,
           source: "linkedin",
           entityType: "post",
           eventName: "post.metrics_snapshot",
-          sourceEventId,
+          dedupKey,
           occurredAt: now,
           payload: {
             postId: post.id,
@@ -296,7 +300,7 @@ export async function linkedinIngestService(
         source: "linkedin",
         entityType: "profile",
         eventName: "profile.followers_snapshot",
-        sourceEventId: snapshotDate,
+        dedupKey: snapshotDate,
         occurredAt: now,
         payload: {
           followerCount,

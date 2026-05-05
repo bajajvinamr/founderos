@@ -20,9 +20,9 @@
  *   - deal.stage_changed | deal.closed_won | deal.closed_lost (entity_type: 'deal')
  *
  * Dedup strategy:
- *   - Contacts: sourceEventId = `<contact_id>:<lifecycle_stage>` so lifecycle changes
+ *   - Contacts: dedupKey = `<contact_id>:<lifecycle_stage>` so lifecycle changes
  *     don't dedup against the initial contact.created event
- *   - Deals: sourceEventId = `<deal_id>:<stage>` so stage changes generate new events
+ *   - Deals: dedupKey = `<deal_id>:<stage>` so stage changes generate new events
  */
 
 import type { Db } from "@founderos/db";
@@ -223,7 +223,7 @@ export async function hubspotIngestService(
         }
 
         const lifecycleStage = contact.properties?.lifecyclestage ?? "unknown";
-        const sourceEventId = `${contact.id}:${lifecycleStage}`;
+        const dedupKey = `${contact.id}:${lifecycleStage}`;
 
         // Determine event type based on lifecycle stage
         let eventName = "contact.created";
@@ -236,7 +236,7 @@ export async function hubspotIngestService(
           source: "hubspot",
           entityType: "contact",
           eventName,
-          sourceEventId,
+          dedupKey,
           occurredAt: lastModified,
           payload: {
             contactId: contact.id,
@@ -312,7 +312,7 @@ export async function hubspotIngestService(
         }
 
         const stage = deal.properties?.dealstage ?? "unknown";
-        const sourceEventId = `${deal.id}:${stage}`;
+        const dedupKey = `${deal.id}:${stage}`;
 
         // Map stage to event name
         let eventName = "deal.stage_changed";
@@ -327,7 +327,7 @@ export async function hubspotIngestService(
           source: "hubspot",
           entityType: "deal",
           eventName,
-          sourceEventId,
+          dedupKey,
           occurredAt: lastModified,
           payload: {
             dealId: deal.id,

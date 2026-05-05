@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { linkedinIngestService } from "../services/integrations/linkedin-ingest.js";
-import { ingestEvent } from "../services/event-ingest-stub.js";
+import { ingestEvent } from "../services/event-ingest.js";
 import * as composioClient from "../services/composio-client.js";
 
-vi.mock("../services/event-ingest-stub.js");
+vi.mock("../services/event-ingest.js");
 vi.mock("../services/composio-client.js");
 
 describe("linkedinIngestService", () => {
@@ -85,7 +85,7 @@ describe("linkedinIngestService", () => {
     const firstCall = mockIngestEvent.mock.calls[0][0];
     expect(firstCall.source).toBe("linkedin");
     expect(firstCall.eventName).toBe("post.metrics_snapshot");
-    expect(firstCall.sourceEventId).toMatch(/^post-1:/);
+    expect(firstCall.dedupKey).toMatch(/^post-1:/);
   });
 
   it("should handle multiple posts with dedup contract", async () => {
@@ -216,7 +216,7 @@ describe("linkedinIngestService", () => {
     );
   });
 
-  it("should prevent cross-org leaks via sourceEventId structure", async () => {
+  it("should prevent cross-org leaks via dedupKey structure", async () => {
     const mockDb = {
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -278,13 +278,13 @@ describe("linkedinIngestService", () => {
 
     expect(result.postsProcessed).toBe(1);
 
-    // Verify that sourceEventId is scoped by post + date, not shared globally
+    // Verify that dedupKey is scoped by post + date, not shared globally
     const ingestedEvents = mockIngestEvent.mock.calls;
     const postEvent = ingestedEvents.find(
       (call) => call[0].eventName === "post.metrics_snapshot",
     );
     expect(postEvent).toBeDefined();
-    expect(postEvent![0].sourceEventId).toMatch(/^shared-post-id:/);
+    expect(postEvent![0].dedupKey).toMatch(/^shared-post-id:/);
     expect(postEvent![0].companyId).toBe("org-a-company");
   });
 });

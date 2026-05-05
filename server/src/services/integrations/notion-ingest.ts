@@ -31,27 +31,41 @@ export async function ingestNotionPages(
 
   try {
     const composio = getComposioClient();
+    if (!composio) {
+      logger.warn(
+        { companyId, workspaceId },
+        "notion-ingest: Composio client not configured (COMPOSIO_API_KEY missing); skipping",
+      );
+      return { created: 0, deduplicated: 0 };
+    }
 
     // List pages the founder explicitly granted access to.
     // Composio Notion API: notion_list_pages returns only accessible pages.
-    const listPagesResponse = await composio.client.executeToolForWorkspace({
-      workspaceId,
+    // ⚠ Council 2026-05-05: this Composio call shape needs human QA — original
+    //   agent wrote against a non-existent `composio.client.executeToolForWorkspace`
+    //   shape. Translated to actual `executeTool` v3 API; the tool slug and
+    //   response shape need to be verified against live Composio behavior.
+    const listPagesResponse = await composio.executeTool({
+      userId: workspaceId,
       connectedAccountId,
-      toolName: "notion_list_pages",
-      executeRequest: {},
+      toolName: "NOTION_LIST_PAGES",
+      params: {},
     });
 
-    if (!listPagesResponse || !listPagesResponse.successfull) {
+    if (!listPagesResponse.ok) {
       logger.warn(
-        { companyId, workspaceId, connectedAccountId },
+        { companyId, workspaceId, connectedAccountId, reason: listPagesResponse.reason, message: listPagesResponse.message },
         "notion-ingest: notion_list_pages returned unsuccessful",
       );
       return { created: 0, deduplicated: 0 };
     }
 
-    const pages = Array.isArray(listPagesResponse.data)
-      ? listPagesResponse.data
-      : listPagesResponse.data?.pages || [];
+    const output = listPagesResponse.output as { pages?: unknown[] } | unknown[];
+    const pages = Array.isArray(output)
+      ? output
+      : Array.isArray(output?.pages)
+      ? output.pages
+      : [];
 
     if (!Array.isArray(pages)) {
       logger.warn(
@@ -64,18 +78,20 @@ export async function ingestNotionPages(
     let created = 0;
     let deduplicated = 0;
 
-    for (const page of pages) {
-      const pageId = page.id;
-      const title = page.title || page.name || "(untitled)";
-      const lastEditedTime = page.last_edited_time || new Date();
-      const url = page.url || "";
+    for (const rawPage of pages) {
+      const page = rawPage as Record<string, unknown>;
+      const pageId = String(page.id ?? "");
+      if (!pageId) continue;
+      const title = String(page.title ?? page.name ?? "(untitled)");
+      const lastEditedTime = (page.last_edited_time as string | Date | undefined) ?? new Date();
+      const url = String(page.url ?? "");
 
       const result = await ingestEvent({
         companyId,
         source: "notion",
         entityType: "page",
         eventName: "page.snapshot",
-        sourceEventId: pageId,
+        dedupKey: pageId,
         occurredAt: new Date(lastEditedTime),
         payload: {
           title,

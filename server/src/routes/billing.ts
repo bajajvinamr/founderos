@@ -2,8 +2,7 @@ import { Router, type Request, type Response } from "express";
 import type { Db } from "@founderos/db";
 import { subscriptionService } from "../services/subscription.js";
 import { createStripeClient } from "../services/stripe-client.js";
-// TODO(S2.1): replace with real ingestEvent import once events table merges
-import { ingestEvent } from "../services/event-ingest-stub.js";
+import { ingestEvent } from "../services/event-ingest.js";
 import { logger } from "../middleware/logger.js";
 import { billingWebhookLimiter } from "../middleware/rate-limit.js";
 
@@ -66,8 +65,6 @@ const INGEST_EVENT_TYPES = new Set([
  * companyId: on the self-hosted single-tenant build there is exactly one
  * company; resolved from FOUNDEROS_DEFAULT_COMPANY_ID. Multi-tenant builds
  * will need to resolve via Stripe customer → company mapping.
- *
- * TODO(S2.1): replace stub import with real ingestEvent import once events table merges
  */
 async function ingestStripeEvent(
   event: StripeEventWithCreated,
@@ -81,7 +78,7 @@ async function ingestStripeEvent(
       source: "stripe",
       entityType: resolveEntityType(event.type),
       eventName: event.type,
-      sourceEventId: event.id,
+      dedupKey: event.id,
       occurredAt: new Date(event.created * 1000),
       payload: event.data.object,
     });
@@ -206,7 +203,6 @@ export function billingRoutes(db: Db) {
       // Cast to StripeEventWithCreated: Stripe always includes `created` on
       // the raw event object — constructWebhookEvent passes it through as
       // unknown fields on the return value from the Stripe SDK.
-      // TODO(S2.1): replace stub import with real ingestEvent once events table merges
       const companyId =
         process.env.FOUNDEROS_DEFAULT_COMPANY_ID ?? "default-company";
       await ingestStripeEvent(event as unknown as StripeEventWithCreated, companyId);

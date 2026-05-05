@@ -48,15 +48,15 @@ export function createNotionSyncCron(
       // A workspace is "active" if it has a composio_connection row with app: 'notion'.
       const connections = await db
         .select({
-          workspaceId: composioConnections.workspaceId,
-          connectedAccountId: composioConnections.connectedAccountId,
+          workspaceId: composioConnections.userId,
+          connectedAccountId: composioConnections.composioConnectionId,
           companyId: composioConnections.companyId,
         })
         .from(composioConnections)
         .where(
           and(
-            eq(composioConnections.app, "notion"),
-            not(isNull(composioConnections.connectedAccountId)),
+            eq(composioConnections.appName, "notion"),
+            not(isNull(composioConnections.composioConnectionId)),
           ),
         );
 

@@ -48,15 +48,15 @@ export function createSlackSyncCron(opts: SlackSyncCronOptions): SlackSyncCron {
       // A workspace is "active" if it has a composio_connection row with app: 'slack'.
       const connections = await db
         .select({
-          workspaceId: composioConnections.workspaceId,
-          connectedAccountId: composioConnections.connectedAccountId,
+          workspaceId: composioConnections.userId,
+          connectedAccountId: composioConnections.composioConnectionId,
           companyId: composioConnections.companyId,
         })
         .from(composioConnections)
         .where(
           and(
-            eq(composioConnections.app, "slack"),
-            not(isNull(composioConnections.connectedAccountId)),
+            eq(composioConnections.appName, "slack"),
+            not(isNull(composioConnections.composioConnectionId)),
           ),
         );
 

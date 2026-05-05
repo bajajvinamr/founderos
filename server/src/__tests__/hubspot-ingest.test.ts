@@ -158,7 +158,7 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
       .where(sql`company_id = ${companyAId} AND source = 'hubspot' AND entity_type = 'contact'`);
     expect(contactEvents).toHaveLength(1);
     expect(contactEvents[0].eventName).toBe("contact.created");
-    expect(contactEvents[0].sourceEventId).toContain("contact_001");
+    expect(contactEvents[0].dedupKey).toContain("contact_001");
 
     mockExecute.mockRestore();
   });
@@ -233,7 +233,7 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
       .from(events)
       .where(sql`company_id = ${companyAId} AND source = 'hubspot'`);
     expect(contactEvents).toHaveLength(1);
-    expect(contactEvents[0].sourceEventId).toContain("new_contact");
+    expect(contactEvents[0].dedupKey).toContain("new_contact");
   });
 
   // ── (c) Lifecycle stage changes ingest as new events ────────────────────
@@ -292,7 +292,7 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
       .where(sql`company_id = ${companyAId} AND entity_type = 'contact'`);
     expect(contactEvents).toHaveLength(1);
     expect(contactEvents[0].eventName).toBe("contact.lifecycle_changed"); // lead → lifecycle change, not created
-    expect(contactEvents[0].sourceEventId).toBe("contact_xyz:lead"); // Dedup key includes stage
+    expect(contactEvents[0].dedupKey).toBe("contact_xyz:lead"); // Dedup key includes stage
   });
 
   // ── (d) Cross-org leak regression ───────────────────────────────────────
@@ -389,7 +389,7 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
 
   // ── (e) Deal events are ingested correctly ───────────────────────────────
 
-  it("(e) deal events (stage_changed, closed_won, closed_lost) are ingested as distinct sourceEventIds", async () => {
+  it("(e) deal events (stage_changed, closed_won, closed_lost) are ingested as distinct dedupKeys", async () => {
     await db.insert(composioConnections).values({
       companyId: companyAId,
       userId: "user-a",
@@ -467,7 +467,7 @@ describeEmbeddedPostgres("hubspot-ingest service — watermarking + cross-org le
       "deal.stage_changed",
     ]);
 
-    // Verify sourceEventId includes stage (so stage changes don't dedup on id alone)
-    expect(dealEvents[0].sourceEventId).toMatch(/^deal_\d{3}:[a-z]+$/);
+    // Verify dedupKey includes stage (so stage changes don't dedup on id alone)
+    expect(dealEvents[0].dedupKey).toMatch(/^deal_\d{3}:[a-z]+$/);
   });
 });

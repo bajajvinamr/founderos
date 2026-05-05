@@ -27,7 +27,7 @@ import {
   PostHogAuthError,
 } from "../services/posthog-client.js";
 import { integrationService } from "../services/integrations.js";
-import { ingestEvent } from "../services/event-ingest-stub.js";
+import { ingestEvent } from "../services/event-ingest.js";
 import { logger } from "../middleware/logger.js";
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
@@ -197,6 +197,14 @@ export function postHogRoutes(db: Db) {
         const timestamp = parseTimestamp(ev["timestamp"]);
         const distinctId = typeof ev["distinct_id"] === "string" ? ev["distinct_id"] : undefined;
         const entityType = resolveEntityType(eventName);
+        // PostHog event id is the natural dedup key. When PostHog omits it
+        // (rare, but possible with custom collectors), synthesize from
+        // event name + timestamp + distinct_id so each event is uniquely
+        // keyed without colliding the NULL-key footgun the council BLOCK
+        // closed off (see /council 2026-05-05 verdict).
+        const dedupKey =
+          eventId ??
+          `synth:${eventName}:${timestamp.toISOString()}:${distinctId ?? "anon"}`;
 
         try {
           await ingestEvent({
@@ -204,7 +212,7 @@ export function postHogRoutes(db: Db) {
             source: "posthog",
             entityType,
             eventName,
-            sourceEventId: eventId,
+            dedupKey,
             occurredAt: timestamp,
             payload: {
               distinctId,

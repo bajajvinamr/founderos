@@ -7,7 +7,7 @@
  *   Returns: { ingested: number; deduplicated: number; errors: string[] }
  *
  * The underlying backfill is idempotent — the events table UNIQUE constraint
- * (companyId, source, sourceEventId) ensures a second run produces no new rows.
+ * (companyId, source, dedupKey) ensures a second run produces no new rows.
  */
 
 import { Router, type Request, type Response } from "express";

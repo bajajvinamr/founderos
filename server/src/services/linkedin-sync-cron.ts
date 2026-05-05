@@ -11,7 +11,7 @@
 
 import type { Db } from "@founderos/db";
 import { composioConnections } from "@founderos/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { linkedinIngestService } from "./integrations/linkedin-ingest.js";
 import { logger } from "../middleware/logger.js";
 
@@ -50,12 +50,16 @@ export function createLinkedInSyncCron(opts: LinkedInSyncCronOptions): LinkedInS
       const connections = await db
         .select()
         .from(composioConnections)
-        .where(eq(composioConnections.appName, "linkedin"))
-        .where(eq(composioConnections.status, "active"));
+        .where(
+          and(
+            eq(composioConnections.appName, "linkedin"),
+            eq(composioConnections.status, "active"),
+          ),
+        );
 
       // Deduplicate by companyId (one company may have multiple connections)
-      const uniqueCompanies = new Set(connections.map((c) => c.companyId));
-      const companies = Array.from(uniqueCompanies);
+      const uniqueCompanies = new Set(connections.map((c: { companyId: string }) => c.companyId));
+      const companies: string[] = Array.from(uniqueCompanies);
 
       logger.info(
         { companyCount: companies.length },

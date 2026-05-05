@@ -106,7 +106,7 @@ describe("Integration DLQ Retry Behavior", () => {
           companyId: "company-1",
           source: "stripe",
           eventName: "subscription.created",
-          sourceEventId: "evt_1234567890",
+          dedupKey: "evt_1234567890",
         },
         attemptsMade: 5,
       });

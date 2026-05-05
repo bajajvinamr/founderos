@@ -4,7 +4,7 @@
  * Tests:
  *   1. All 14 Stripe event types fire ingestEvent with the correct normalized
  *      shape: source='stripe', correct entityType, eventName=<stripe type>,
- *      sourceEventId=<stripe event id>, occurredAt=<event.created → Date>,
+ *      dedupKey=<stripe event id>, occurredAt=<event.created → Date>,
  *      payload=<event.data.object>.
  *   2. Events outside the 14-type set do NOT call ingestEvent.
  *   3. ingestStripeEvent is non-throwing even when ingestEvent rejects.
@@ -24,12 +24,12 @@ import request from "supertest";
 // can intercept the stub's export.
 // ---------------------------------------------------------------------------
 
-vi.mock("../services/event-ingest-stub.js", () => ({
+vi.mock("../services/event-ingest.js", () => ({
   ingestEvent: vi.fn().mockResolvedValue({ eventId: "stub-evt-001", deduplicated: false }),
 }));
 
 // Import after mock registration.
-import { ingestEvent } from "../services/event-ingest-stub.js";
+import { ingestEvent } from "../services/event-ingest.js";
 import { billingRoutes } from "../routes/billing.js";
 
 // ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
           source: "stripe",
           entityType: "customer",
           eventName: eventType,
-          sourceEventId: evt.id,
+          dedupKey: evt.id,
           occurredAt: new Date(evt.created * 1000),
           payload: evt.data.object,
         }),
@@ -221,7 +221,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
           source: "stripe",
           entityType: "subscription",
           eventName: eventType,
-          sourceEventId: evt.id,
+          dedupKey: evt.id,
         }),
       );
     });
@@ -239,7 +239,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
           source: "stripe",
           entityType: "invoice",
           eventName: eventType,
-          sourceEventId: evt.id,
+          dedupKey: evt.id,
         }),
       );
     });
@@ -257,7 +257,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
           source: "stripe",
           entityType: "charge",
           eventName: eventType,
-          sourceEventId: evt.id,
+          dedupKey: evt.id,
         }),
       );
     });
@@ -275,7 +275,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
     );
   });
 
-  it("sourceEventId is the Stripe event.id (not the data.object.id)", async () => {
+  it("dedupKey is the Stripe event.id (not the data.object.id)", async () => {
     const evt = makeStripeEvent("invoice.paid", {
       id: "evt_stripe_top_level_id",
       dataObject: { id: "in_invoice_id", amount: 9900 },
@@ -284,7 +284,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
 
     expect(mockIngestEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceEventId: "evt_stripe_top_level_id",
+        dedupKey: "evt_stripe_top_level_id",
       }),
     );
   });
@@ -319,7 +319,7 @@ describe("stripe webhook event ingestion — 14 event types", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Deduplication path — stub returns deduplicated: true for same sourceEventId
+// Deduplication path — stub returns deduplicated: true for same dedupKey
 // ---------------------------------------------------------------------------
 
 describe("stripe webhook event ingestion — deduplication via stub", () => {
@@ -347,7 +347,7 @@ describe("stripe webhook event ingestion — deduplication via stub", () => {
     expect(res.body.received).toBe(true);
     expect(mockIngestEvent).toHaveBeenCalledOnce();
     expect(mockIngestEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceEventId: "evt_already_seen" }),
+      expect.objectContaining({ dedupKey: "evt_already_seen" }),
     );
   });
 });
