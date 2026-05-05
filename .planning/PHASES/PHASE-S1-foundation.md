@@ -72,30 +72,30 @@ Atomic-PR-sized. Each has PM (intent), Engineering (file paths + interface), QA 
 
 ---
 
-### Ticket S1.2 — Chief of Staff Console (shell only)
+### Ticket S1.2 — Chief of Staff Console (use Dashboard as CoS, add Capital Allocation placeholder)
 
-**PM intent**: Default route `/departments/chief-of-staff` shows a CoS console with 4 modules (Daily Brief, Department Status, Capital Allocation, Decision Inbox). Modules show empty/placeholder state in S1; real content lands in S3.
+**Audit finding 2026-05-05**: `DepartmentConsole.tsx:110-112` already redirects `/departments/chief-of-staff` → `/dashboard`. Dashboard IS the CoS console by design — no new file needed. After S1.1 + S1.6, Dashboard already has 3 of the 4 PRD-specified CoS modules:
+- ✅ Daily Founder Brief — `<FounderBriefing />` (existing)
+- ✅ Department Status — `<DepartmentStatusGrid />` (S1.1)
+- ✅ Decision Inbox — `<DecisionsInbox compact />` (S1.6)
+- ⏳ **Capital Allocation — placeholder needed (this ticket)**
+
+**PM intent**: Add the 4th CoS module — Capital Allocation — as a placeholder card on Dashboard. Real content (channel ROI ranking, "move 30% from Meta → LinkedIn") lands when S2 integrations sync and S3 channel-recommendation engine runs.
 
 **Engineering**:
-- New: `ui/src/pages/departments/ChiefOfStaffConsole.tsx` matching the shape of `GrowthConsole.tsx`
-- Update `DepartmentConsole.tsx` `SPECIALIZED_CONSOLES` set to include `chief-of-staff`
-- Add lazy import for the new console
-- 4 sections within the console:
-  1. Daily Founder Brief — placeholder card "Generates daily at 7am — first run after S3 ships"
-  2. Department Status — reuses `<DepartmentStatusGrid />` from S1.1
-  3. Capital Allocation — placeholder "Activated when integrations sync (S2)"
-  4. Decision Inbox — embeds `<DecisionsInbox compact />`
-- No new endpoints. CoS console is purely UI compositional in S1.
-
-**QA**:
-- Click "Chief of Staff" in left nav → URL updates → console renders with all 4 module headers
-- All 4 modules tolerate empty data (no agents, no integrations, no approvals)
-- Department Status grid matches the one on Dashboard
+- New: `ui/src/components/CapitalAllocationCard.tsx` — placeholder card with friendly empty state ("Connect integrations to surface budget reallocation insights · Activated when S2 integrations sync")
+- Edit: `ui/src/pages/Dashboard.tsx` — wedge the card next to the Decision Inbox (or below Department Status)
+- KEEP `DepartmentConsole.tsx` redirect — don't duplicate the screen
 
 **Files**:
-- New: `ui/src/pages/departments/ChiefOfStaffConsole.tsx`
-- Edit: `ui/src/pages/DepartmentConsole.tsx`
-- New: `ui/src/pages/departments/__tests__/ChiefOfStaffConsole.test.tsx`
+- New: `ui/src/components/CapitalAllocationCard.tsx`
+- Edit: `ui/src/pages/Dashboard.tsx` (one new JSX line)
+- Tests: snapshot of CapitalAllocationCard empty/loaded states (loaded state stays empty until S3.8 lands the channel-recommender)
+
+**QA**:
+- Card renders with placeholder copy
+- Visiting `/departments/chief-of-staff` continues to redirect to `/dashboard` (regression check)
+- 375px mobile renders the card cleanly
 
 ---
 
