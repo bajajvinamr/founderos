@@ -114,3 +114,14 @@ export {
   type InsightKind,
   type InsightStatus,
 } from "./insights.js";
+export {
+  experiments,
+  EXPERIMENT_DEPARTMENTS,
+  EXPERIMENT_STATUSES,
+  EXPERIMENT_CHANNELS,
+  type Experiment,
+  type ExperimentInsert,
+  type ExperimentDepartment,
+  type ExperimentStatus,
+  type ExperimentChannel,
+} from "./experiments.js";
