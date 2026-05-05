@@ -53,6 +53,7 @@ const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => (
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
 const AuditLog = lazy(() => import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })));
+const Alerts = lazy(() => import("./pages/Alerts").then((m) => ({ default: m.Alerts })));
 const CompanySettings = lazy(() => import("./pages/CompanySettings").then((m) => ({ default: m.CompanySettings })));
 const CompanySkills = lazy(() => import("./pages/CompanySkills").then((m) => ({ default: m.CompanySkills })));
 const CompanyExport = lazy(() => import("./pages/CompanyExport").then((m) => ({ default: m.CompanyExport })));
@@ -276,6 +277,7 @@ function boardRoutes() {
       <Route path="integrations" element={<Integrations />} />
       <Route path="activity" element={<Activity />} />
       <Route path="audit" element={<AuditLog />} />
+      <Route path="alerts" element={<Alerts />} />
       <Route path="weekly" element={<WeeklyWrap />} />
       <Route path="conversations" element={<Conversations />} />
       <Route path="conversations/:convId" element={<Conversations />} />
