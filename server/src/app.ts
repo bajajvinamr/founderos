@@ -57,6 +57,7 @@ import { digestRoutes } from "./routes/digest.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
 import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
+import { departmentRoutes } from "./routes/departments.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -310,6 +311,7 @@ export async function createApp(
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
+  api.use(departmentRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(instanceInvitesRoutes(db));
