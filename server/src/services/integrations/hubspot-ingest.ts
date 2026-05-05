@@ -27,7 +27,7 @@
 
 import type { Db } from "@founderos/db";
 import { composioConnections } from "@founderos/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ingestEvent, type IngestEventInput } from "../event-ingest.js";
 import { executeTool } from "../composio-client.js";
 import { logger } from "../../middleware/logger.js";
@@ -130,8 +130,10 @@ export async function hubspotIngestService(
     .select()
     .from(composioConnections)
     .where(
-      eq(composioConnections.companyId, companyId) &&
+      and(
+        eq(composioConnections.companyId, companyId),
         eq(composioConnections.appName, "hubspot"),
+      ),
     )
     .limit(1);
 

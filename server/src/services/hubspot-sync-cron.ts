@@ -12,7 +12,7 @@
 import type { Worker } from "bullmq";
 import type { Db } from "@founderos/db";
 import { composioConnections, companies } from "@founderos/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getQueue, QUEUE_NAMES, setupDlqListener } from "../lib/queues.js";
 import { hubspotIngestService } from "./integrations/hubspot-ingest.js";
 import { logger } from "../middleware/logger.js";
@@ -125,8 +125,10 @@ async function syncAllWorkspaces(db: Db): Promise<SyncAllWorkspacesResult> {
       })
       .from(composioConnections)
       .where(
-        eq(composioConnections.appName, "hubspot") &&
+        and(
+          eq(composioConnections.appName, "hubspot"),
           eq(composioConnections.status, "active"),
+        ),
       );
 
     logger.info(
