@@ -8,6 +8,7 @@ import { useToast } from "../context/ToastContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
+import { branding } from "../branding";
 import { integrationsApi } from "../api/integrations";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
@@ -486,13 +487,13 @@ export function CompanySettings() {
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
           <ToggleField
-            label="Allow sharing voted AI outputs with FounderOS Labs"
+            label={`Allow sharing voted AI outputs with ${branding.productName} Labs`}
             hint="Only AI-generated outputs you explicitly vote on are eligible for feedback sharing."
             checked={!!selectedCompany.feedbackDataSharingEnabled}
             onChange={(enabled) => feedbackSharingMutation.mutate(enabled)}
           />
           <p className="text-sm text-muted-foreground">
-            Votes are always saved locally. This setting controls whether voted AI outputs may also be marked for sharing with FounderOS Labs.
+            Votes are always saved locally. This setting controls whether voted AI outputs may also be marked for sharing with {branding.productName} Labs.
           </p>
           <div className="space-y-1 text-xs text-muted-foreground">
             <div>
@@ -801,35 +802,35 @@ function buildAgentSnippet(input: AgentSnippetInput) {
 
   const connectivityBlock =
     candidateUrls.length === 0
-      ? `No candidate URLs are available. Ask your user to configure a reachable hostname in FounderOS, then retry.
+      ? `No candidate URLs are available. Ask your user to configure a reachable hostname in ${branding.productName}, then retry.
 Suggested steps:
-- choose a hostname that resolves to the FounderOS host from your runtime
+- choose a hostname that resolves to the ${branding.productName} host from your runtime
 - run: pnpm founderos allowed-hostname <host>
-- restart FounderOS
+- restart ${branding.productName}
 - verify with: curl -fsS http://<host>:3100/api/health
 - regenerate this invite snippet`
-      : `If none are reachable, ask your user to add a reachable hostname in FounderOS, restart, and retry.
+      : `If none are reachable, ask your user to add a reachable hostname in ${branding.productName}, restart, and retry.
 Suggested command:
 - pnpm founderos allowed-hostname <host>
 Then verify with: curl -fsS <base-url>/api/health`;
 
   const resolutionLine = resolutionTestUrl
-    ? `\nYou MUST test FounderOS-to-gateway reachability, call: ${resolutionTestUrl}?url=<urlencoded-gateway-url> (using the hostname that worked above). Do not assume your 172.x is necessarily reachable from FounderOS. Test it. `
+    ? `\nYou MUST test ${branding.productName}-to-gateway reachability, call: ${resolutionTestUrl}?url=<urlencoded-gateway-url> (using the hostname that worked above). Do not assume your 172.x is necessarily reachable from ${branding.productName}. Test it. `
     : "";
 
-  return `You're invited to join a FounderOS organization.
+  return `You're invited to join a ${branding.productName} organization.
 
 The URLs you should try are:
 ${candidateList}
 
 Connectivity guidance:
-If you are running on a different machine than FounderOS, FounderOS must be reachable at one of the hostnames used above.
+If you are running on a different machine than ${branding.productName}, ${branding.productName} must be reachable at one of the hostnames used above.
 Verify the hostname works from your runtime with: GET <base-url>/api/health
 
 ${connectivityBlock}
 
 For your "agentName", just use your own agent name (OpenClaw or whatever your name is) and send it directly.
-You also need to send a gateway URL that FounderOS can access. Check your config and include that URL.${resolutionLine}
+You also need to send a gateway URL that ${branding.productName} can access. Check your config and include that URL.${resolutionLine}
 
 ---
 
@@ -839,14 +840,14 @@ When you submit the join request, use:
 - \`agentDefaultsPayload.url\` as your \`ws://\` or \`wss://\` gateway URL
 - \`agentDefaultsPayload.headers["x-openclaw-token"]\` with your gateway token
 - (legacy accepted) \`agentDefaultsPayload.headers["x-openclaw-auth"]\`
-- Keep device auth enabled (recommended). If \`devicePrivateKeyPem\` is omitted, FounderOS will generate and persist one during join so pairing approvals remain stable.
+- Keep device auth enabled (recommended). If \`devicePrivateKeyPem\` is omitted, ${branding.productName} will generate and persist one during join so pairing approvals remain stable.
 - Only use \`disableDeviceAuth=true\` for special environments where pairing cannot be completed.
 
 Do NOT use \`/v1/responses\` or \`/hooks/*\` in this join flow.
 
 Before you do anything, please respond to your user that you understand the instructions and you're going to work on them. Then do the step above in another session called "founderos-onboarding" and then tell your user when you're done. Update your user in intermediate steps along the way so they know what's going on.
 
-Then after you've connected to FounderOS (exchanged keys etc.) you MUST review and follow the onboarding instructions in onboarding.txt they give you.
+Then after you've connected to ${branding.productName} (exchanged keys etc.) you MUST review and follow the onboarding instructions in onboarding.txt they give you.
 
 `;
 }

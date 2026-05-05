@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { branding } from "../branding";
 
 export interface Breadcrumb {
   label: string;
@@ -21,10 +22,10 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (breadcrumbs.length === 0) {
-      document.title = "FounderOS";
+      document.title = branding.productName;
     } else {
       const parts = [...breadcrumbs].reverse().map((b) => b.label);
-      document.title = `${parts.join(" · ")} · FounderOS`;
+      document.title = `${parts.join(" · ")} · ${branding.productName}`;
     }
   }, [breadcrumbs]);
 
