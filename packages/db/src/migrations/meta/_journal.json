@@ -575,6 +575,13 @@
       "when": 1779700000000,
       "tag": "0084_experiment_embeddings",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0085_tenant_invariants",
+      "breakpoints": true
     }
   ]
 }

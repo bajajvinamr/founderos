@@ -1,4 +1,5 @@
-import { type AnyPgColumn, pgTable, uuid, text, timestamp, jsonb, index, integer, bigint, boolean } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { type AnyPgColumn, check, foreignKey, pgTable, uuid, text, timestamp, jsonb, index, integer, bigint, boolean } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import { agentWakeupRequests } from "./agent_wakeup_requests.js";
@@ -8,6 +9,11 @@ export const heartbeatRuns = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     companyId: uuid("company_id").notNull().references(() => companies.id),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `heartbeat_runs_agent_id_company_id_agents_id_company_id_fk` —
+     * see migration 0085_tenant_invariants.sql.
+     */
     agentId: uuid("agent_id").notNull().references(() => agents.id),
     invocationSource: text("invocation_source").notNull().default("on_demand"),
     triggerDetail: text("trigger_detail"),
@@ -15,6 +21,11 @@ export const heartbeatRuns = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     error: text("error"),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `heartbeat_runs_wakeup_request_id_company_id_agent_wakeup_requests_id_company_id_fk` —
+     * see migration 0085_tenant_invariants.sql.
+     */
     wakeupRequestId: uuid("wakeup_request_id").references(() => agentWakeupRequests.id),
     exitCode: integer("exit_code"),
     signal: text("signal"),
@@ -50,6 +61,23 @@ export const heartbeatRuns = pgTable(
       table.companyId,
       table.agentId,
       table.startedAt,
+    ),
+    // Same-tenant invariants (composite FKs) — migration 0085.
+    agentTenantFk: foreignKey({
+      name: "heartbeat_runs_agent_id_company_id_agents_id_company_id_fk",
+      columns: [table.agentId, table.companyId],
+      foreignColumns: [agents.id, agents.companyId],
+    }),
+    wakeupRequestTenantFk: foreignKey({
+      name: "heartbeat_runs_wakeup_request_id_company_id_agent_wakeup_requests_id_company_id_fk",
+      columns: [table.wakeupRequestId, table.companyId],
+      foreignColumns: [agentWakeupRequests.id, agentWakeupRequests.companyId],
+    }),
+    // Status enum CHECK — migration 0085. Mirrors HEARTBEAT_RUN_STATUSES
+    // plus 'coalesced' (heartbeat scheduler-only synthetic state).
+    statusCheck: check(
+      "heartbeat_runs_status_check",
+      sql`${table.status} IN ('queued','running','succeeded','failed','cancelled','timed_out','coalesced')`,
     ),
   }),
 );

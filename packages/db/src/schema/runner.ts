@@ -19,7 +19,10 @@
  * duplicate the event store.
  */
 
+import { sql } from "drizzle-orm";
 import {
+  check,
+  foreignKey,
   pgTable,
   uuid,
   text,
@@ -94,6 +97,11 @@ export const runnerJobs = pgTable(
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `runner_jobs_agent_id_company_id_agents_id_company_id_fk` —
+     * see migration 0085_tenant_invariants.sql.
+     */
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
@@ -101,6 +109,10 @@ export const runnerJobs = pgTable(
      * The heartbeat_runs row this job materializes. Created in the same
      * transaction as the job. byo_runner.execute() reads this back to
      * finalize the heartbeat_run record on completion.
+     *
+     * Same-tenant invariant enforced by the composite FK
+     * `runner_jobs_heartbeat_run_id_company_id_heartbeat_runs_id_company_id_fk`
+     * — see migration 0085_tenant_invariants.sql.
      */
     heartbeatRunId: uuid("heartbeat_run_id")
       .notNull()
@@ -160,5 +172,21 @@ export const runnerJobs = pgTable(
     claimedByIdx: index("runner_jobs_claimed_by_idx").on(table.claimedByTokenId),
     // Reverse lookup: heartbeat_runs → runner_jobs (rare but useful for audit UI).
     heartbeatRunIdx: index("runner_jobs_heartbeat_run_idx").on(table.heartbeatRunId),
+    // Same-tenant invariant (composite FK) — migration 0085.
+    agentTenantFk: foreignKey({
+      name: "runner_jobs_agent_id_company_id_agents_id_company_id_fk",
+      columns: [table.agentId, table.companyId],
+      foreignColumns: [agents.id, agents.companyId],
+    }).onDelete("cascade"),
+    heartbeatRunTenantFk: foreignKey({
+      name: "runner_jobs_heartbeat_run_id_company_id_heartbeat_runs_id_company_id_fk",
+      columns: [table.heartbeatRunId, table.companyId],
+      foreignColumns: [heartbeatRuns.id, heartbeatRuns.companyId],
+    }).onDelete("cascade"),
+    // Status enum CHECK — migration 0085. Mirrors RunnerJobStatus.
+    statusCheck: check(
+      "runner_jobs_status_check",
+      sql`${table.status} IN ('queued','claimed','streaming','completed','failed','cancelled')`,
+    ),
   }),
 );
