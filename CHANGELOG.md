@@ -1,3 +1,8 @@
+## [0.6.1] - 2026-05-06 20:18:57 UTC
+
+### Fixed
+- fix(e2e): skip /api/health/deep probe in public-only profile (closes #42) (#45) (c594760)
+
 ## [0.6.0] - 2026-05-06 20:07:01 UTC
 
 ## [0.5.0] - 2026-05-06 15:24:53 UTC
