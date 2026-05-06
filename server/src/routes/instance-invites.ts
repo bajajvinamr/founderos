@@ -133,8 +133,14 @@ export function instanceInvitesRoutes(
         logger.warn({ err, to: email }, "instance invite: email send threw (non-fatal)");
       }
     } else {
+      // PR-7 (council 2026-05-07 P1): do NOT log signupUrl — it carries the
+      // raw `pcp_<token>` invite token in a query param. Anyone with log
+      // access (Fly logs / Sentry / log drains) could otherwise claim the
+      // invite. The admin sees the URL in the response body (HTTPS only)
+      // at line ~147; logs only need enough context to audit "an invite
+      // was created for this email at this role."
       logger.info(
-        { to: email, signupUrl },
+        { to: email, role: created.role, expiresAt: created.expiresAt },
         "instance invite: email sender disabled — admin must share signup URL manually",
       );
     }

@@ -21,7 +21,72 @@ const SENSITIVE_KEYS = new Set([
   "accesstoken", "access_token", "refreshtoken", "refresh_token",
   "authorization", "auth", "credential", "credentials", "privatekey",
   "private_key", "clientsecret", "client_secret",
+  // PR-7 (council 2026-05-07 P1): tokens that previously leaked unredacted
+  // because pino's path-based redact only covered req.headers.authorization.
+  // signupUrl carries the raw `pcp_<48hex>` invite token in a query param;
+  // magic-link / runner / refresh tokens follow the same shape contract.
+  "signupurl", "magiclinktoken", "magic_link_token",
+  "runnertoken", "runner_token", "inviteurl", "invite_url",
 ]);
+
+/**
+ * Path-based redaction list for pino's top-level `redact` option. Paths are
+ * dot-separated; bracket notation handles keys with hyphens (`x-runner-token`).
+ *
+ * What this protects (PR-7, 2026-05-07):
+ *   - HTTP request headers: Authorization, Cookie, x-runner-token, x-api-key
+ *     (bearer tokens, session cookies, runner identity tokens)
+ *   - Top-level fields in custom logger.* calls: signupUrl, token, password,
+ *     apiKey, secret, credentials, refresh/access/client tokens, magic-link
+ *     and runner tokens. The `pino-http` body redaction at customProps
+ *     covers HTTP body / params / query (via `redactSensitive`); this list
+ *     covers EVERYTHING ELSE (direct `logger.info({ ... }, "...")` calls).
+ *
+ * NOTE: Wildcards in pino paths only cover ONE level (`req.headers.*` would
+ * redact every header). We list specific keys instead — narrow blast radius,
+ * keeps unrelated debug fields visible.
+ */
+/**
+ * Redaction sentinel — matches the lowercase `[redacted]` used by
+ * `redactSensitive` so a single log record never mixes sentinels.
+ */
+export const REDACT_CENSOR = "[redacted]" as const;
+
+export const REDACT_PATHS: readonly string[] = [
+  // HTTP request headers
+  "req.headers.authorization",
+  "req.headers.cookie",
+  'req.headers["x-runner-token"]',
+  'req.headers["x-api-key"]',
+  'req.headers["x-auth-token"]',
+  // Top-level keys in custom logger.* calls. Pino's path matcher treats
+  // these as root-level — a `logger.info({ signupUrl }, "...")` call gets
+  // its `signupUrl` redacted before serialization.
+  "signupUrl",
+  "signup_url",
+  "inviteUrl",
+  "invite_url",
+  "token",
+  "password",
+  "apiKey",
+  "api_key",
+  "secret",
+  "credentials",
+  "credential",
+  "privateKey",
+  "private_key",
+  "refreshToken",
+  "refresh_token",
+  "accessToken",
+  "access_token",
+  "clientSecret",
+  "client_secret",
+  "magicLinkToken",
+  "magic_link_token",
+  "runnerToken",
+  "runner_token",
+  "authorization",
+];
 
 export function redactSensitive(value: unknown, depth = 0): unknown {
   if (depth > 6 || value === null || typeof value !== "object") return value;
@@ -47,7 +112,12 @@ const sharedOpts = {
 
 export const logger = pino({
   level: logLevel,
-  redact: ["req.headers.authorization"],
+  // Match the lowercase `[redacted]` sentinel used by `redactSensitive`
+  // (the JSON-tree redactor used in pino-http customProps for body /
+  // params / query). Default pino censor is `[Redacted]` (capital R)
+  // which would have produced two different sentinels in the same log
+  // record — confusing for downstream log parsers and Sentry filters.
+  redact: { paths: [...REDACT_PATHS], censor: REDACT_CENSOR },
   // Auto-inject the active requestId / traceId / actor on every log call —
   // including background tasks (heartbeat runs, agent execution, db queries)
   // that aren't tied to an HTTP req. Reads from AsyncLocalStorage. Returns
