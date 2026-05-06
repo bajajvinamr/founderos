@@ -375,3 +375,9 @@ export {
   type ListMarketingSpendQuery,
   type MarketingSpendRow,
 } from "./marketing-spend.js";
+export {
+  tierChangeSchema,
+  pricingSimulateSchema,
+  type TierChange,
+  type PricingSimulateBody,
+} from "./pricing-simulator.js";

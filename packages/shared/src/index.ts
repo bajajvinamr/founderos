@@ -725,6 +725,10 @@ export {
   type UpdateMarketingSpend,
   type ListMarketingSpendQuery,
   type MarketingSpendRow,
+  tierChangeSchema,
+  pricingSimulateSchema,
+  type TierChange,
+  type PricingSimulateBody,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
