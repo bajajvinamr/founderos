@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type { Db } from "@founderos/db";
 import { instanceInvites, instanceUserRoles } from "@founderos/db";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
-import { logger } from "../middleware/logger.js";
 
 /**
  * Instance-scoped invite flow.
@@ -150,47 +149,71 @@ export function instanceInviteService(db: Db): InstanceInviteService {
       return null;
     }
 
-    // Mark consumed and grant role in the same transaction where possible.
-    // drizzle's `transaction` is available on postgres-js driver; we call
-    // operations sequentially and tolerate partial failures via logging.
-    const [updated] = await db
-      .update(instanceInvites)
-      .set({
-        consumedAt: now,
-        consumedBy: input.userId,
-      })
-      .where(and(eq(instanceInvites.id, pending.id), isNull(instanceInvites.consumedAt)))
-      .returning();
+    // PR-4 (council 2026-05-07 P1): the consume + role grant pair MUST be
+    // atomic. Pre-fix, the UPDATE and INSERT ran sequentially with the
+    // INSERT wrapped in try/catch+log+swallow. A non-unique error (most
+    // commonly an FK violation when the public."user" mirror upsert
+    // hasn't run yet — the exact failure mode the 2026-05-04 council
+    // surfaced) silently marked the invite consumed but never granted
+    // the role, locking the user out forever (cannot re-claim, cannot
+    // retry).
+    //
+    // The fix: wrap consume + grant in db.transaction(). A failed grant
+    // rolls the consume back at the PG layer; the invite stays pending;
+    // the caller (post-signup-hook.ts) catches the throw, logs it as
+    // non-fatal, and the user reclaims on next auth attempt.
+    //
+    // The original try/catch was tolerating ONE legitimate case: the
+    // (user_id, role) unique violation when the role was already granted
+    // by a prior partial attempt. We preserve that idempotent semantics
+    // via `.onConflictDoNothing({ target: [userId, role] })` — the
+    // unique-violation case becomes a no-op INSERT that commits cleanly,
+    // while every other error (FK, constraint, network) propagates.
+    return await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(instanceInvites)
+        .set({
+          consumedAt: now,
+          consumedBy: input.userId,
+        })
+        .where(and(eq(instanceInvites.id, pending.id), isNull(instanceInvites.consumedAt)))
+        .returning();
 
-    if (!updated) {
-      // Another concurrent consume won the race. Treat as no-op — the
-      // competing flow already granted the role.
-      return null;
-    }
-
-    // Grant the instance role. Upsert-ish: the unique index on
-    // (user_id, role) makes duplicate grants harmless.
-    const existing = await db
-      .select({ id: instanceUserRoles.id })
-      .from(instanceUserRoles)
-      .where(and(eq(instanceUserRoles.userId, input.userId), eq(instanceUserRoles.role, updated.role)))
-      .then((r) => r[0] ?? null);
-
-    if (!existing) {
-      try {
-        await db.insert(instanceUserRoles).values({
-          userId: input.userId,
-          role: updated.role,
-        });
-      } catch (err) {
-        logger.warn(
-          { err, userId: input.userId, role: updated.role },
-          "instance-invite: failed to insert instance_user_roles row (race or constraint — continuing)",
-        );
+      if (!updated) {
+        // Another concurrent consume won the race. Transaction commits
+        // empty — no rollback, no thrown error, no role grant. Caller
+        // sees null and treats it as a no-op.
+        return null;
       }
-    }
 
-    return toInvite(updated);
+      const existing = await tx
+        .select({ id: instanceUserRoles.id })
+        .from(instanceUserRoles)
+        .where(
+          and(
+            eq(instanceUserRoles.userId, input.userId),
+            eq(instanceUserRoles.role, updated.role),
+          ),
+        )
+        .then((r) => r[0] ?? null);
+
+      if (!existing) {
+        // Idempotent grant: unique-violation on (user_id, role) is a
+        // no-op (already granted by a prior partial attempt). Any other
+        // error (FK, constraint, network) propagates and rolls back.
+        await tx
+          .insert(instanceUserRoles)
+          .values({
+            userId: input.userId,
+            role: updated.role,
+          })
+          .onConflictDoNothing({
+            target: [instanceUserRoles.userId, instanceUserRoles.role],
+          });
+      }
+
+      return toInvite(updated);
+    });
   }
 
   async function listInvites(): Promise<InstanceInvite[]> {
