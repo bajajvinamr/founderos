@@ -24,6 +24,7 @@ import { authUsers, companyMemberships } from "@founderos/db";
 import { buildDailyDigest, hourInTimezone } from "./daily-digest.js";
 import type { EmailSender } from "./email-sender.js";
 import { logger } from "../middleware/logger.js";
+import { runCronTick } from "../lib/cron-tick.js";
 
 const DEFAULT_TICK_INTERVAL_MS = 15 * 60 * 1_000;
 
@@ -180,13 +181,11 @@ export function createDailyDigestCron(opts: DailyDigestCronOptions): DailyDigest
   function start(): void {
     if (running) return;
     running = true;
+    // PR-5 (council 2026-05-07 P1): wrap in runCronTick so logs from inside
+    // tick() carry a cron requestId/traceId/actor and any uncaught throw
+    // routes to Sentry via captureServerError instead of being swallowed.
     timer = setInterval(() => {
-      void tick().catch((err) => {
-        log.error(
-          { err: err instanceof Error ? err.message : String(err) },
-          "daily digest tick threw",
-        );
-      });
+      void runCronTick("daily-digest", tick);
     }, tickIntervalMs);
     // Don't block Node shutdown on this timer in tests / short-lived scripts.
     timer.unref?.();

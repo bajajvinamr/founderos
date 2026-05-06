@@ -15,6 +15,7 @@ import { and, eq, not, isNull } from "drizzle-orm";
 import { composioConnections } from "@founderos/db";
 import { ingestNotionPages } from "./integrations/notion-ingest.js";
 import { logger } from "../middleware/logger.js";
+import { runCronTick } from "../lib/cron-tick.js";
 
 /** Cron tick cadence: every 1 hour. */
 export const DEFAULT_TICK_INTERVAL_MS = 60 * 60 * 1_000;
@@ -103,10 +104,12 @@ export function createNotionSyncCron(
 
   function start(): void {
     if (timer) return;
+    // PR-5 (council 2026-05-07 P1): runCronTick adds cron requestId/
+    // traceId/actor to logs and routes uncaught throws to Sentry.
     // Fire once immediately so we don't wait a full tick after boot.
-    void runOnce();
+    void runCronTick("notion-sync", runOnce);
     timer = setInterval(() => {
-      void runOnce();
+      void runCronTick("notion-sync", runOnce);
     }, tickIntervalMs);
     timer.unref?.();
   }

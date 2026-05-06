@@ -17,6 +17,7 @@ import { and, eq, not, isNull } from "drizzle-orm";
 import { composioConnections } from "@founderos/db";
 import { ingestSlackMessages } from "./integrations/slack-ingest.js";
 import { logger } from "../middleware/logger.js";
+import { runCronTick } from "../lib/cron-tick.js";
 
 /** Cron tick cadence: every 30 minutes. */
 export const DEFAULT_TICK_INTERVAL_MS = 30 * 60 * 1_000;
@@ -103,10 +104,13 @@ export function createSlackSyncCron(opts: SlackSyncCronOptions): SlackSyncCron {
 
   function start(): void {
     if (timer) return;
+    // PR-5 (council 2026-05-07 P1): wrap in runCronTick — adds cron
+    // requestId/traceId/actor to logs from inside runOnce() and routes
+    // uncaught throws to Sentry via captureServerError.
     // Fire once immediately so we don't wait a full tick after boot.
-    void runOnce();
+    void runCronTick("slack-sync", runOnce);
     timer = setInterval(() => {
-      void runOnce();
+      void runCronTick("slack-sync", runOnce);
     }, tickIntervalMs);
     timer.unref?.();
   }

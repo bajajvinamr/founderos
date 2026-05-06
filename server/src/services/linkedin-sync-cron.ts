@@ -14,6 +14,7 @@ import { composioConnections } from "@founderos/db";
 import { and, eq } from "drizzle-orm";
 import { linkedinIngestService } from "./integrations/linkedin-ingest.js";
 import { logger } from "../middleware/logger.js";
+import { runCronTick } from "../lib/cron-tick.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -106,15 +107,17 @@ export function createLinkedInSyncCron(opts: LinkedInSyncCronOptions): LinkedInS
         return;
       }
       logger.info("linkedin-sync-cron: starting with 1h interval");
+      // PR-5 (council 2026-05-07 P1): wrap each tick in runCronTick — adds
+      // cron requestId/traceId/actor to logs from inside tick() and routes
+      // uncaught throws to Sentry via captureServerError. Same applies to
+      // the startup tick below.
       intervalHandle = setInterval(() => {
-        void tick().catch((err) => {
-          logger.error({ err }, "linkedin-sync-cron: unhandled tick error");
-        });
+        void runCronTick("linkedin-sync", tick);
       }, DEFAULT_SYNC_INTERVAL_MS);
       // Unref so the interval doesn't keep the process alive
       intervalHandle?.unref?.();
       // Run once at startup
-      void tick();
+      void runCronTick("linkedin-sync", tick);
     },
     stop() {
       if (intervalHandle) {
