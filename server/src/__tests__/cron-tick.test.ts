@@ -38,7 +38,7 @@ vi.mock("../observability/sentry.js", () => ({
   initServerSentry: vi.fn(async () => false),
 }));
 
-import { runCronTick } from "../lib/cron-tick.js";
+import { runCronTick, runCronTaskWithRethrow } from "../lib/cron-tick.js";
 import { getRequestContext } from "../lib/request-context.js";
 import { captureServerError } from "../observability/sentry.js";
 
@@ -204,5 +204,134 @@ describe("runCronTick — duration measurement", () => {
     });
     const [, contextArg2] = (captureServerError as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
     expect((contextArg2 as { durationMs: number }).durationMs).toBeGreaterThanOrEqual(SLEEP_MS - 5);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// runCronTaskWithRethrow — BullMQ-shape sibling of runCronTick.
+//
+// PR-5b (council 2026-05-07 P1-5b). The 7th business cron (hubspot-sync) is
+// a BullMQ recurring job with a Worker callback, NOT a setInterval tick.
+// BullMQ requires the worker callback to THROW on failure so the job is
+// marked failed, retries fire per the queue policy, and exhausted retries
+// route to the DLQ. `runCronTick` swallows the error (returns undefined) —
+// correct for setInterval (next tick proceeds), wrong for BullMQ (the
+// queue layer never sees the failure and the job is marked succeeded).
+//
+// `runCronTaskWithRethrow` shares the inner composition (runInCronContext +
+// duration log + Sentry capture) but RE-THROWS after capture so BullMQ's
+// retry/DLQ machinery sees the failure with full context tags attached.
+// ──────────────────────────────────────────────────────────────────────────
+
+describe("runCronTaskWithRethrow — request context propagation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sets up the same cron-flavored request context as runCronTick", async () => {
+    let capturedContext: ReturnType<typeof getRequestContext> = undefined;
+    await runCronTaskWithRethrow("hubspot-sync", () => {
+      capturedContext = getRequestContext();
+      return "ok";
+    });
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext?.requestId).toMatch(/^cron:hubspot-sync:[\w-]+$/);
+    expect(capturedContext?.actor?.type).toBe("system");
+    expect(capturedContext?.actor?.source).toBe("cron:hubspot-sync");
+    expect(capturedContext?.routePath).toBe("cron/hubspot-sync");
+  });
+});
+
+describe("runCronTaskWithRethrow — happy path", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the awaited callback value when it succeeds", async () => {
+    const result = await runCronTaskWithRethrow("hubspot-sync", async () => {
+      return { workspacesProcessed: 4, errors: [] };
+    });
+    expect(result).toEqual({ workspacesProcessed: 4, errors: [] });
+  });
+
+  it("does not call captureServerError on success", async () => {
+    await runCronTaskWithRethrow("hubspot-sync", async () => "ok");
+    expect(captureServerError).not.toHaveBeenCalled();
+  });
+});
+
+describe("runCronTaskWithRethrow — error path (re-throws for BullMQ)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("re-throws the original error so BullMQ marks the job failed", async () => {
+    // The whole point of the rethrow variant: BullMQ's Worker layer needs
+    // to see the throw, otherwise it marks the job succeeded, retry/DLQ
+    // never fire, and observability silently breaks at the queue layer.
+    const original = new Error("hubspot 429 rate-limited");
+    await expect(
+      runCronTaskWithRethrow("hubspot-sync", async () => {
+        throw original;
+      }),
+    ).rejects.toBe(original);
+  });
+
+  it("calls captureServerError with { taskName, durationMs, ...extraContext } before re-throwing", async () => {
+    await expect(
+      runCronTaskWithRethrow(
+        "hubspot-sync",
+        async () => {
+          throw new Error("downstream timeout");
+        },
+        { jobId: "abc-123", jobName: "sync-all-workspaces" },
+      ),
+    ).rejects.toThrow("downstream timeout");
+
+    expect(captureServerError).toHaveBeenCalledTimes(1);
+    const [errArg, contextArg] = (captureServerError as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
+    expect(errArg).toBeInstanceOf(Error);
+    expect((errArg as Error).message).toBe("downstream timeout");
+    expect(contextArg).toMatchObject({
+      taskName: "hubspot-sync",
+      jobId: "abc-123",
+      jobName: "sync-all-workspaces",
+    });
+    expect(typeof (contextArg as { durationMs: number }).durationMs).toBe("number");
+    expect((contextArg as { durationMs: number }).durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("the request context is still active when captureServerError fires (same invariant as runCronTick)", async () => {
+    // If the rethrow happened BEFORE captureServerError ran, or if the
+    // context exited too early, Sentry would lose the cron requestId tag
+    // and the BullMQ worker.on("failed") signal would have no correlation
+    // to the job that produced it.
+    let contextAtCapture: ReturnType<typeof getRequestContext> = undefined;
+    (captureServerError as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => {
+      contextAtCapture = getRequestContext();
+    });
+
+    await expect(
+      runCronTaskWithRethrow("hubspot-sync", async () => {
+        throw new Error("force-capture");
+      }),
+    ).rejects.toThrow("force-capture");
+
+    expect(contextAtCapture).toBeDefined();
+    expect(contextAtCapture?.requestId).toMatch(/^cron:hubspot-sync:/);
+    expect(contextAtCapture?.actor?.type).toBe("system");
+  });
+
+  it("captures non-Error throws (e.g. string) and re-throws them as-is", async () => {
+    await expect(
+      runCronTaskWithRethrow("hubspot-sync", async () => {
+        throw "raw string"; // eslint-disable-line @typescript-eslint/only-throw-error
+      }),
+    ).rejects.toBe("raw string");
+
+    expect(captureServerError).toHaveBeenCalledTimes(1);
+    const [errArg] = (captureServerError as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
+    expect(errArg).toBe("raw string");
   });
 });

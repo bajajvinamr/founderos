@@ -16,6 +16,7 @@ import { and, eq } from "drizzle-orm";
 import { getQueue, QUEUE_NAMES, setupDlqListener } from "../lib/queues.js";
 import { hubspotIngestService } from "./integrations/hubspot-ingest.js";
 import { logger } from "../middleware/logger.js";
+import { runCronTaskWithRethrow } from "../lib/cron-tick.js";
 
 const HUBSPOT_SYNC_INTERVAL_CRON = "*/30 * * * *"; // Every 30 minutes
 
@@ -64,12 +65,23 @@ export async function attachHubspotSyncWorker(db: Db): Promise<Worker> {
       // ── Job types ────────────────────────────────────────────────────
       // "sync-all-workspaces" — recurring cron or manual trigger
       // (future: "sync-workspace:{companyId}" — manual per-workspace)
-
-      if (job.name === "sync-all-workspaces") {
-        return syncAllWorkspaces(db);
-      }
-
-      throw new Error(`Unknown HubSpot sync job type: ${job.name}`);
+      //
+      // PR-5b (council 2026-05-07 P1-5b): wrap in runCronTaskWithRethrow
+      // — sibling of runCronTick that re-throws after Sentry capture so
+      // BullMQ's failed-event + retry/DLQ machinery sees the throw with
+      // a cron requestId attached. Without the wrap, log lines and
+      // Sentry events from inside syncAllWorkspaces() emit empty
+      // requestId/traceId/actor mixin fields.
+      return runCronTaskWithRethrow(
+        "hubspot-sync",
+        async () => {
+          if (job.name === "sync-all-workspaces") {
+            return syncAllWorkspaces(db);
+          }
+          throw new Error(`Unknown HubSpot sync job type: ${job.name}`);
+        },
+        { jobId: job.id, jobName: job.name },
+      );
     },
     {
       connection: (queue.client as any).options as any,
