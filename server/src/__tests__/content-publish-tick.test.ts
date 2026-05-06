@@ -75,6 +75,20 @@ describe("content-publish-tick", () => {
   });
 
   afterEach(async () => {
+    // Close the drizzle/node-postgres pool before tearing down the
+    // embedded PG instance — otherwise in-flight pool connections throw
+    // 57P01 ("terminating connection due to administrator command")
+    // during teardown, which vitest counts as uncaught errors and
+    // promotes to a test-file failure (even though all tests passed).
+    // S6.9 fix: drain the pool first, swallow any teardown errors.
+    try {
+      const client = (db as unknown as { $client?: { end: () => Promise<void> } }).$client;
+      if (client && typeof client.end === "function") {
+        await client.end();
+      }
+    } catch {
+      // pool already closed or never connected — fine
+    }
     await cleanup();
     vi.clearAllMocks();
   });

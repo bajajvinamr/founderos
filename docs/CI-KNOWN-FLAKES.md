@@ -56,6 +56,32 @@ Root cause: `FounderOnboardingWizard.tsx:228` rendered raw `<div>`s inside `Dial
 
 ---
 
+### 6. ~~content-publish-tick.test.ts > teardown 57P01 connection-terminated errors~~ — FIXED 2026-05-06 (S6.9 bug bash)
+
+**Location:** `server/src/__tests__/content-publish-tick.test.ts` afterEach
+
+**Issue:** All 6 tests pass logically, but vitest reports "Test Files: 1 failed, Tests: 6 passed, Errors: 6" — six `severity: 'FATAL', code: '57P01'` ("terminating connection due to administrator command") uncaught exceptions thrown during teardown. The drizzle/node-postgres pool keeps connections open after the last test completes; when `cleanup()` shuts down the embedded PG instance, those in-flight connections throw 57P01 and vitest counts them as test-file failures.
+
+**Root cause:** `drizzle(connectionString)` (node-postgres path) creates an internal pool with `idleTimeoutMillis` defaults that don't drain quickly enough between PG shutdown and process exit. Same pattern would affect any test that holds a pool past `cleanup()`.
+
+**Fix:** Drain the drizzle `$client.end()` before calling `cleanup()`:
+```ts
+afterEach(async () => {
+  try {
+    const client = (db as unknown as { $client?: { end: () => Promise<void> } }).$client;
+    if (client?.end) await client.end();
+  } catch { /* pool already closed */ }
+  await cleanup();
+  vi.clearAllMocks();
+});
+```
+
+**Generalizes to:** any test using `startEmbeddedPostgresTestDatabase` + `drizzle(connectionString)` (node-postgres path). Tests using the project's `createDb` wrapper instead of raw `drizzle(...)` are unaffected because the wrapper already plumbs cleanup.
+
+**Verified:** in-isolation `vitest run` after fix shows `Tests 6 passed, 0 errors`.
+
+---
+
 ## Verification
 
 To verify a fix works:
