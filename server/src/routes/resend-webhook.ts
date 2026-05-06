@@ -48,9 +48,15 @@
 import { Router, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
-import { workflowRuns, type WorkflowAction, type WorkflowRunStatus } from "@founderos/db";
+import {
+  workflowRuns,
+  type SuppressionTopic,
+  type WorkflowAction,
+  type WorkflowRunStatus,
+} from "@founderos/db";
 import { logger } from "../middleware/logger.js";
 import { verifySvixSignature } from "../services/transports/resend-webhook-verify.js";
+import { insertSuppression } from "../services/customer-email-suppressions.js";
 
 // ── Resend webhook event shapes ─────────────────────────────────────────────
 
@@ -143,6 +149,57 @@ function eventToActionUpdate(event: ResendEventBase): ActionUpdate | null {
     default:
       return null;
   }
+}
+
+/**
+ * templateTagToSuppressionTopic — map the Resend `template` tag to the
+ * customer_email_suppressions.topic enum.
+ *
+ * The tag values are emitted by each workflow template at send time:
+ *   onboarding-emails.ts  → tag.template="onboarding-emails"  → "onboarding"
+ *   activation-nudge.ts   → tag.template="activation-nudge"   → "activation_nudge"
+ *   upsell.ts             → tag.template="upsell"             → "upsell"
+ *
+ * Returns null when the tag is missing or unknown — caller skips the
+ * auto-suppression in that case rather than over-broadly using "all".
+ * (#196 layer 4 — council 2026-05-06 finding #4 close-out.)
+ */
+function templateTagToSuppressionTopic(
+  template: string | undefined,
+): SuppressionTopic | null {
+  switch (template) {
+    case "onboarding-emails":
+      return "onboarding";
+    case "activation-nudge":
+      return "activation_nudge";
+    case "upsell":
+      return "upsell";
+    case "churn_rescue":
+    case "product_update":
+      return template as SuppressionTopic;
+    default:
+      return null;
+  }
+}
+
+/**
+ * isHardBounce — Resend bounce events distinguish hard from soft via subType.
+ *
+ * Only HARD bounces (mailbox doesn't exist, domain doesn't exist, perm reject)
+ * trigger an auto-suppression. Soft bounces (full mailbox, transient relay
+ * issues) come back later and shouldn't permanently block the sender.
+ *
+ * Resend's bounce.subType values include: "Permanent" / "Transient" /
+ * "Undetermined" / "DnsBlackHole" — we treat anything starting with
+ * "Permanent" or unknown subType (defensive: missing-subType is rare and
+ * usually accompanied by a Permanent message) as hard. Soft bounces
+ * (Transient) don't suppress.
+ */
+function isHardBounce(subType: string | undefined): boolean {
+  if (!subType) return true; // missing → assume permanent (rare, defensive)
+  const normalized = subType.toLowerCase();
+  if (normalized.startsWith("transient")) return false;
+  return true;
 }
 
 /**
@@ -276,6 +333,83 @@ export function resendWebhookRoutes(db: Db) {
             ...(completedAt ? { completedAt } : {}),
           })
           .where(eq(workflowRuns.id, workflowRunId));
+
+        // ── #196 layer 4: auto-insert customer_email_suppressions on
+        // hard bounce + spam complaint. Best-effort; failures here log but
+        // don't reject the webhook (preserves the "always 200" contract).
+        const shouldAutoSuppress =
+          event.type === "email.bounced" || event.type === "email.complained";
+
+        if (shouldAutoSuppress) {
+          const recipient = event.data.to?.[0];
+          const templateTag = tags.find((t) => t.name === "template")?.value;
+          const topic = templateTagToSuppressionTopic(templateTag);
+
+          // Only suppress when we can confidently identify the recipient AND
+          // the template. Unknown template → skip (don't widen to topic="all"
+          // because a single bounce shouldn't lock a contact out of every
+          // future surface).
+          if (!recipient) {
+            logger.warn(
+              { workflowRunId, emailId, type: event.type },
+              "resend webhook: bounce/complaint with no recipient — skipping auto-suppress",
+            );
+          } else if (!topic) {
+            logger.warn(
+              { workflowRunId, emailId, type: event.type, templateTag },
+              "resend webhook: bounce/complaint with unknown template tag — skipping auto-suppress",
+            );
+          } else {
+            const isBounce = event.type === "email.bounced";
+            const isComplaint = event.type === "email.complained";
+            const subType = event.data.bounce?.subType;
+            const hard = isBounce ? isHardBounce(subType) : false;
+
+            if (isBounce && !hard) {
+              logger.info(
+                { workflowRunId, emailId, recipient, subType },
+                "resend webhook: soft bounce — not suppressing",
+              );
+            } else if (isBounce || isComplaint) {
+              const reason = isComplaint ? "spam_report" : "bounce_hard";
+              try {
+                const result = await insertSuppression(tx as unknown as Db, {
+                  companyId: run.companyId,
+                  contactEmail: recipient.toLowerCase().trim(),
+                  topic,
+                  reason,
+                  sourceWorkflowRunId: workflowRunId,
+                  sourceMessageId: emailId,
+                  metadata: {
+                    resend_event_type: event.type,
+                    ...(subType ? { resend_bounce_subtype: subType } : {}),
+                    ...(event.data.bounce?.message
+                      ? { resend_bounce_message: event.data.bounce.message }
+                      : {}),
+                  },
+                });
+                logger.info(
+                  {
+                    workflowRunId,
+                    emailId,
+                    recipient,
+                    topic,
+                    reason,
+                    inserted: result.inserted,
+                  },
+                  "resend webhook: auto-suppression " +
+                    (result.inserted ? "inserted" : "already-exists"),
+                );
+              } catch (suppressErr) {
+                logger.error(
+                  { err: suppressErr, workflowRunId, emailId, recipient, topic },
+                  "resend webhook: auto-suppression insert failed",
+                );
+                // swallow — webhook still 200s per always-200 contract
+              }
+            }
+          }
+        }
 
         logger.info(
           {
