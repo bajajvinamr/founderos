@@ -52,7 +52,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       (errorBody as { error?: string } | null)?.error ?? `Request failed: ${res.status}`,
       res.status,
       errorBody,
-      res.headers.get("x-request-id"),
+      // Defensive: a CDN or proxy may strip x-request-id, and mocked
+      // Response objects in tests sometimes omit headers entirely.
+      // Either case shouldn't crash the error path.
+      res.headers?.get?.("x-request-id") ?? null,
     );
   }
   if (res.status === 204) return undefined as T;

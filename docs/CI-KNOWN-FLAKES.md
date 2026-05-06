@@ -56,6 +56,33 @@ Root cause: `FounderOnboardingWizard.tsx:228` rendered raw `<div>`s inside `Dial
 
 ---
 
+### 7. backup-lib.test.ts > backs up and restores large table payloads — FK duplicate-references restore failure
+
+**Location:** `packages/db/src/backup-lib.test.ts:136` — call to `runDatabaseRestore`
+
+**Issue:** Backup completes cleanly; restore fails on `content_drafts` FK creation:
+```
+ERROR: foreign key referenced-columns list must not contain duplicates
+[statement: ALTER TABLE "public"."content_drafts"
+ ADD CONSTRAINT "content_drafts_brief_id_company_id_fk"
+ FOREIGN KEY ("brief_id", "b...]
+```
+
+**Root cause:** `content_briefs` has BOTH a PK on `id` AND a UNIQUE on `(id, company_id)` (added in 0086 specifically to support the TC-3 composite FK pattern). The migration source defines the FK as `REFERENCES content_briefs(id, company_id)` — valid SQL. But `pg_dump` re-emits the FK with the referenced-columns list rendered in a way Postgres rejects on restore.
+
+**Why this isn't a backup-lib bug:** The migration's source SQL is valid and applies cleanly to a fresh database. The issue is in pg_dump → pg_restore round-trip when the target table has overlapping PK + composite UNIQUE on the same column. The TC-3 composite-FK pattern (used to enforce same-tenant ownership) is correct application-side; only the dump/restore path stumbles.
+
+**Pre-existing:** Predates S6 work (this test references migration 0088 which was content_drafts; S6.x migrations 0099-0102 don't touch this area). Surfaced today during the S6.9 bug bash because the full suite was being run end-to-end.
+
+**Mitigation options (for v1.1 cleanup):**
+1. Drop the UNIQUE on `(id, company_id)` and rely on application-level enforcement (loses DB-level same-tenant invariant — not great).
+2. Patch backup-lib to post-process pg_dump output and rewrite ambiguous FK references.
+3. Switch from raw pg_dump to a Drizzle-aware backup that emits schema from the migration source rather than introspecting the live DB.
+
+**Tracked as v1.1.** Does NOT block production cutover — actual prod backups via Fly Managed Postgres point-in-time recovery don't go through this pg_dump path.
+
+---
+
 ### 6. ~~content-publish-tick.test.ts > teardown 57P01 connection-terminated errors~~ — FIXED 2026-05-06 (S6.9 bug bash)
 
 **Location:** `server/src/__tests__/content-publish-tick.test.ts` afterEach
