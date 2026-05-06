@@ -25,6 +25,7 @@ import { canRunAutonomously } from "../../workflow-autonomy.js";
 import { logActivity } from "../../activity-log.js";
 import { logger } from "../../../middleware/logger.js";
 import { getEmailTransport } from "../../transports/email-transport.js";
+import { isSuppressed } from "../../customer-email-suppressions.js";
 
 export interface OnboardingEmailConfig {
   /** Email address of the new contact (from trigger event) */
@@ -46,7 +47,17 @@ export interface OnboardingEmailAction {
     bodyText: string;
     bodyHtml: string;
   };
-  status: "pending" | "completed" | "failed";
+  /**
+   * Action status:
+   *   - "pending":   initial; not yet attempted
+   *   - "running":   transport.send() in flight (transient; rarely persisted)
+   *   - "completed": transport accepted (Resend 200/201, capture-mode unconditional)
+   *   - "failed":    transport rejected synchronously
+   *   - "skipped":   pre-send suppression check found a customer_email_suppressions
+   *                  row; the send was deliberately not attempted. Council 2026-05-06
+   *                  finding #4 #196 layer 3c-1.
+   */
+  status: "pending" | "running" | "completed" | "failed" | "skipped";
   executedAt?: string;
 }
 
@@ -140,6 +151,7 @@ export async function executeOnboardingEmailTemplate(
     await sendOnboardingEmails(db, workflow, runId, actions);
     const anyFailed = actions.some((a) => a.status === "failed");
     const successCount = actions.filter((a) => a.status === "completed").length;
+    const skippedCount = actions.filter((a) => a.status === "skipped").length;
     const runStatus = anyFailed ? "failed" : "completed";
     await updateWorkflowRunStatus(db, runId, runStatus, { actions });
 
@@ -153,9 +165,10 @@ export async function executeOnboardingEmailTemplate(
       workflowId,
       details: {
         recipientEmail: config.contactEmail,
-        emailCount: 3,
+        emailCount: actions.length,
         successCount,
-        failureCount: actions.length - successCount,
+        skippedCount,
+        failureCount: actions.length - successCount - skippedCount,
       },
     });
   } else if (workflow.autonomyLevel === 3) {
@@ -211,6 +224,33 @@ async function sendOnboardingEmails(
 
   for (const action of actions) {
     if (action.type !== "send_email") continue;
+
+    // Pre-send suppression check (#196 layer 3c-1, council 2026-05-06 finding #4).
+    // Skip the send if the recipient has a customer_email_suppressions row for
+    // either topic="onboarding" OR topic="all" (master switch). This is the
+    // CAN-SPAM/GDPR compliance gate — never send to a contact who opted out.
+    const suppressed = await isSuppressed(
+      db,
+      workflow.companyId,
+      action.payload.recipientEmail,
+      "onboarding",
+    );
+    if (suppressed) {
+      const nowIso = new Date().toISOString();
+      action.status = "skipped";
+      action.executedAt = nowIso;
+      (action.payload as unknown as Record<string, unknown>).skipReason =
+        "customer_email_suppressed";
+      logger.info(
+        {
+          workflowId: workflow.id,
+          day: action.payload.day,
+          to: action.payload.recipientEmail,
+        },
+        "onboarding email skipped — recipient is suppressed",
+      );
+      continue;
+    }
 
     const result = await transport.send({
       to: action.payload.recipientEmail,
