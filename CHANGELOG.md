@@ -1,3 +1,9 @@
+## [0.6.5] - 2026-05-06 20:54:44 UTC
+
+### Fixed
+- fix(security): expand pino redact paths + drop signupUrl log (P1-7) (#50) (c554539)
+- fix(security): wrap invite consume + role grant in db.transaction (P1-4) (#49) (565c5eb)
+
 ## [0.6.4] - 2026-05-06 20:42:52 UTC
 
 ## [0.6.3] - 2026-05-06 20:21:43 UTC
