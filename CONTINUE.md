@@ -1,6 +1,80 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-05 PM (council BLOCK on BYO Runner + Sprint 4 fake-delivery; 7-day LRP authored; "no hard halt + morning report" directive set) by Claude_
+_Last updated: 2026-05-06 PM (Day 2 of 7-day LRP; **S4.8 demo ticket complete** — all 8 council prereqs + dispatcher + generator + trigger + E2E shipped; +29 tests, 0 regressions) by Claude_
+
+## 🟢 2026-05-06 PM — S4.8 COMPLETE · Day 2 wrap status
+
+**S4.8 (the demo ticket) shipped end-to-end.** Council finding #4's BLOCK is structurally closed: all 8 prereqs (#192-#199) are green, the dispatcher template composes them into the autonomous send path, the generator builds the actions[] array at workflow_run CREATION time (idempotent, byte-identical retry), and the trigger orchestrator threads the entire pipeline behind a single function call.
+
+### Day 2 commit ladder (top → bottom — all on `feat/s4.3-content-attribution`, pushed to origin)
+
+```
+dd65421  test(s4.8): E2E test — trigger → dispatcher → transport (#164 part 4)
+57ca011  feat(s4.8): churn-rescue trigger orchestrator — closes the create-time loop (#164 part 3)
+7cba53b  feat(s4.8): churn-rescue generator — run-CREATION time builder (#164 part 2)
+2576c07  test(s4.8): integration tests for churn-rescue template (10 tests)
+16bb70c  feat(s4.8): churn-rescue template — composition of 8 prereqs (#164)
+61a5b1c  docs(morning-report): Day 2 afternoon — test repair + S4.8 dispatcher shipped
+a187d0f  fix(test): repair pre-existing scaffolding tests from commit 2db3d17
+920945b  fix(test): repair pre-existing fixture bugs unblocking 10 tests
+8afafeb  fix(test): inject EMAIL_UNSUBSCRIBE_SECRET in workflows.test.ts beforeAll
++ 8 prereq commits (Day 2 AM): #192 #193 #194 #195 #196 #197 #198 #199
+```
+
+### Test-suite scoreboard (Day 2 EOD)
+
+| Suite | Pass | Fail | Skip | Notes |
+|---|---:|---:|---:|---|
+| `pnpm --filter @founderos/server vitest run` | 1877 | 0 | 7 | +29 vs Day 2 AM (10 dispatcher + 12 generator + 13 trigger + 4 E2E - duplicates) |
+| `pnpm typecheck` (workspace) | ✅ | — | — | server + ui + cli + plugin examples all clean |
+| `pnpm e2e` (FOUNDEROS_E2E_PROFILE=public-only against `founderos.fly.dev`) | 44 | 0 | 63 | 63 skipped are auth-required specs; 0 failures; 1.4 min runtime |
+
+### S4.8 surface inventory
+
+```
+server/src/services/workflows/templates/churn-rescue.ts                — dispatcher (~290 lines)
+server/src/services/workflows/templates/churn-rescue-generator.ts      — create-time builder (~280 lines)
+server/src/services/workflows/templates/churn-rescue-trigger.ts        — orchestrator (~290 lines)
+server/src/__tests__/churn-rescue.test.ts                              — 10 dispatcher tests
+server/src/__tests__/churn-rescue-generator.test.ts                    — 12 generator tests
+server/src/__tests__/churn-rescue-trigger.test.ts                      — 13 trigger tests
+server/src/__tests__/churn-rescue-e2e.test.ts                          — 4 E2E pipeline tests
+                                                                       --
+                                                                       39 integration tests, 100% green
+```
+
+### What remains for full S4.8 demo readiness (NOT done; needs decisions below)
+
+1. **Stripe webhook receiver glue** — `subscription.ts` already handles `customer.subscription.deleted` for billing-state updates, but doesn't invoke `triggerChurnRescue()`. One-line wire-up required, but **needs a per-tenant config decision**: should every cancellation auto-fire churn rescue, or only when a `churn-rescue` workflow exists in `active` state for that tenant? (Recommendation: latter — opt-in via workflow row.)
+
+2. **LLM-personalized copy** — the generator is deterministic (template-based per-category). Replacing with an LLM call is mechanical (input/output contract is stable), but council #4 discipline ("byte-identical retry") still needs a deterministic fallback if the LLM call fails. Defer to S6 polish.
+
+### Phase C (Sprint 5 — Finance) — NOT STARTED
+
+Sprint 5 is 10 tickets: revenue cockpit, pricing simulator, churn forecast, runway model, LTV/CAC, experiment ROI rollup, cash planning. Each is multi-day data + viz work. **Recommendation: Vinamr triages priority before next session** — full Sprint 5 in one autonomous push isn't realistic given today's S4.8 took 4 hours of focused work.
+
+### Phase D (Sprint 6 — Ops + Polish) — NOT STARTED
+
+Sprint 6 is 10 tickets of polish (Sentry integration, health hardening, BG job observability, Inbox/Goals/Projects/Settings UI consolidation). Defer pending Sprint 5 scope decision.
+
+### Production health (2026-05-06 EOD)
+
+- `https://founderos.fly.dev` — green; public E2E suite 44/44 pass
+- Branch `feat/s4.3-content-attribution` ahead of `origin/main` by 30+ commits, all pushed
+- CI billing block (noted in CLAUDE.md) — still in effect; no GitHub Actions runs have completed since 2026-05-02. `deploy-prod.yml` remains the source of truth for any rollout.
+- No live deploys made today. All work is on the feature branch.
+
+### Decisions for Vinamr (when back)
+
+| # | Decision | Why it needs you |
+|---|---|---|
+| 1 | **PR or merge S4.8 to `main`?** | 30+ commits on a feature branch. Branch protection on `main` still pending so I could merge directly, but the LRP's spirit is human-in-loop on milestone merges. |
+| 2 | **Wire `triggerChurnRescue` into Stripe webhook?** | Trade-off: opt-in via active workflow row (recommended; safer) vs auto-fire on every `subscription.deleted` (faster demo, riskier prod). |
+| 3 | **Sprint 5 vs Sprint 6 ordering?** | Original LRP order is S5→S6, but S6 polish (Sentry hardening, health endpoint #139) is lower-risk and unblocks demo readiness independently. Could swap. |
+| 4 | **Flip Stripe live keys?** | Out of scope for me per LRP V2 mandate (live key flip = irreversible one-way door, requires explicit owner action). |
+| 5 | **Branch protection on `main`** | Doc ready at `docs/ops/branch-protection.md`. GitHub Actions billing exhausted blocks the CI-status-check requirement until billing is restored. |
+
+---
 
 ## 🟧 2026-05-05 PM — 7-DAY AUTONOMOUS RUN AUTHORIZED (ends 2026-05-12)
 
