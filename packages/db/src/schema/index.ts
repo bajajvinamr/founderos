@@ -78,6 +78,13 @@ export {
   type NotificationKind,
   type NotificationRefKind,
 } from "./notifications.js";
+export {
+  magicLinkTokens,
+  MAGIC_LINK_PURPOSES,
+  MAGIC_LINK_TARGET_REF_KINDS,
+  type MagicLinkPurpose,
+  type MagicLinkTargetRefKind,
+} from "./magic_link_tokens.js";
 export { integrationData } from "./integration-data.js";
 export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";

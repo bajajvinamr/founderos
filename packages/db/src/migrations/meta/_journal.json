@@ -687,6 +687,13 @@
       "when": 1780700000000,
       "tag": "0100_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1780800000000,
+      "tag": "0101_magic_link_tokens",
+      "breakpoints": true
     }
   ]
 }
