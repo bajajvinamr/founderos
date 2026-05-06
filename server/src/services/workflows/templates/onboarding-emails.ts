@@ -26,6 +26,7 @@ import { logActivity } from "../../activity-log.js";
 import { logger } from "../../../middleware/logger.js";
 import { getEmailTransport } from "../../transports/email-transport.js";
 import { isSuppressed } from "../../customer-email-suppressions.js";
+import { buildUnsubscribeUrl } from "../../email-unsubscribe-tokens.js";
 
 export interface OnboardingEmailConfig {
   /** Email address of the new contact (from trigger event) */
@@ -96,6 +97,19 @@ export async function executeOnboardingEmailTemplate(
   const contactName = config.contactName ?? "there";
   const companyName = config.companyName ?? "FounderOS";
 
+  // CAN-SPAM unsubscribe URL — built once per workflow_run so all 3 emails
+  // share the same token (recipient + topic identical across the sequence).
+  // Same shape as slack-digest.ts: APP_URL env, default to founderos.io.
+  // Throws if EMAIL_UNSUBSCRIBE_SECRET is unset (env-validation marks it WARN
+  // but every customer-email send NEEDS it — fail loudly here, not silently).
+  const baseUrl = process.env.APP_URL ?? "https://founderos.io";
+  const unsubscribeUrl = buildUnsubscribeUrl(baseUrl, {
+    c: workflow.companyId,
+    e: config.contactEmail.toLowerCase(),
+    t: "onboarding",
+    ts: Date.now(),
+  });
+
   // Build the 3 email actions
   const actions: OnboardingEmailAction[] = [
     {
@@ -104,8 +118,8 @@ export async function executeOnboardingEmailTemplate(
         day: 0,
         recipientEmail: config.contactEmail,
         subject: `Welcome to ${companyName}`,
-        bodyText: buildOnboardingEmailText(0, contactName, companyName),
-        bodyHtml: buildOnboardingEmailHtml(0, contactName, companyName, config.dashboardUrl),
+        bodyText: buildOnboardingEmailText(0, contactName, companyName, unsubscribeUrl),
+        bodyHtml: buildOnboardingEmailHtml(0, contactName, companyName, config.dashboardUrl, unsubscribeUrl),
       },
       status: "pending",
     },
@@ -115,8 +129,8 @@ export async function executeOnboardingEmailTemplate(
         day: 2,
         recipientEmail: config.contactEmail,
         subject: `Getting started with ${companyName} — Day 2`,
-        bodyText: buildOnboardingEmailText(2, contactName, companyName),
-        bodyHtml: buildOnboardingEmailHtml(2, contactName, companyName, config.dashboardUrl),
+        bodyText: buildOnboardingEmailText(2, contactName, companyName, unsubscribeUrl),
+        bodyHtml: buildOnboardingEmailHtml(2, contactName, companyName, config.dashboardUrl, unsubscribeUrl),
       },
       status: "pending",
     },
@@ -126,8 +140,8 @@ export async function executeOnboardingEmailTemplate(
         day: 7,
         recipientEmail: config.contactEmail,
         subject: `What to do next with ${companyName}`,
-        bodyText: buildOnboardingEmailText(7, contactName, companyName),
-        bodyHtml: buildOnboardingEmailHtml(7, contactName, companyName, config.dashboardUrl),
+        bodyText: buildOnboardingEmailText(7, contactName, companyName, unsubscribeUrl),
+        bodyHtml: buildOnboardingEmailHtml(7, contactName, companyName, config.dashboardUrl, unsubscribeUrl),
       },
       status: "pending",
     },
@@ -342,7 +356,27 @@ async function updateWorkflowRunStatus(
 
 // ── Email template builders ────────────────────────────────────────────────
 
-function buildOnboardingEmailText(day: 0 | 2 | 7, contactName: string, companyName: string): string {
+/**
+ * CAN-SPAM footer (text + HTML variants) — every customer-facing email MUST
+ * include a working unsubscribe link. The link points at our public route
+ * `/u/customer/:token` (layer 3b), HMAC-signed by layer 2's
+ * `generateUnsubscribeToken`. One-click GET works in every email client;
+ * RFC 8058 List-Unsubscribe-Post is set in the email headers (Resend handles
+ * those — see email-transport.ts where `tags` map to provider headers).
+ */
+function buildOnboardingEmailText(
+  day: 0 | 2 | 7,
+  contactName: string,
+  companyName: string,
+  unsubscribeUrl: string,
+): string {
+  const footer = [
+    "",
+    "—",
+    `You're receiving this because you signed up for ${companyName}.`,
+    `To unsubscribe from these emails: ${unsubscribeUrl}`,
+  ];
+
   if (day === 0) {
     return [
       `Hey ${contactName},`,
@@ -358,6 +392,7 @@ function buildOnboardingEmailText(day: 0 | 2 | 7, contactName: string, companyNa
       "",
       "Best,",
       `The ${companyName} team`,
+      ...footer,
     ].join("\n");
   }
 
@@ -375,6 +410,7 @@ function buildOnboardingEmailText(day: 0 | 2 | 7, contactName: string, companyNa
       "",
       "Best,",
       `The ${companyName} team`,
+      ...footer,
     ].join("\n");
   }
 
@@ -392,6 +428,7 @@ function buildOnboardingEmailText(day: 0 | 2 | 7, contactName: string, companyNa
     "",
     "Best,",
     `The ${companyName} team`,
+    ...footer,
   ].join("\n");
 }
 
@@ -400,12 +437,20 @@ function buildOnboardingEmailHtml(
   contactName: string,
   companyName: string,
   dashboardUrl: string,
+  unsubscribeUrl: string,
 ): string {
   const escaped = {
     contactName: escapeHtml(contactName),
     companyName: escapeHtml(companyName),
     dashboardUrl: escapeHtml(dashboardUrl),
+    unsubscribeUrl: escapeHtml(unsubscribeUrl),
   };
+  // CAN-SPAM compliance footer; muted so it doesn't compete with primary CTA.
+  const footer = `<hr style="margin-top:32px;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999;line-height:1.5">
+    You're receiving this because you signed up for ${escaped.companyName}.<br>
+    <a href="${escaped.unsubscribeUrl}" style="color:#999;text-decoration:underline">Unsubscribe</a>
+  </p>`;
 
   if (day === 0) {
     return `<!DOCTYPE html>
@@ -426,6 +471,7 @@ function buildOnboardingEmailHtml(
   <p><a href="${escaped.dashboardUrl}" style="color:#0066cc;text-decoration:none">Open your dashboard →</a></p>
   <p>Questions? Reply to this email or check our docs.</p>
   <p>Best,<br>The ${escaped.companyName} team</p>
+  ${footer}
 </body>
 </html>`;
   }
@@ -447,6 +493,7 @@ function buildOnboardingEmailHtml(
   </ul>
   <p><a href="${escaped.dashboardUrl}" style="color:#0066cc;text-decoration:none">Check your dashboard for next steps →</a></p>
   <p>Best,<br>The ${escaped.companyName} team</p>
+  ${footer}
 </body>
 </html>`;
   }
@@ -469,6 +516,7 @@ function buildOnboardingEmailHtml(
   <p><a href="${escaped.dashboardUrl}" style="color:#0066cc;text-decoration:none">Visit your dashboard →</a></p>
   <p>Need help? Our docs and support team are here.</p>
   <p>Best,<br>The ${escaped.companyName} team</p>
+  ${footer}
 </body>
 </html>`;
 }
