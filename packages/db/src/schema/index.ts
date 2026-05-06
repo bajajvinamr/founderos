@@ -85,6 +85,10 @@ export {
   type MagicLinkPurpose,
   type MagicLinkTargetRefKind,
 } from "./magic_link_tokens.js";
+export {
+  onboardingDrafts,
+  ONBOARDING_TOTAL_STEPS,
+} from "./onboarding_drafts.js";
 export { integrationData } from "./integration-data.js";
 export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";

@@ -335,6 +335,13 @@ export {
 } from "./notification.js";
 
 export {
+  ONBOARDING_MAX_STEP,
+  onboardingStepSchema,
+  saveOnboardingDraftSchema,
+  type SaveOnboardingDraftInput,
+} from "./onboarding-draft.js";
+
+export {
   agentReviewRecommendationSchema,
   generateAgentReviewSchema,
   createManualAgentReviewSchema,

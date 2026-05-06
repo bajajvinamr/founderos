@@ -71,6 +71,7 @@ import { permissionsMatrixRoutes } from "./routes/permissions-matrix.js";
 import { auditLineageRoutes } from "./routes/audit-lineage.js";
 import { templateRegistryRoutes } from "./routes/template-registry.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { onboardingDraftRoutes } from "./routes/onboarding-draft.js";
 import { departmentStatusRoutes } from "./routes/department-status.js";
 import { experimentRoutes } from "./routes/experiments.js";
 import { workflowRoutes } from "./routes/workflows.js";
@@ -346,6 +347,7 @@ export async function createApp(
   api.use(auditLineageRoutes(db));
   api.use(templateRegistryRoutes());
   api.use(notificationRoutes(db));
+  api.use(onboardingDraftRoutes(db));
   api.use(experimentRoutes(db));
   api.use(workflowRoutes(db));
   api.use(contentBriefRoutes(db));
