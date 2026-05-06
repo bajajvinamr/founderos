@@ -180,3 +180,12 @@ export {
   type LandingCopyPayload,
   type AdCreativePayload,
 } from "./content_drafts.js";
+export {
+  customerEmailSuppressions,
+  SUPPRESSION_TOPICS,
+  SUPPRESSION_REASONS,
+  type CustomerEmailSuppression,
+  type CustomerEmailSuppressionInsert,
+  type SuppressionTopic,
+  type SuppressionReason,
+} from "./customer_email_suppressions.js";

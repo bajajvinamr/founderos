@@ -631,6 +631,13 @@
       "when": 1780150000000,
       "tag": "0092_workflow_runs_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0093_customer_email_suppressions",
+      "breakpoints": true
     }
   ]
 }
