@@ -83,3 +83,73 @@ export async function runCronTick<T>(
  * request-context.
  */
 export { getRequestContext };
+
+/**
+ * BullMQ-shape sibling of `runCronTick`. Same composition (cron context,
+ * structured duration log, Sentry capture) — but RE-THROWS after capture
+ * instead of swallowing.
+ *
+ * Council 2026-05-07 P1-5b — `hubspot-sync-cron.ts` is the 7th business
+ * cron and is shaped as a BullMQ recurring job + Worker callback, not a
+ * `setInterval`. BullMQ's contract is the inverse of setInterval's:
+ *
+ *   - setInterval cron: error must be SWALLOWED. The next tick proceeds
+ *     normally; an unhandled rejection from `void runCronTick(...)` would
+ *     crash the process under Node 24's default unhandledRejection
+ *     behavior. → use `runCronTick`.
+ *
+ *   - BullMQ cron: error must be RE-THROWN. The Worker's `failed` event
+ *     fires only when the job callback throws; the queue's retry / DLQ
+ *     machinery depends on the throw to mark the job failed. Swallowing
+ *     would silently mark every failed job as succeeded. → use this.
+ *
+ * Pattern at the call site (BullMQ Worker):
+ *
+ *   const worker = new Worker(QUEUE, async (job) => {
+ *     return runCronTaskWithRethrow(
+ *       "hubspot-sync",
+ *       () => syncAllWorkspaces(db),
+ *       { jobId: job.id, jobName: job.name },
+ *     );
+ *   }, ...);
+ *
+ * Optional `extraContext` is merged into both the structured error log
+ * and the Sentry capture context — useful for BullMQ to attach jobId /
+ * jobName so the Sentry event correlates back to the queue row.
+ */
+export async function runCronTaskWithRethrow<T>(
+  taskName: string,
+  fn: () => Promise<T> | T,
+  extraContext?: Record<string, unknown>,
+): Promise<T> {
+  return runInCronContext(taskName, async () => {
+    const start = Date.now();
+    try {
+      const result = await fn();
+      const durationMs = Date.now() - start;
+      logger.debug(
+        { taskName, durationMs, ...extraContext },
+        `cron:${taskName} ok`,
+      );
+      return result;
+    } catch (err) {
+      const durationMs = Date.now() - start;
+      logger.error(
+        {
+          err: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+          taskName,
+          durationMs,
+          ...extraContext,
+        },
+        `cron:${taskName} threw`,
+      );
+      // Capture FIRST, while the cron request context is still active —
+      // Sentry's scope enricher reads getRequestContext() at this exact
+      // call. Then re-throw so BullMQ's failed handler (and retry/DLQ
+      // policy) can react.
+      captureServerError(err, { taskName, durationMs, ...extraContext });
+      throw err;
+    }
+  });
+}
