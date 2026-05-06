@@ -64,6 +64,8 @@ import { canRunAutonomously } from "../../workflow-autonomy.js";
 import { isDraftOnly, requiresApproval } from "../../workflow-autonomy.js";
 import { getEmailTransport } from "../../transports/email-transport.js";
 import { logger } from "../../../middleware/logger.js";
+import { isSuppressed } from "../../customer-email-suppressions.js";
+import { buildUnsubscribeUrl } from "../../email-unsubscribe-tokens.js";
 
 // ── Config schema (inferred from config JSONB) ──────────────────────────────
 
@@ -324,11 +326,21 @@ export async function executeNudgeActions(
   actions: WorkflowAction[],
   workflow?: Pick<Workflow, "id">,
   runId?: string,
+  // Optional db + companyId for the customer-email-suppressions gate.
+  // Production callers (executeActivationNudgeTemplate) pass both. Legacy tests
+  // that exercise executeNudgeActions in isolation can omit them — the gate
+  // simply doesn't fire (preserves the pre-#196 contract for those tests). The
+  // production callsite is the trust boundary that matters; new test
+  // coverage of the gate lives in onboarding-emails-suppression.test.ts and
+  // its activation-nudge counterpart.
+  db?: Db,
+  companyId?: string,
 ): Promise<WorkflowAction[]> {
   const transport = getEmailTransport();
   const fromAddress =
     process.env.FOUNDEROS_EMAIL_FROM ?? "FounderOS <onboarding@founderos.io>";
   const now = () => new Date().toISOString();
+  const baseUrl = process.env.APP_URL ?? "https://founderos.io";
 
   const out: WorkflowAction[] = [];
 
@@ -337,12 +349,6 @@ export async function executeNudgeActions(
       const payload = action.payload as Record<string, unknown>;
       const to = (payload.email ?? payload.recipientEmail) as string | undefined;
       const subject = (payload.subject ?? "We miss you!") as string;
-      const text =
-        (payload.bodyText as string | undefined) ??
-        `Hey — we noticed you haven't been back in a while. ${subject}`;
-      const html =
-        (payload.bodyHtml as string | undefined) ??
-        `<p>Hey — we noticed you haven't been back in a while.</p><p>${subject}</p>`;
 
       if (!to) {
         logger.warn(
@@ -357,6 +363,59 @@ export async function executeNudgeActions(
         });
         continue;
       }
+
+      // Suppression gate (#196 layer 3d). Only fires when both db + companyId
+      // are passed — production always passes them; some unit tests exercise
+      // the function bare-bones and skip the gate intentionally.
+      if (db && companyId) {
+        const suppressed = await isSuppressed(
+          db,
+          companyId,
+          to,
+          "activation_nudge",
+        );
+        if (suppressed) {
+          logger.info(
+            { workflowId: workflow?.id, runId, to },
+            "activation-nudge email skipped — recipient is suppressed",
+          );
+          out.push({
+            ...action,
+            status: "skipped",
+            executedAt: now(),
+            payload: { ...payload, skipReason: "customer_email_suppressed" },
+          });
+          continue;
+        }
+      }
+
+      // CAN-SPAM unsubscribe URL — built per send because activation-nudge
+      // candidates are independent (different recipients per scan tick).
+      // Only generated when db + companyId are present (i.e. production
+      // path). When absent, fall back to body without footer (existing
+      // unit-test contract).
+      let unsubscribeUrl: string | null = null;
+      if (db && companyId) {
+        unsubscribeUrl = buildUnsubscribeUrl(baseUrl, {
+          c: companyId,
+          e: to.toLowerCase(),
+          t: "activation_nudge",
+          ts: Date.now(),
+        });
+      }
+
+      const text =
+        ((payload.bodyText as string | undefined) ??
+          `Hey — we noticed you haven't been back in a while. ${subject}`) +
+        (unsubscribeUrl
+          ? `\n\n—\nTo unsubscribe from these emails: ${unsubscribeUrl}`
+          : "");
+      const html =
+        ((payload.bodyHtml as string | undefined) ??
+          `<p>Hey — we noticed you haven't been back in a while.</p><p>${subject}</p>`) +
+        (unsubscribeUrl
+          ? `<hr style="margin-top:32px;border:none;border-top:1px solid #eee"><p style="font-size:12px;color:#999"><a href="${unsubscribeUrl}" style="color:#999;text-decoration:underline">Unsubscribe</a></p>`
+          : "");
 
       const tags: Array<{ name: string; value: string }> = [
         { name: "template", value: "activation-nudge" },
@@ -495,7 +554,13 @@ export async function executeActivationNudgeTemplate(
     { workflowId, runId, actionCount: incoming.length },
     "activation-nudge autonomous send triggered",
   );
-  const executed = await executeNudgeActions(incoming, workflow, runId);
+  const executed = await executeNudgeActions(
+    incoming,
+    workflow,
+    runId,
+    db,
+    workflow.companyId,
+  );
 
   const anyFailed = executed.some((a) => a.status === "failed");
   const runStatus = anyFailed ? "failed" : "completed";
