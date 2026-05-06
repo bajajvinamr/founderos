@@ -5,6 +5,7 @@ import { computeCockpitMetrics } from "../services/finance/cockpit.js";
 import { runPricingSimulation } from "../services/finance/pricing-simulator.js";
 import { computeChurnForecast } from "../services/finance/churn-forecast.js";
 import { computeRunwayForecast } from "../services/finance/runway-forecast.js";
+import { computeExperimentRoi } from "../services/finance/experiment-roi.js";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
 
@@ -38,6 +39,17 @@ export function financeRoutes(db: Db) {
 
       const forecast = await computeChurnForecast(db, companyId);
       res.json(forecast);
+    },
+  );
+
+  router.get(
+    "/companies/:companyId/finance/experiment-roi",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const rollup = await computeExperimentRoi(db, companyId);
+      res.json(rollup);
     },
   );
 
