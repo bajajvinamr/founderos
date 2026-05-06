@@ -1,3 +1,8 @@
+## [0.6.11] - 2026-05-06 22:05:46 UTC
+
+### Fixed
+- fix(observability): extend env validator + delete master-branch dead workflow (P1-11) (#57) (aac7d9e)
+
 ## [0.6.9] - 2026-05-06 21:45:16 UTC
 
 ### Fixed
