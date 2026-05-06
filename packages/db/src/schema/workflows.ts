@@ -108,6 +108,13 @@ export type AutonomyLevel = (typeof AUTONOMY_LEVELS)[keyof typeof AUTONOMY_LEVEL
 export const WORKFLOW_RUN_STATUSES = [
   "pending_approval",
   "running",
+  // S4.8 prereq #194: "approved" is a transient state between
+  // pending_approval and dispatch — used by the workflow-run-approval
+  // service to mark "human said yes; dispatcher should re-execute now".
+  // The dispatcher then transitions approved → completed | failed.
+  "approved",
+  // "rejected" is terminal — human declined, no further action.
+  "rejected",
   "completed",
   "failed",
   "cancelled",
