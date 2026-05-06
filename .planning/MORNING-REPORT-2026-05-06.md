@@ -372,3 +372,46 @@ Picking up Sprint 5 ahead of plan (Day 2 evening instead of Day 3) per autonomou
 - S5.8 — Cash planning (now unblocked by S5.9)
 - S5.4 — Scenario modeling LLM (last — needs S5.1/S5.2/S5.3 as Claude tools)
 - S5.10 — Console layout consolidation (last — replaces all mock tabs at once)
+
+### S5.6 — Marketing spend ledger — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `c57fd8e` | `feat(s5.6): marketing_spend ledger — channel × period × amount`. Schema reuses the `EXPERIMENT_CHANNELS` enum (linkedin/paid_meta/paid_google/referral/seo/partnerships/content) + "other" catch-all. Migration 0097 with CHECK constraints on amount_cents>=0, period_end>=period_start, channel enum. Full CRUD route with tenant-scope check on PATCH/DELETE (read-then-mutate). 12/12 integration tests via embedded postgres. Council T3 advisory fired — same self-audit pattern as S5.9 (additive new table, no auth/payment touch). |
+
+### S5.1 — Revenue cockpit endpoint + math — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `39108d5` | `feat(s5.1): revenue cockpit — live MRR/ARR/churn/LTV/CAC/payback math`. Single composable service computes MRR/ARR/expansion/churn/LTV/CAC/payback/customer counts/ARPU/cash from `events` (Stripe stream) + `marketing_spend` (S5.6) + `company_financials` (S5.9). DISTINCT ON (subscription_id) for active-sub state; latest-event-wins semantic. Confidence bands per metric (high/medium/low/insufficient_data) — empty workspaces get explicit "insufficient_data" not deceptive zeroes. UI: 4-up + 3-up cards + per-channel CAC table + cash/runway panel; confidence dots (emerald/amber/orange/muted) on every metric. Empty-state UX renders "Connect Stripe to see revenue" instead of misleading $0s. 13/13 integration tests, all hand-calculated truth values. Drizzle pg-vs-pglite shape differential handled via `unwrapRows<T>` helper (vinamr-invariants pattern). Date binding to SQL templates uses .toISOString() (postgres driver doesn't accept raw Date objects). |
+
+### Iteration totals (Day 2 evening)
+
+| Metric | Value |
+|---|---|
+| Tickets shipped | 3 (S5.9 + S5.6 + S5.1) |
+| Server tests added | 33 (8 + 12 + 13) — all green on first or second run |
+| Migrations | 2 (0096 + 0097) |
+| Files created | 14 |
+| Lines added | ~1900 |
+| Commits | 4 (3 feat + 1 docs) |
+| Council T3 advisories | 2 (both self-audited; additive new tables) |
+| Typecheck regressions | 0 |
+| Adjacent test regressions (content-attribution) | 0 |
+
+### Sprint 5 status
+
+| Ticket | Status |
+|---|---|
+| S5.1 — Revenue cockpit | ✅ SHIPPED |
+| S5.2 — Pricing simulator | ⏳ pending (composes existing `runScenario` engine) |
+| S5.3 — Churn forecast | ⏳ pending (cohort retention curve fit) |
+| S5.4 — Scenario modeling LLM | ⏳ pending (uses S5.1/S5.2/S5.3 as Claude tools) |
+| S5.5 — Runway forecast | ⏳ pending (now unblocked by S5.9) |
+| S5.6 — Marketing spend ledger | ✅ SHIPPED |
+| S5.7 — Experiment ROI rollup | ⏳ pending |
+| S5.8 — Cash planning | ⏳ pending (composes S5.5 + S5.6) |
+| S5.9 — Finance settings | ✅ SHIPPED |
+| S5.10 — Console layout consolidation | ⏳ pending (last) |
+
+3/10 tickets shipped — foundation tickets complete. The remaining 7 tickets compose the foundation.
