@@ -103,6 +103,9 @@ export const queryKeys = {
   health: ["health"] as const,
   bootstrapState: ["bootstrap-state"] as const,
   diagnostics: ["diagnostics"] as const,
+  finance: {
+    settings: (companyId: string) => ["finance", companyId, "settings"] as const,
+  },
   secrets: {
     list: (companyId: string) => ["secrets", companyId] as const,
     providers: (companyId: string) => ["secret-providers", companyId] as const,

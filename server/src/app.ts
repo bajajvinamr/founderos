@@ -36,6 +36,7 @@ import { insightRoutes } from "./routes/insights.js";
 import { postHogRoutes } from "./routes/posthog-connector.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
+import { financeSettingsRoutes } from "./routes/finance-settings.js";
 import { conversationRoutes } from "./routes/conversations.js";
 import { integrationDataRoutes } from "./routes/integration-data.js";
 import { agentReviewRoutes } from "./routes/agent-reviews.js";
@@ -350,6 +351,7 @@ export async function createApp(
   api.use(postHogRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
+  api.use(financeSettingsRoutes(db));
   api.use(conversationRoutes(db));
   api.use(integrationDataRoutes(db));
   api.use(agentReviewRoutes(db));
