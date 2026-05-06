@@ -35,6 +35,7 @@ import { generateWeeklyWrap, type AnthropicCaller } from "./weekly-wrap-generato
 import { postWeeklyWrapToSlack } from "./weekly-wrap-poster.js";
 import { hourInTimezone } from "./daily-digest.js";
 import { logger } from "../middleware/logger.js";
+import { runCronTick } from "../lib/cron-tick.js";
 
 const DEFAULT_TICK_INTERVAL_MS = 60 * 60 * 1_000; // 1 hour
 const TARGET_HOUR_LOCAL = 17; // 5pm local
@@ -315,13 +316,11 @@ export function createWeeklyWrapDeliveryCron(
   function start(): void {
     if (running) return;
     running = true;
+    // PR-5 (council 2026-05-07 P1): runCronTick adds cron
+    // requestId/traceId/actor to logs from inside tick() and routes
+    // uncaught throws to Sentry via captureServerError.
     timer = setInterval(() => {
-      void tick().catch((err) => {
-        log.error(
-          { err: err instanceof Error ? err.message : String(err) },
-          "weekly-wrap-delivery-cron tick threw",
-        );
-      });
+      void runCronTick("weekly-wrap-delivery", tick);
     }, tickIntervalMs);
     timer.unref?.();
     log.info({ tickIntervalMs }, "weekly-wrap-delivery-cron started");

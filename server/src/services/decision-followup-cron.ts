@@ -17,6 +17,7 @@
 
 import type { Db } from "@founderos/db";
 import { logger } from "../middleware/logger.js";
+import { runCronTick } from "../lib/cron-tick.js";
 import { decisionOutcomeService } from "./decision-outcomes.js";
 
 /** Cron tick cadence: every 6 hours. */
@@ -76,10 +77,12 @@ export function createDecisionFollowupCron(
 
   function start(): void {
     if (timer) return;
+    // PR-5 (council 2026-05-07 P1): runCronTick adds cron requestId/
+    // traceId/actor to logs and routes uncaught throws to Sentry.
     // Fire once immediately so we don't wait a full tick after boot.
-    void runOnce();
+    void runCronTick("decision-followup", runOnce);
     timer = setInterval(() => {
-      void runOnce();
+      void runCronTick("decision-followup", runOnce);
     }, tickIntervalMs);
     timer.unref?.();
   }
