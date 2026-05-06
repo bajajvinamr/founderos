@@ -316,6 +316,7 @@ export {
 export {
   memoryKindSchema,
   memorySourceSchema,
+  memoryCategorySchema,
   createCompanyMemorySchema,
   updateCompanyMemorySchema,
   generateWeeklySummarySchema,

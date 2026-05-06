@@ -9,7 +9,7 @@
  * calls for the same ISO week update the existing row in place.
  */
 
-import { and, eq, desc, gte, lt, sql } from "drizzle-orm";
+import { and, eq, desc, gte, lt, sql, isNull, or, lte } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { companyMemory, activityLog, issues, costEvents } from "@founderos/db";
 import type {
@@ -17,6 +17,7 @@ import type {
   CreateCompanyMemoryInput,
   UpdateCompanyMemoryInput,
   MemoryKind,
+  MemoryCategory,
 } from "@founderos/shared";
 
 function toEntry(row: typeof companyMemory.$inferSelect): CompanyMemoryEntry {
@@ -30,6 +31,8 @@ function toEntry(row: typeof companyMemory.$inferSelect): CompanyMemoryEntry {
     occurredAt: row.occurredAt,
     pinned: row.pinned,
     source: row.source as "auto" | "manual",
+    category: (row.category as MemoryCategory | null) ?? null,
+    expiresAt: row.expiresAt ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -58,7 +61,13 @@ export function companyMemoryService(db: Db) {
    */
   async function list(
     companyId: string,
-    opts?: { limit?: number; kind?: MemoryKind; pinned?: boolean },
+    opts?: {
+      limit?: number;
+      kind?: MemoryKind;
+      pinned?: boolean;
+      // S6.4 — when true, exclude rows whose expires_at < now().
+      excludeExpired?: boolean;
+    },
   ): Promise<CompanyMemoryEntry[]> {
     const conditions = [eq(companyMemory.companyId, companyId)];
     if (opts?.kind) {
@@ -66,6 +75,12 @@ export function companyMemoryService(db: Db) {
     }
     if (opts?.pinned !== undefined) {
       conditions.push(eq(companyMemory.pinned, opts.pinned));
+    }
+    if (opts?.excludeExpired) {
+      conditions.push(
+        // expiresAt IS NULL OR expiresAt > now()
+        or(isNull(companyMemory.expiresAt), sql`${companyMemory.expiresAt} > NOW()`)!,
+      );
     }
 
     const rows = await db
@@ -80,6 +95,77 @@ export function companyMemoryService(db: Db) {
       .limit(opts?.limit ?? 100);
 
     return rows.map(toEntry);
+  }
+
+  /**
+   * S6.4 — agent recall query. Returns memories filtered by category
+   * (and optionally by topic substring), newest first, with expired rows
+   * excluded. This is the keyword-path; the embedding-cosine path can be
+   * layered on top once an embedder is wired (it's a separate ORDER BY
+   * over `embedding <=> $1` against the HNSW index).
+   *
+   * Always tenant-scoped.
+   */
+  async function recall(
+    companyId: string,
+    opts: {
+      category?: MemoryCategory;
+      topic?: string;
+      limit?: number;
+    },
+  ): Promise<CompanyMemoryEntry[]> {
+    const conditions = [
+      eq(companyMemory.companyId, companyId),
+      // Exclude expired rows by default for recall — TTL'd memory should
+      // not influence future agent decisions.
+      or(isNull(companyMemory.expiresAt), sql`${companyMemory.expiresAt} > NOW()`)!,
+    ];
+
+    if (opts.category) {
+      conditions.push(eq(companyMemory.category, opts.category));
+    }
+    if (opts.topic) {
+      // Topic substring match (case-insensitive). pg_trgm index would be
+      // ideal here but the topic column doesn't have one yet; ILIKE on
+      // a 100-char column is acceptable for typical row counts.
+      conditions.push(sql`${companyMemory.topic} ILIKE ${"%" + opts.topic + "%"}`);
+    }
+
+    const rows = await db
+      .select()
+      .from(companyMemory)
+      .where(and(...conditions))
+      .orderBy(
+        desc(companyMemory.pinned),
+        desc(companyMemory.occurredAt),
+      )
+      .limit(opts.limit ?? 20);
+
+    return rows.map(toEntry);
+  }
+
+  /**
+   * S6.4 — TTL cleanup. Deletes rows whose `expires_at < now()`.
+   * Returns the number of deleted rows.
+   *
+   * Tenant-scoped when companyId is provided; otherwise sweeps all
+   * companies (for use by a system-wide cron).
+   */
+  async function purgeExpired(companyId?: string): Promise<number> {
+    const conditions = [
+      sql`${companyMemory.expiresAt} IS NOT NULL`,
+      lte(companyMemory.expiresAt, new Date()),
+    ];
+    if (companyId) {
+      conditions.push(eq(companyMemory.companyId, companyId));
+    }
+
+    const result = await db
+      .delete(companyMemory)
+      .where(and(...conditions))
+      .returning({ id: companyMemory.id });
+
+    return result.length;
   }
 
   /**
@@ -101,6 +187,8 @@ export function companyMemoryService(db: Db) {
         occurredAt: input.occurredAt ?? now,
         pinned: input.pinned ?? false,
         source: input.source,
+        category: input.category ?? null,
+        expiresAt: input.expiresAt ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -276,6 +364,8 @@ export function companyMemoryService(db: Db) {
 
   return {
     list,
+    recall,
+    purgeExpired,
     create,
     update,
     remove,

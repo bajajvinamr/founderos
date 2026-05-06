@@ -248,6 +248,7 @@ export type {
 export type {
   MemoryKind,
   MemorySource,
+  MemoryCategory,
   CompanyMemoryEntry,
   CreateCompanyMemoryInput,
   UpdateCompanyMemoryInput,

@@ -65,7 +65,12 @@ export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
 export { integrations } from "./integrations.js";
-export { companyMemory } from "./company_memory.js";
+export {
+  companyMemory,
+  COMPANY_MEMORY_CATEGORIES,
+  COMPANY_MEMORY_EMBEDDING_DIM,
+  type CompanyMemoryCategory,
+} from "./company_memory.js";
 export { integrationData } from "./integration-data.js";
 export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";
