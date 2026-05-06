@@ -452,3 +452,77 @@ Picking up Sprint 5 ahead of plan (Day 2 evening instead of Day 3) per autonomou
 | Sprint 5 tests | 0 | 49 |
 | Files touched | — | 9 new + 4 modified |
 | Migrations | — | 0 (S5.2/S5.3 are pure compute) |
+
+---
+
+## Iteration N+M — Sprint 5 close-out (S5.5, S5.7, S5.8, S5.4, S5.10)
+
+Five remaining tickets shipped in one autonomous push.
+
+### S5.5 — Runway forecast — SHIPPED
+
+| Commit | Description |
+|---|---|
+| earlier | `feat(s5.5): runway forecast with conservative/base/optimistic bands`. Walks 60 months applying retention curve × multiplier per band. Sub-month interpolation at cash-out. Infinity-safe `monthsRemaining` field for cash-flow-positive months. 7/7 tests. |
+
+### S5.7 — Experiment ROI — SHIPPED
+
+| Commit | Description |
+|---|---|
+| earlier | `feat(s5.7): experiment ROI rollup`. Reads experiments filtered to last 90 days where `actualLiftPct IS NOT NULL`. Per-experiment contribution = `current_mrr × (lift/100)`. Splits positive vs negative; per-channel rollup. 10/10 tests. |
+
+### S5.8 — Cash planning — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `ce5fd0f` | `feat(s5.8): cash planning with stackable scenario adjustments`. POST `/api/companies/:id/finance/cash-plan` walks horizon (default 6mo) applying hires (per-hire `salaryCents` + `startMonthOffset`), `priceChangePct` multiplier, `churnDeltaPct` curve shift, `monthlyMarketingSpendCents`. Returns per-month inflow/outflow + ending cash + cash-out month. Warnings on aggressive price hikes (>30%) and 3+ hires. 11/11 tests. |
+
+### S5.4 — Scenario modeling LLM — SHIPPED (the killer demo)
+
+| Commit | Description |
+|---|---|
+| `f55d7c2` | `feat(s5.4): natural-language finance scenario modeling`. POST `/api/companies/:id/finance/scenario`. Founder types "what happens if I reduce free credits by 70%?" — Claude orchestrates `get_cockpit_metrics`, `get_churn_forecast`, `get_runway_forecast`, `run_pricing_simulation`, `run_cash_plan` as tools. Bounded tool-use loop (`maxSteps`=6). Returns structured `{headline, narrative, keyNumbers[], warnings[], toolsUsed[]}`. Per-instance Anthropic key via `instanceApiKeysService`; 412 `no_anthropic_key` if unconfigured (no canned fallback — scenario must be company-specific). 11/11 tests with stubbed `callClaude` covering single-tool, multi-tool, parallel calls, tool errors, JSON validation, fence parsing, maxSteps cap, missing key, Infinity-safe runway shape. |
+
+### S5.10 — Console layout consolidation — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `5b86d0e` | `feat(s5.10): wire scenario modeling into finance console`. Adds "Scenario" tab between Revenue and Forecast. New `ScenarioChat` component renders the structured response with a key-numbers grid (delta-colored), warnings strip, tool-call trace. Each ask is independent (no chat history). ⌘/Ctrl+Enter shortcut. Friendly fallback when no Anthropic key. UI typecheck clean. |
+
+### Sprint 5 final status
+
+| Ticket | Status |
+|---|---|
+| S5.1 — Revenue cockpit | ✅ SHIPPED |
+| S5.2 — Pricing simulator | ✅ SHIPPED |
+| S5.3 — Churn forecast | ✅ SHIPPED |
+| S5.4 — Scenario modeling LLM | ✅ SHIPPED |
+| S5.5 — Runway forecast | ✅ SHIPPED |
+| S5.6 — Marketing spend ledger | ✅ SHIPPED |
+| S5.7 — Experiment ROI rollup | ✅ SHIPPED |
+| S5.8 — Cash planning | ✅ SHIPPED |
+| S5.9 — Finance settings | ✅ SHIPPED |
+| S5.10 — Console layout consolidation | ✅ SHIPPED |
+
+**10/10 tickets shipped. Sprint 5 complete.**
+
+### Sprint 5 test totals
+
+| Suite | Tests |
+|---|---|
+| finance-cockpit (S5.1) | 13 |
+| pricing-simulator (S5.2) | 9 |
+| churn-forecast (S5.3) | 7 |
+| finance-scenario (S5.4) | 11 |
+| runway-forecast (S5.5) | 7 |
+| marketing-spend (S5.6) | 12 |
+| experiment-roi (S5.7) | 10 |
+| cash-planning (S5.8) | 11 |
+| finance-settings (S5.9) | 8 |
+| **Total** | **88** |
+
+All 88 pass green in 7.10s wall under embedded postgres.
+
+### Next: Sprint 6 (10 tickets)
+
+S6.1 permissions, S6.2 approval engine, S6.3 audit lineage, S6.4 memory schema, S6.5 named templates, S6.6 notifications, S6.7 mobile brief, S6.8 onboarding polish, S6.9 bug bash, S6.10 cutover.
