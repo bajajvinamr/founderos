@@ -33,26 +33,17 @@ export function healthRoutes(
 ) {
   const router = Router();
 
-  router.get("/", async (req, res) => {
-    // Council 2026-05-05 P3 — minimize reconnaissance surface for unauth
-    // callers. `deploymentExposure`, `features.*`, and `devServer` are not
-    // consumed by the UI in unauth paths (verified by grep against ui/src);
-    // strip them when the caller hasn't presented credentials. The remaining
-    // fields (`deploymentMode`, `authReady`, `bootstrapStatus`,
-    // `bootstrapInviteActive`) are UI-load-bearing for the unauth onboarding
-    // flow — App.tsx + InviteLanding read these BEFORE the user is signed in
-    // to decide signup-vs-login. The full strip to {ok, version} (per the
-    // council's literal recommendation) requires splitting bootstrap state
-    // to its own endpoint + updating UI consumers — tracked separately for
-    // Sprint 4. actorMiddleware always runs before this route, so `req.actor`
-    // is reliably populated; `type === "none"` means unauthenticated.
-    const isAuthed = req.actor?.type != null && req.actor.type !== "none";
-
+  router.get("/", async (_req, res) => {
+    // Council 2026-05-05 P3 / task #139 — `/api/health` ROOT is the public
+    // liveness probe surface. Strip it to {status, version} so unauth
+    // recon yields nothing operational. The bootstrap-flow fields
+    // (deploymentMode/authReady/bootstrapStatus/bootstrapInviteActive)
+    // moved to /api/bootstrap-state below — same data, dedicated route,
+    // unambiguous purpose.
     if (!db) {
       res.json({ status: "ok", version: serverVersion });
       return;
     }
-
     try {
       await db.execute(sql`SELECT 1`);
     } catch {
@@ -60,6 +51,25 @@ export function healthRoutes(
         status: "unhealthy",
         version: serverVersion,
         error: "database_unreachable",
+      });
+      return;
+    }
+    res.json({ status: "ok", version: serverVersion });
+  });
+
+  // Public bootstrap-state endpoint — UI calls this BEFORE the user is
+  // signed in to decide signup-vs-login-vs-bootstrap-pending. The fields
+  // here used to live on /api/health ROOT; split out per task #139 so the
+  // liveness probe response stops doubling as a recon surface for the
+  // operational metadata.
+  router.get("/bootstrap-state", async (_req, res) => {
+    if (!db) {
+      // Local-trusted mode without DB still has a deterministic answer
+      res.json({
+        deploymentMode: opts.deploymentMode,
+        authReady: opts.authReady,
+        bootstrapStatus: "ready" as const,
+        bootstrapInviteActive: false,
       });
       return;
     }
@@ -101,6 +111,29 @@ export function healthRoutes(
       }
     }
 
+    res.json({
+      deploymentMode: opts.deploymentMode,
+      authReady: opts.authReady,
+      bootstrapStatus,
+      bootstrapInviteActive,
+    });
+  });
+
+  // Authenticated diagnostics — devServer status, exposure, features.
+  // Replaces the old "isAuthed branch on /" with an explicit endpoint
+  // that admins can hit when they need the ops metadata. Same data,
+  // explicit auth gate.
+  router.get("/diagnostics", async (req, res) => {
+    assertInstanceAdmin(req);
+
+    if (!db) {
+      res.json({
+        deploymentExposure: opts.deploymentExposure,
+        features: { companyDeletionEnabled: opts.companyDeletionEnabled },
+      });
+      return;
+    }
+
     const persistedDevServerStatus = readPersistedDevServerStatus();
     let devServer: ReturnType<typeof toDevServerHealthStatus> | undefined;
     if (persistedDevServerStatus) {
@@ -118,29 +151,11 @@ export function healthRoutes(
       });
     }
 
-    const baseResponse = {
-      status: "ok" as const,
-      version: serverVersion,
-      // UI-load-bearing for unauth onboarding flow (App.tsx + InviteLanding):
-      deploymentMode: opts.deploymentMode,
-      authReady: opts.authReady,
-      bootstrapStatus,
-      bootstrapInviteActive,
-    };
-
-    if (isAuthed) {
-      res.json({
-        ...baseResponse,
-        deploymentExposure: opts.deploymentExposure,
-        features: {
-          companyDeletionEnabled: opts.companyDeletionEnabled,
-        },
-        ...(devServer ? { devServer } : {}),
-      });
-      return;
-    }
-
-    res.json(baseResponse);
+    res.json({
+      deploymentExposure: opts.deploymentExposure,
+      features: { companyDeletionEnabled: opts.companyDeletionEnabled },
+      ...(devServer ? { devServer } : {}),
+    });
   });
 
   // Deep health check: exercises the full stack.

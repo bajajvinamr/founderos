@@ -547,6 +547,160 @@
       "when": 1779400000000,
       "tag": "0079_connector_health",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1779500000000,
+      "tag": "0081_insights",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1779550000000,
+      "tag": "0082_daily_briefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1779600000000,
+      "tag": "0083_experiments",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0084_experiment_embeddings",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0085_tenant_invariants",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1779850000000,
+      "tag": "0086_content_briefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0087_lifecycle_crm_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1779950000000,
+      "tag": "0088_content_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0089_runner_token_ttl",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1780050000000,
+      "tag": "0090_content_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1780100000000,
+      "tag": "0091_content_drafts_scheduling",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1780150000000,
+      "tag": "0092_workflow_runs_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0093_customer_email_suppressions",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1780250000000,
+      "tag": "0094_company_physical_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1780300000000,
+      "tag": "0095_workflow_run_approval_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1780350000000,
+      "tag": "0096_company_financials",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1780400000000,
+      "tag": "0097_marketing_spend",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0098_approvals_workflow_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1780600000000,
+      "tag": "0099_company_memory_agent_recall",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1780700000000,
+      "tag": "0100_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1780800000000,
+      "tag": "0101_magic_link_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1780900000000,
+      "tag": "0102_onboarding_drafts",
+      "breakpoints": true
     }
   ]
 }

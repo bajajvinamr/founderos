@@ -1,6 +1,7 @@
 export {
   instanceGeneralSettingsSchema,
   patchInstanceGeneralSettingsSchema,
+  telemetryConsentSchema,
   type InstanceGeneralSettings,
   type PatchInstanceGeneralSettings,
   instanceExperimentalSettingsSchema,
@@ -315,6 +316,7 @@ export {
 export {
   memoryKindSchema,
   memorySourceSchema,
+  memoryCategorySchema,
   createCompanyMemorySchema,
   updateCompanyMemorySchema,
   generateWeeklySummarySchema,
@@ -324,9 +326,85 @@ export {
 } from "./company-memory.js";
 
 export {
+  notificationKindSchema,
+  notificationRefKindSchema,
+  createNotificationSchema,
+  listNotificationsQuerySchema,
+  type CreateNotificationInput,
+  type ListNotificationsQuery,
+} from "./notification.js";
+
+export {
+  ONBOARDING_MAX_STEP,
+  onboardingStepSchema,
+  saveOnboardingDraftSchema,
+  type SaveOnboardingDraftInput,
+} from "./onboarding-draft.js";
+
+export {
   agentReviewRecommendationSchema,
   generateAgentReviewSchema,
   createManualAgentReviewSchema,
   type GenerateAgentReview,
   type CreateManualAgentReview,
 } from "./agent-review.js";
+
+export {
+  CONTENT_BRIEF_ANGLES,
+  CONTENT_BRIEF_STATUSES,
+  createContentBriefSchema,
+  updateContentBriefSchema,
+  transitionContentBriefSchema,
+  listContentBriefsQuerySchema,
+  type ContentBriefAngle,
+  type ContentBriefStatusValue,
+  type CreateContentBrief,
+  type UpdateContentBrief,
+  type TransitionContentBrief,
+  type ListContentBriefsQuery,
+} from "./content-briefs.js";
+export {
+  CONTENT_DRAFT_FORMATS,
+  CONTENT_DRAFT_STATUSES,
+  generateContentSchema,
+  updateContentDraftSchema,
+  type ContentDraftFormatValue,
+  type ContentDraftStatusValue,
+  type GenerateContent,
+  type UpdateContentDraft,
+} from "./content-drafts.js";
+export {
+  CURRENCY_CODES,
+  currencySchema,
+  upsertFinanceSettingsSchema,
+  type UpsertFinanceSettings,
+  type FinanceSettings,
+} from "./finance-settings.js";
+export {
+  MARKETING_SPEND_CHANNELS,
+  marketingSpendChannelSchema,
+  createMarketingSpendSchema,
+  updateMarketingSpendSchema,
+  listMarketingSpendQuerySchema,
+  type MarketingSpendChannel,
+  type CreateMarketingSpend,
+  type UpdateMarketingSpend,
+  type ListMarketingSpendQuery,
+  type MarketingSpendRow,
+} from "./marketing-spend.js";
+export {
+  tierChangeSchema,
+  pricingSimulateSchema,
+  type TierChange,
+  type PricingSimulateBody,
+} from "./pricing-simulator.js";
+export {
+  cashPlanHireSchema,
+  cashPlanInputSchema,
+  type CashPlanHire,
+  type CashPlanInput,
+} from "./cash-plan.js";
+export {
+  financeScenarioInputSchema,
+  type FinanceScenarioInput,
+} from "./finance-scenario.js";

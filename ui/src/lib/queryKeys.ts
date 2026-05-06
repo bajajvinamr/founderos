@@ -101,6 +101,12 @@ export const queryKeys = {
     experimentalSettings: ["instance", "experimental-settings"] as const,
   },
   health: ["health"] as const,
+  bootstrapState: ["bootstrap-state"] as const,
+  diagnostics: ["diagnostics"] as const,
+  finance: {
+    settings: (companyId: string) => ["finance", companyId, "settings"] as const,
+    cockpit: (companyId: string) => ["finance", companyId, "cockpit"] as const,
+  },
   secrets: {
     list: (companyId: string) => ["secrets", companyId] as const,
     providers: (companyId: string) => ["secret-providers", companyId] as const,
@@ -169,6 +175,13 @@ export const queryKeys = {
   },
   departments: {
     list: (companyId: string) => ["departments", companyId] as const,
+    status: (companyId: string) => ["departments", "status", companyId] as const,
+  },
+  permissions: {
+    matrix: (companyId: string) => ["permissions-matrix", companyId] as const,
+  },
+  auditLineage: {
+    expand: (logId: string) => ["audit-lineage", logId] as const,
   },
   integrationHealth: {
     list: (companyId: string) => ["integration-health", companyId] as const,

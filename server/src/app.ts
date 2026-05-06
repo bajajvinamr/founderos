@@ -32,9 +32,13 @@ import { instanceInvitesRoutes } from "./routes/instance-invites.js";
 import { templateRoutes } from "./routes/templates.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { integrationHealthRoutes } from "./routes/integration-health.js";
+import { insightRoutes } from "./routes/insights.js";
 import { postHogRoutes } from "./routes/posthog-connector.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { companyMemoryRoutes } from "./routes/company-memory.js";
+import { financeSettingsRoutes } from "./routes/finance-settings.js";
+import { marketingSpendRoutes } from "./routes/marketing-spend.js";
+import { financeRoutes } from "./routes/finance.js";
 import { conversationRoutes } from "./routes/conversations.js";
 import { integrationDataRoutes } from "./routes/integration-data.js";
 import { agentReviewRoutes } from "./routes/agent-reviews.js";
@@ -43,6 +47,8 @@ import { decisionOutcomeRoutes } from "./routes/decision-outcomes.js";
 import { createDecisionFollowupCron } from "./services/decision-followup-cron.js";
 import { createWeeklyWrapDeliveryCron } from "./services/weekly-wrap-delivery-cron.js";
 import { weeklyWrapRoutes } from "./routes/weekly-wraps.js";
+import { dailyBriefRoutes } from "./routes/daily-briefs.js";
+import { createDailyFounderBriefCron } from "./jobs/daily-founder-brief.js";
 import { billingRoutes } from "./routes/billing.js";
 import { stripeBackfillRoutes } from "./routes/stripe-backfill.js";
 import { agentHandoffRoutes } from "./routes/agent-handoffs.js";
@@ -61,10 +67,24 @@ import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
 import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
 import { departmentRoutes } from "./routes/departments.js";
+import { permissionsMatrixRoutes } from "./routes/permissions-matrix.js";
+import { auditLineageRoutes } from "./routes/audit-lineage.js";
+import { templateRegistryRoutes } from "./routes/template-registry.js";
+import { notificationRoutes } from "./routes/notifications.js";
+import { onboardingDraftRoutes } from "./routes/onboarding-draft.js";
+import { departmentStatusRoutes } from "./routes/department-status.js";
+import { experimentRoutes } from "./routes/experiments.js";
+import { workflowRoutes } from "./routes/workflows.js";
+import { contentBriefRoutes } from "./routes/content-briefs.js";
+import { contentDraftRoutes } from "./routes/content-drafts.js";
+import { contentTrackingRoutes } from "./routes/content-tracking.js";
+import { customerEmailUnsubscribeRoutes } from "./routes/customer-email-unsubscribe.js";
+import { funnelRoutes } from "./routes/funnel.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { authWebhookRoutes } from "./routes/auth-webhook.js";
+import { resendWebhookRoutes } from "./routes/resend-webhook.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -239,6 +259,12 @@ export async function createApp(
     // secret case explicitly.
     app.use(authWebhookRoutes(db, { webhookSecret: opts.supabaseWebhookSecret }));
   }
+  // Resend webhook receiver — same fail-closed pattern as Supabase above.
+  // Mounted unconditionally so missing-secret produces a logged 503 instead
+  // of a silent 404. Council 2026-05-05 W0.2c — closes the
+  // accept != deliver buyer-trust gap. Route is unauthenticated and verifies
+  // the Svix signature against RESEND_WEBHOOK_SECRET.
+  app.use(resendWebhookRoutes(db));
   if (opts.betterAuthHandler) {
     app.all("/api/auth/{*authPath}", opts.betterAuthHandler);
   }
@@ -316,21 +342,37 @@ export async function createApp(
   api.use(dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
   api.use(departmentRoutes(db));
+  api.use(departmentStatusRoutes(db));
+  api.use(permissionsMatrixRoutes(db));
+  api.use(auditLineageRoutes(db));
+  api.use(templateRegistryRoutes());
+  api.use(notificationRoutes(db));
+  api.use(onboardingDraftRoutes(db));
+  api.use(experimentRoutes(db));
+  api.use(workflowRoutes(db));
+  api.use(contentBriefRoutes(db));
+  api.use(contentDraftRoutes(db));
+  api.use(funnelRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(instanceInvitesRoutes(db));
   api.use(templateRoutes(db));
   api.use(integrationRoutes(db));
   api.use(integrationHealthRoutes(db));
+  api.use(insightRoutes(db));
   api.use(postHogRoutes(db));
   api.use(oauthRoutes(db));
   api.use(companyMemoryRoutes(db));
+  api.use(financeSettingsRoutes(db));
+  api.use(marketingSpendRoutes(db));
+  api.use(financeRoutes(db));
   api.use(conversationRoutes(db));
   api.use(integrationDataRoutes(db));
   api.use(agentReviewRoutes(db));
   api.use(companyProviderRoutes(db));
   api.use(decisionOutcomeRoutes(db));
   api.use(weeklyWrapRoutes(db));
+  api.use(dailyBriefRoutes(db));
   api.use(permissionCoachRoutes(db));
   api.use(agentHandoffRoutes(db));
   api.use(composioRoutes(db));
@@ -418,6 +460,16 @@ export async function createApp(
       allowedHostnames: opts.allowedHostnames,
     }),
   );
+
+  // Content tracking links (S4.3) — public-facing /c/:trackingId endpoint
+  app.use(contentTrackingRoutes(db));
+
+  // Customer email unsubscribe (S4.8 prereq #196 layer 3b) — public-facing
+  // /u/customer/:token endpoint. HMAC-trusted, no auth/session. CAN-SPAM
+  // RFC 8058 compliant: GET (legacy clients) + POST (List-Unsubscribe-Post).
+  // Council 2026-05-06 finding #4 BLOCK closure.
+  app.use(customerEmailUnsubscribeRoutes(db));
+
   app.use("/api", api);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
@@ -505,6 +557,8 @@ export async function createApp(
   weeklyWrapDeliveryCron.start();
   const linkedinSyncCron = createLinkedInSyncCron({ db });
   linkedinSyncCron.start();
+  const dailyFounderBriefCron = createDailyFounderBriefCron({ db });
+  dailyFounderBriefCron.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       runInCronContext("feedback-export-flush", () => {
@@ -544,6 +598,7 @@ export async function createApp(
     decisionFollowupCron.stop();
     weeklyWrapDeliveryCron.stop();
     linkedinSyncCron.stop();
+    dailyFounderBriefCron.stop();
     devWatcher?.close();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();

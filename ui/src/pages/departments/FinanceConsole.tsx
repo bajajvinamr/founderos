@@ -9,14 +9,30 @@ import { TrendingUp, TrendingDown, Minus, DollarSign } from "lucide-react";
 import type { Agent } from "@founderos/shared";
 import { runScenario, type TierCurrent } from "@founderos/shared";
 import { agentsInDepartment } from "../../lib/departments";
+import { FinanceSettings } from "./finance/FinanceSettings";
+import { RevenueCockpit } from "./finance/RevenueCockpit";
+import { ScenarioChat } from "./finance/ScenarioChat";
 
 // MOCK — Wave 5 replaces with real finance service (Stripe/QuickBooks/etc)
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type FinanceTab = "revenue" | "forecast" | "pricing" | "burn";
+type FinanceTab =
+  | "revenue"
+  | "scenario"
+  | "forecast"
+  | "pricing"
+  | "burn"
+  | "settings";
 
-const VALID_TABS: FinanceTab[] = ["revenue", "forecast", "pricing", "burn"];
+const VALID_TABS: FinanceTab[] = [
+  "revenue",
+  "scenario",
+  "forecast",
+  "pricing",
+  "burn",
+  "settings",
+];
 
 function isValidTab(v: string | null): v is FinanceTab {
   return VALID_TABS.includes(v as FinanceTab);
@@ -978,9 +994,11 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
 
   const tabItems: { value: string; label: string }[] = [
     { value: "revenue",  label: "Revenue"  },
+    { value: "scenario", label: "Scenario" },
     { value: "forecast", label: "Forecast" },
     { value: "pricing",  label: "Pricing"  },
     { value: "burn",     label: "Burn"     },
+    { value: "settings", label: "Settings" },
   ];
 
   void cfoName; // resolved name available for future Wave 5 wiring
@@ -1029,10 +1047,30 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
           />
         ) : (
           <>
-            {activeTab === "revenue"  && <RevenueTab />}
+            {activeTab === "revenue"  && (
+              _companyId ? <RevenueCockpit companyId={_companyId} /> : <RevenueTab />
+            )}
+            {activeTab === "scenario" && _companyId && (
+              <ScenarioChat companyId={_companyId} />
+            )}
+            {activeTab === "scenario" && !_companyId && (
+              <EmptyState
+                icon={DollarSign}
+                message="Select a company before running scenario modeling."
+              />
+            )}
             {activeTab === "forecast" && <ForecastTab />}
             {activeTab === "pricing"  && <PricingTab />}
             {activeTab === "burn"     && <BurnTab />}
+            {activeTab === "settings" && _companyId && (
+              <FinanceSettings companyId={_companyId} />
+            )}
+            {activeTab === "settings" && !_companyId && (
+              <EmptyState
+                icon={DollarSign}
+                message="Select a company before editing finance settings."
+              />
+            )}
           </>
         )}
       </div>

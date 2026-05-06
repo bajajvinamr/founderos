@@ -182,7 +182,7 @@ test.describe("routing", () => {
 // 4, 6 — Always-public API health + integration status
 // ────────────────────────────────────────────────────────────────────────
 test.describe("api-public", () => {
-  test("[health] /api/health returns 200 with the expected shape", async ({ api }) => {
+  test("[health] /api/health returns 200 with {status, version} (task #139 strip)", async ({ api }) => {
     const r = await api.get("/api/health");
     expect(
       r.status,
@@ -191,13 +191,40 @@ test.describe("api-public", () => {
     const body = r.json as Record<string, unknown> | null;
     expect(body, "GET /api/health returned non-JSON body").not.toBeNull();
     expect(
-      body && "authReady" in body,
-      "GET /api/health response is missing `authReady` — health route contract broke",
+      body && body.status === "ok",
+      "GET /api/health response missing status:ok",
+    ).toBe(true);
+    // Task #139 — these fields moved to /api/health/bootstrap-state and
+    // /api/health/diagnostics. Liveness probe must NOT leak them.
+    expect(
+      body && !("authReady" in body),
+      "GET /api/health leaked authReady — task #139 strip regressed",
     ).toBe(true);
     expect(
-      body && "bootstrapStatus" in body,
-      "GET /api/health response is missing `bootstrapStatus` — health route contract broke",
+      body && !("bootstrapStatus" in body),
+      "GET /api/health leaked bootstrapStatus — task #139 strip regressed",
     ).toBe(true);
+    expect(
+      body && !("deploymentMode" in body),
+      "GET /api/health leaked deploymentMode — task #139 strip regressed",
+    ).toBe(true);
+  });
+
+  test("[bootstrap-state] /api/health/bootstrap-state returns the UI's pre-signin fields", async ({ api }) => {
+    const r = await api.get("/api/health/bootstrap-state");
+    expect(
+      r.status,
+      describeResponse("GET /api/health/bootstrap-state did not return 200", r),
+    ).toBe(200);
+    const body = r.json as Record<string, unknown> | null;
+    expect(body, "bootstrap-state was non-JSON").not.toBeNull();
+    expect(body && "deploymentMode" in body, "missing deploymentMode").toBe(true);
+    expect(body && "authReady" in body, "missing authReady").toBe(true);
+    expect(body && "bootstrapStatus" in body, "missing bootstrapStatus").toBe(true);
+    expect(body && "bootstrapInviteActive" in body, "missing bootstrapInviteActive").toBe(true);
+    // Defense in depth: must NOT leak deploymentExposure or features here either
+    expect(body && !("deploymentExposure" in body), "leaked deploymentExposure").toBe(true);
+    expect(body && !("features" in body), "leaked features").toBe(true);
   });
 
   test("[composio-status] /api/composio/status returns {enabled, configuredApps[]}", async ({
@@ -421,8 +448,8 @@ test.describe("admin", () => {
     // would see the canary fire (500). We run it against prod / authenticated
     // surfaces where we expect a 403 for an unauth request.
     if (profile === "default") {
-      // Detect local_trusted via /api/health and skip if so.
-      const h = await api.get("/api/health");
+      // Task #139 — deploymentMode moved off /api/health to /api/health/bootstrap-state
+      const h = await api.get("/api/health/bootstrap-state");
       const mode = (h.json as { deploymentMode?: string } | null)?.deploymentMode;
       test.skip(
         mode === "local_trusted",

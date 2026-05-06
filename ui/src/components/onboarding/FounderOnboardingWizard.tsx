@@ -16,6 +16,7 @@ import { Step4Plugin, type ValidationState } from "./steps/Step4Plugin.js";
 import { Step5Departments } from "./steps/Step5Departments.js";
 import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
 import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
+import { Step7Telemetry } from "./steps/Step7Telemetry.js";
 import {
   buildAutoCharters,
   buildFirstDecisions,
@@ -35,8 +36,10 @@ import {
 
 // S1.9 — added Step 5 (departments) between Plugin and MeetTeam.
 // MeetTeam moved 5 → 6, FirstDecision moved 6 → 7.
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
-const TOTAL_STEPS = 7;
+// S-TC1 (council 2026-05-05 P1) — added Step 8 (telemetry consent) at the
+// END so the founder is asked AFTER seeing the product story. Default OFF.
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+const TOTAL_STEPS = 8;
 
 function buildInitialDraft(): OnboardingDraft {
   return {
@@ -56,6 +59,9 @@ function buildInitialDraft(): OnboardingDraft {
       team: "solo",
     }),
     firstDecisionId: null,
+    // Default OFF — council 2026-05-05 P1. Founder MUST tap "Allow"
+    // on Step 8 to flip this on.
+    telemetryEnabled: false,
   };
 }
 
@@ -156,6 +162,7 @@ export function FounderOnboardingWizard() {
     if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
     if (current === 7) return true;
+    if (current === 8) return true; // Telemetry consent — both Yes and No are valid answers
     return false;
   }
 
@@ -180,6 +187,10 @@ export function FounderOnboardingWizard() {
         nonCoreDepartments: draft.nonCoreDepartments,
         autonomyLevel: draft.autonomyLevel,
         charters: draft.charters,
+        // S-TC1 — telemetry consent decision from the final wizard step.
+        // Always present (true OR false) — the wizard cannot complete
+        // without the founder having seen Step 8.
+        telemetryEnabled: draft.telemetryEnabled,
       };
       const bootstrap = await api.post<OnboardingBootstrapResponse>(
         "/onboarding/bootstrap",
@@ -356,6 +367,14 @@ export function FounderOnboardingWizard() {
                   charters={draft.charters}
                   selectedId={draft.firstDecisionId}
                   onSelect={(id) => patchDraft({ firstDecisionId: id })}
+                />
+              )}
+              {step === 8 && (
+                <Step7Telemetry
+                  telemetryEnabled={draft.telemetryEnabled}
+                  onTelemetryEnabledChange={(next) =>
+                    patchDraft({ telemetryEnabled: next })
+                  }
                 />
               )}
               {submitError && (

@@ -88,6 +88,23 @@ function unauthorized(res: Response, requestId: string | undefined): void {
   res.status(401).json({ error: "invalid_runner_token", requestId });
 }
 
+/**
+ * Council 2026-05-05 W0.3 — surface expiry distinctly so the runner CLI
+ * can prompt for rotation instead of silently 401'ing in a poll loop. The
+ * `code` shape lets the runner package switch on the failure cleanly without
+ * regex-matching error strings. The plaintext token is NEVER echoed.
+ */
+function expired(res: Response, requestId: string | undefined, expiredAt: Date): void {
+  res.status(401).json({
+    error: "runner_token_expired",
+    code: "expired",
+    expiredAt: expiredAt.toISOString(),
+    rotationHint:
+      "Run `founderos auth rotate-runner-token` from the laptop, or mint a new token from the dashboard.",
+    requestId,
+  });
+}
+
 // ─── Middleware ─────────────────────────────────────────────────────────────
 
 /**
@@ -120,7 +137,15 @@ export function runnerAuthMiddleware(db: Db): RequestHandler {
 
     const expectedHash = hashRunnerToken(token);
 
-    let row: { id: string; companyId: string; tokenHash: string; revokedAt: Date | null } | undefined;
+    let row:
+      | {
+          id: string;
+          companyId: string;
+          tokenHash: string;
+          revokedAt: Date | null;
+          expiresAt: Date | null;
+        }
+      | undefined;
     try {
       const result = await db
         .select({
@@ -128,6 +153,8 @@ export function runnerAuthMiddleware(db: Db): RequestHandler {
           companyId: runnerTokens.companyId,
           tokenHash: runnerTokens.tokenHash,
           revokedAt: runnerTokens.revokedAt,
+          // W0.3 — pull expires_at so the middleware can reject on TTL.
+          expiresAt: runnerTokens.expiresAt,
         })
         .from(runnerTokens)
         .where(and(eq(runnerTokens.tokenHash, expectedHash), isNull(runnerTokens.revokedAt)))
@@ -152,6 +179,19 @@ export function runnerAuthMiddleware(db: Db): RequestHandler {
     // someone bypasses the WHERE in a refactor, this still catches it.
     if (!safeHashEquals(row.tokenHash, expectedHash)) {
       unauthorized(res, req.requestId);
+      return;
+    }
+
+    // W0.3 (council 2026-05-05) — TTL gate. expires_at IS NULL means a
+    // legacy token issued before migration 0089; those continue to work
+    // until manually revoked or rotated. Non-NULL + past = reject with
+    // `code: "expired"` + rotationHint so the CLI can prompt cleanly.
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) {
+      logger.info(
+        { tokenId: row.id, expiredAt: row.expiresAt, requestId: req.requestId },
+        "runner-auth: token expired",
+      );
+      expired(res, req.requestId, row.expiresAt);
       return;
     }
 

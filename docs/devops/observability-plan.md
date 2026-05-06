@@ -19,31 +19,30 @@ required, by quoting a `requestId`.
 | Pino mixin auto-injects request context | ✅ | `middleware/logger.ts` |
 | Sentry server-side scope enrichment | ✅ | `observability/sentry.ts` |
 | Browser Sentry (opt-in via `VITE_SENTRY_DSN`) | ✅ | `ui/src/observability/sentry.ts` |
-| Auth-call breadcrumbs + structured logs | ✅ This PR | `ui/src/lib/auth-logger.ts`, `ui/src/lib/supabase.ts` |
-| `window.__authDebug() / __authErrors() / __authBreadcrumbs()` | ✅ This PR | DevTools self-service |
-| Build-time placeholder guard | ✅ This PR | `ui/vite.config.ts` |
-| Post-deploy bundle scan | ✅ This PR | `scripts/ci/check-deployed-supabase.sh` |
+| Auth-call breadcrumbs + structured logs | ✅ | `ui/src/lib/auth-logger.ts`, `ui/src/lib/supabase.ts` |
+| `window.__authDebug() / __authErrors() / __authBreadcrumbs()` | ✅ | DevTools self-service |
+| Build-time placeholder guard | ✅ | `ui/vite.config.ts` |
+| Post-deploy bundle scan | ✅ | `scripts/ci/check-deployed-supabase.sh` |
 | Health check (`/api/health`) | ✅ | shallow — version, mode, authReady, bootstrapStatus |
-| Deep health check (`/api/health/deep`) | ⚠️ Unauthenticated, leaks DB latency | `routes/health.ts` |
+| Deep health check (`/api/health/deep`) | ✅ Admin-gated as of 2026-05-03 council | `routes/health.ts:132-133` (`assertInstanceAdmin`) |
+| Public readiness probe (`/api/readyz`) | ✅ Council #133 (2026-05-05) | Used by `deploy-prod.yml` smoke gate |
+| Auth round-trip canary | ✅ TC-4 (2026-05-05) | `e2e/tests/auth-round-trip.spec.ts` + `e2e-synthetic.yml` 15-min schedule + post-deploy `repository_dispatch` |
+| SLO + alert routing | ✅ TC-4 (2026-05-05) | This doc §SLOs + `docs/runbooks/sentry-alert-config.md` |
 | Fly metrics (`fly logs`, `fly status`) | ✅ — but only via CLI | — |
 
 ## Gaps (in priority order — fix top-down)
 
-### G1 — No SLO / no alerts (highest impact, lowest effort)
-**Problem:** A broken auth route can serve 500s for 24+ hours and the
-founder finds out only when someone tells them in person.
+### G1 — SLOs + alerts ✅ TC-4 (2026-05-05)
+**Status:** Closed. Concrete SLOs defined below; alert routes wired via
+GitHub Actions (canary + Slack) and Sentry rules
+(`docs/runbooks/sentry-alert-config.md`). Auth round-trip canary
+(`e2e/tests/auth-round-trip.spec.ts`) runs every 15 min on the
+`e2e-synthetic.yml` schedule and on every prod deploy via
+`repository_dispatch`. Single failure = P0 page.
 
-**Fix (1–2 hr):**
-- Wire up Sentry alerts on:
-  - `auth-error.config-error` (any occurrence → page founder immediately)
-  - 5xx error rate > 1% over 5 min (warn)
-  - 5xx error rate > 5% over 5 min (page)
-- Wire up Fly Better Stack monitor (or Cronitor) on:
-  - `GET /api/health` every 60s, alert on 2 consecutive failures
-  - Synthetic auth flow: `POST /api/auth/test-roundtrip` (new endpoint
-    that round-trips a no-op signup) every 5 min, alert on 1 failure
-- Public status page: status.founderos.fly.dev (UptimeRobot or BetterStack
-  free tier)
+Still open / future work (lower priority):
+- Public status page at status.founderos.fly.dev (UptimeRobot or BetterStack
+  free tier) — manual config, not in repo.
 
 ### G2 — Deep health endpoint is unauthenticated
 **Problem:** `/api/health/deep` leaks DB latency, active run counts,
@@ -69,20 +68,25 @@ own deploy starts blind. The auth-logger ring buffer is in-memory only.
 - Founder gets every browser-side auth failure correlated by `buildSha`
   even without a Sentry account.
 
-### G4 — Auth synthetic-monitor missing from CI
-**Problem:** The 2026-05-04 incident slipped past CI because
-`FOUNDEROS_E2E_PROFILE=public-only` skips auth-mutation tests.
+### G4 — Auth synthetic-monitor ✅ TC-4 (2026-05-05)
+**Status:** Closed. Implementation simpler than the original spec — uses a
+single pre-created canary user instead of dynamic signup/teardown, which
+eliminates the Supabase admin-API surface area + cleanup-failure risk.
 
-**Fix (~3 hr):**
-- New CI job: `e2e-auth-synthetic.yml` (runs hourly + on every prod deploy):
-  - Spins up an ephemeral Supabase test project (or uses a long-lived
-    test project with seeded throwaway accounts)
-  - Runs Playwright that signs up a fresh `auth-test-${timestamp}@founderos.dev`
-    address, confirms email via Supabase admin API, signs in, hits one
-    authed API endpoint, deletes the user
-  - Fails the deploy + pages founder if any step fails
-  - Captures + uploads HAR file as artifact
-- This is the canonical "the live auth flow is alive" gate.
+Wired surfaces:
+- `e2e/tests/auth-round-trip.spec.ts` — Playwright spec, env-gated on
+  `CANARY_USER_EMAIL` + `CANARY_USER_PASSWORD`. Skips with explicit
+  message if creds missing (so local dev still runs the public-only suite).
+- `.github/workflows/e2e-synthetic.yml#auth-canary` — runs every 15 min
+  on a `*/15 * * * *` cron AND on every `repository_dispatch` of type
+  `auth-canary-trigger`.
+- `.github/workflows/deploy-prod.yml#trigger-auth-canary` — fires
+  `auth-canary-trigger` after smoke + readiness pass, so the canary hits
+  prod auth ~30s after the new release goes live.
+- Single failure opens a `P0` GitHub issue + Slack page (NO threshold,
+  unlike the public-only probe which dedups after 3 consecutive failures).
+
+Canary user contract: see `docs/runbooks/auth-canary.md`.
 
 ### G5 — No structured-logs aggregation beyond Fly
 **Problem:** `fly logs` is good for grep-by-requestId but doesn't aggregate
@@ -162,11 +166,46 @@ in the UI.
   `supabase.ts`. Add a similar `BUILD_META` for the app overall, render
   in a footer.
 
+## SLOs (TC-4, 2026-05-05)
+
+These are the explicit reliability budgets. Every SLO has a measurable
+threshold, an alert route, and an oncall playbook URL. When an SLO breaks,
+the alert route fires within the budget window — no human-in-the-loop polling.
+
+| # | SLO | Threshold | Window | Alert route | Playbook |
+|---|---|---|---|---|---|
+| 1 | **5xx error rate per route** | < 0.5% | 5 min rolling | Sentry rule `prod-5xx-rate` → Slack `#oncall` (warn at >1%, page at >5%) | `docs/runbooks/sentry-alert-config.md#5xx-rate` |
+| 2 | **Auth round-trip p99 latency** | < 2,000 ms | 15 min (per canary run) | `e2e-synthetic.yml#auth-canary` failure → GH issue + Slack `#oncall` page | `docs/runbooks/auth-canary.md` |
+| 3 | **Auth round-trip success rate** | 100% (single failure pages) | 15 min cadence | `e2e-synthetic.yml#auth-canary` failure → GH issue + Slack `#oncall` page | `docs/runbooks/auth-canary.md` |
+| 4 | **Agent run success rate** | > 95% | 1 h rolling (excludes billing-gated 402s) | Sentry rule `agent-failure-rate` → Slack `#oncall` warn | `docs/runbooks/sentry-alert-config.md#agent-run-failures` |
+| 5 | **Heartbeat job claim-to-complete p95** | < 5 min | 15 min rolling | Sentry rule `heartbeat-stale` → Slack `#oncall` warn | `docs/runbooks/sentry-alert-config.md#heartbeat-stale` |
+| 6 | **Agent crashloop detection** | < 3 `setRunStatus("failed")` events with same `root_cause` per agent | 10 min rolling | Sentry rule `agent-crashloop` → Slack `#oncall` page | `docs/runbooks/sentry-alert-config.md#agent-crashloop` |
+| 7 | **Public readiness probe (`/api/readyz`)** | 200 "ready" | 60 s | Uptime monitor (BetterStack free tier — manual setup) → Slack `#oncall` after 2 consecutive failures | `docs/runbooks/sentry-alert-config.md#readyz-monitor` |
+| 8 | **Public synthetic suite (`e2e-synthetic.yml#probe`)** | All 7 public-only specs pass | 30 min cadence | GH issue auto-opens after 3 consecutive failures | `e2e/README.md` regression table |
+
+**Severity definitions used above:**
+- *page* — Slack `#oncall` channel + GitHub issue with `incident` label. Founder gets pinged on phone (Slack mobile).
+- *warn* — Slack `#oncall` only, no phone wake. Reviewed in next office hours.
+
+**Why these specific numbers:**
+- 0.5% / 1% / 5% staircase for 5xx rate — matches Sentry's default warn/page tiers. Lower than 0.5% is noise; higher than 5% is "site is down."
+- 2 s p99 auth budget — Supabase signInWithPassword + the Fly cold-start is ~600 ms median; 2 s catches a 3x regression without flapping on cold-start outliers.
+- 95% agent success — leaves headroom for billing 402s, transient Composio rate limits, and human-cancelled runs. Below 95% is a real regression.
+- 5 min heartbeat p95 — heartbeat queue is 1-second poll; >5 min means the runner is stuck or the worker is OOM.
+- 3-in-10-min crashloop — same agent failing 3x in 10 min on the same root cause is virtually always a bad config / bad model / API key revocation. Lower triggers on legitimate retry storms.
+
+**Coverage gap acknowledged:** SLOs 1, 4, 5, 6 require the Sentry rules in
+`docs/runbooks/sentry-alert-config.md` to be applied via the Sentry UI or API
+(Sentry rule definitions are not codified in this repo today — they live in
+the project's Sentry org as JSON in the runbook for reproducibility). SLO 7
+requires a manual BetterStack/UptimeRobot monitor. SLOs 2, 3, 8 are fully
+in-repo (workflows + Playwright specs) and run on every cron tick.
+
 ## Sequencing — first 3 sprints
 
 | Sprint | Deliverables | Why first |
 |---|---|---|
-| **S1 — alerts + synthetic** (1 wk) | G1 + G4 + G10 | Catches the next P0 in <5 min, not 24 hrs. Synthetic gate is the single biggest "you'd have caught the placeholder bug" lever. |
+| **S1 — alerts + synthetic** (1 wk) | G1 + G4 + G10 | Catches the next P0 in <5 min, not 24 hrs. Synthetic gate is the single biggest "you'd have caught the placeholder bug" lever. **(G1+G4 closed in TC-4, 2026-05-05.)** |
 | **S2 — observability surface** (1 wk) | G2 + G3 + G5 | Founder + early users can self-debug. Auth issues become 1-min triage, not 1-hr triage. |
 | **S3 — perf + canary + RUM** (1.5 wks) | G6 + G7 + G9 | Pre-customer scaling — these are "before you have 100 customers" investments, not "before you have 5" investments. Worth queuing but don't block on. |
 | **Always-on** | G8 (rotation runbook) | Should land in S1 as a 2-hour task, doesn't need its own sprint. |

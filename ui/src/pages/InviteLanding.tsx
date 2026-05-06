@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@/lib/router";
 import { accessApi } from "../api/access";
 import { authApi } from "../api/auth";
-import { healthApi } from "../api/health";
+import { bootstrapStateApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { AGENT_ADAPTER_TYPES } from "@founderos/shared";
@@ -41,8 +41,8 @@ export function InviteLandingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const healthQuery = useQuery({
-    queryKey: queryKeys.health,
-    queryFn: () => healthApi.get(),
+    queryKey: queryKeys.bootstrapState,
+    queryFn: () => bootstrapStateApi.get(),
     retry: false,
   });
   const sessionQuery = useQuery({

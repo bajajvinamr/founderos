@@ -4,6 +4,8 @@ import { patchInstanceExperimentalSettingsSchema, patchInstanceGeneralSettingsSc
 import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { instanceSettingsService, logActivity } from "../services/index.js";
+import { reinitTelemetryFromInstanceSettings } from "../telemetry.js";
+import { logger } from "../middleware/logger.js";
 import { getActorInfo } from "./authz.js";
 
 function assertCanManageInstanceSettings(req: Request) {
@@ -35,6 +37,20 @@ export function instanceSettingsRoutes(db: Db) {
     async (req, res) => {
       assertCanManageInstanceSettings(req);
       const updated = await svc.updateGeneral(req.body);
+
+      // Council 2026-05-05 P2 (C1) — if the patch touched telemetryConsent,
+      // re-initialize the runtime telemetry client so the toggle takes effect
+      // without a server restart. Non-fatal: a hydration failure logs but
+      // doesn't block the PATCH response (the persisted state remains correct
+      // and will hydrate on next boot).
+      if (Object.prototype.hasOwnProperty.call(req.body, "telemetryConsent")) {
+        try {
+          await reinitTelemetryFromInstanceSettings(db);
+        } catch (err) {
+          logger.warn({ err }, "telemetry: hot reinit after settings patch failed");
+        }
+      }
+
       const actor = getActorInfo(req);
       const companyIds = await svc.listCompanyIds();
       await Promise.all(

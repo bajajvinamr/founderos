@@ -65,10 +65,39 @@ export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
 export { integrations } from "./integrations.js";
-export { companyMemory } from "./company_memory.js";
+export {
+  companyMemory,
+  COMPANY_MEMORY_CATEGORIES,
+  COMPANY_MEMORY_EMBEDDING_DIM,
+  type CompanyMemoryCategory,
+} from "./company_memory.js";
+export {
+  notifications,
+  NOTIFICATION_KINDS,
+  NOTIFICATION_REF_KINDS,
+  type NotificationKind,
+  type NotificationRefKind,
+} from "./notifications.js";
+export {
+  magicLinkTokens,
+  MAGIC_LINK_PURPOSES,
+  MAGIC_LINK_TARGET_REF_KINDS,
+  type MagicLinkPurpose,
+  type MagicLinkTargetRefKind,
+} from "./magic_link_tokens.js";
+export {
+  onboardingDrafts,
+  ONBOARDING_TOTAL_STEPS,
+} from "./onboarding_drafts.js";
 export { integrationData } from "./integration-data.js";
 export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";
+export { companyFinancials } from "./company_financials.js";
+export {
+  marketingSpend,
+  MARKETING_SPEND_CHANNELS,
+  type MarketingSpendChannel,
+} from "./marketing_spend.js";
 export { decisionOutcomes } from "./decision_outcomes.js";
 export { conversations, type ExtractedInsight } from "./conversations.js";
 export {
@@ -103,3 +132,89 @@ export {
   type EventInsert,
   type EventSource,
 } from "./events.js";
+export {
+  insights,
+  INSIGHT_DEPARTMENTS,
+  INSIGHT_KINDS,
+  INSIGHT_STATUSES,
+  type Insight,
+  type InsightInsert,
+  type InsightDepartment,
+  type InsightKind,
+  type InsightStatus,
+} from "./insights.js";
+export {
+  experiments,
+  EXPERIMENT_DEPARTMENTS,
+  EXPERIMENT_STATUSES,
+  EXPERIMENT_CHANNELS,
+  HYPOTHESIS_EMBEDDING_DIM,
+  type Experiment,
+  type ExperimentInsert,
+  type ExperimentDepartment,
+  type ExperimentStatus,
+  type ExperimentChannel,
+} from "./experiments.js";
+export {
+  dailyBriefs,
+  type DailyBrief,
+  type DailyBriefInsert,
+  type DailyBriefPayload,
+  type DailyBriefKpiMovement,
+  type DailyBriefAnomaly,
+  type DailyBriefBlocker,
+  type DailyBriefOpportunity,
+  type DailyBriefTopAction,
+} from "./daily_briefs.js";
+export {
+  workflows,
+  workflowRuns,
+  WORKFLOW_TEMPLATES,
+  WORKFLOW_TRIGGER_KINDS,
+  WORKFLOW_STATUSES,
+  WORKFLOW_RUN_STATUSES,
+  AUTONOMY_LEVELS,
+  type WorkflowTemplate,
+  type WorkflowTriggerKind,
+  type WorkflowStatus,
+  type WorkflowRunStatus,
+  type AutonomyLevel,
+  type WorkflowTriggerSpec,
+  type WorkflowAction,
+  type Workflow,
+  type WorkflowInsert,
+  type WorkflowRun,
+  type WorkflowRunInsert,
+} from "./workflows.js";
+export {
+  contentBriefs,
+  CONTENT_BRIEF_STATUSES,
+  type ContentBrief,
+  type ContentBriefInsert,
+  type ContentBriefStatus,
+} from "./content_briefs.js";
+export {
+  contentDrafts,
+  CONTENT_DRAFT_FORMATS,
+  CONTENT_DRAFT_STATUSES,
+  type ContentDraft,
+  type ContentDraftInsert,
+  type ContentDraftFormat,
+  type ContentDraftStatus,
+  type ContentDraftPayload,
+  type LinkedInPayload,
+  type XThreadPayload,
+  type NewsletterPayload,
+  type ReelScriptPayload,
+  type LandingCopyPayload,
+  type AdCreativePayload,
+} from "./content_drafts.js";
+export {
+  customerEmailSuppressions,
+  SUPPRESSION_TOPICS,
+  SUPPRESSION_REASONS,
+  type CustomerEmailSuppression,
+  type CustomerEmailSuppressionInsert,
+  type SuppressionTopic,
+  type SuppressionReason,
+} from "./customer_email_suppressions.js";

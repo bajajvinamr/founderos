@@ -12,7 +12,7 @@
 import type { Worker } from "bullmq";
 import type { Db } from "@founderos/db";
 import { composioConnections, companies } from "@founderos/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getQueue, QUEUE_NAMES, setupDlqListener } from "../lib/queues.js";
 import { hubspotIngestService } from "./integrations/hubspot-ingest.js";
 import { logger } from "../middleware/logger.js";
@@ -125,8 +125,10 @@ async function syncAllWorkspaces(db: Db): Promise<SyncAllWorkspacesResult> {
       })
       .from(composioConnections)
       .where(
-        eq(composioConnections.appName, "hubspot") &&
+        and(
+          eq(composioConnections.appName, "hubspot"),
           eq(composioConnections.status, "active"),
+        ),
       );
 
     logger.info(
@@ -138,8 +140,15 @@ async function syncAllWorkspaces(db: Db): Promise<SyncAllWorkspacesResult> {
 
     for (const conn of activeConnections) {
       try {
+        // Council 2026-05-06 R2 P2 — pass the exact connectionId we
+        // vetted as active so the service binds to the same row, not
+        // an arbitrary status=active row picked by .limit(1) in the
+        // service. Multi-admin companies have multiple active rows
+        // (different userIds), and re-selection without the ID can
+        // sync the same workspace twice in one cron tick.
         const syncResult = await hubspotIngestService({
           companyId: conn.companyId,
+          connectionId: conn.connectionId,
           db,
         });
 

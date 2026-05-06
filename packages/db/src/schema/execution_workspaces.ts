@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  check,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -17,8 +20,23 @@ export const executionWorkspaces = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     companyId: uuid("company_id").notNull().references(() => companies.id),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `execution_workspaces_project_id_company_id_projects_id_company_id_fk`
+     * — see migration 0085_tenant_invariants.sql.
+     */
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `execution_workspaces_project_workspace_id_company_id_project_workspaces_id_company_id_fk`
+     * — see migration 0085_tenant_invariants.sql.
+     */
     projectWorkspaceId: uuid("project_workspace_id").references(() => projectWorkspaces.id, { onDelete: "set null" }),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `execution_workspaces_source_issue_id_company_id_issues_id_company_id_fk`
+     * — see migration 0085_tenant_invariants.sql.
+     */
     sourceIssueId: uuid("source_issue_id").references((): AnyPgColumn => issues.id, { onDelete: "set null" }),
     mode: text("mode").notNull(),
     strategyType: text("strategy_type").notNull(),
@@ -63,6 +81,27 @@ export const executionWorkspaces = pgTable(
     companyBranchIdx: index("execution_workspaces_company_branch_idx").on(
       table.companyId,
       table.branchName,
+    ),
+    // Same-tenant invariants (composite FKs) — migration 0085.
+    projectTenantFk: foreignKey({
+      name: "execution_workspaces_project_id_company_id_projects_id_company_id_fk",
+      columns: [table.projectId, table.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }).onDelete("cascade"),
+    projectWorkspaceTenantFk: foreignKey({
+      name: "execution_workspaces_project_workspace_id_company_id_project_workspaces_id_company_id_fk",
+      columns: [table.projectWorkspaceId, table.companyId],
+      foreignColumns: [projectWorkspaces.id, projectWorkspaces.companyId],
+    }).onDelete("set null"),
+    sourceIssueTenantFk: foreignKey({
+      name: "execution_workspaces_source_issue_id_company_id_issues_id_company_id_fk",
+      columns: [table.sourceIssueId, table.companyId],
+      foreignColumns: [issues.id, issues.companyId],
+    }).onDelete("set null"),
+    // Status enum CHECK — migration 0085. Mirrors ExecutionWorkspaceStatus.
+    statusCheck: check(
+      "execution_workspaces_status_check",
+      sql`${table.status} IN ('active','idle','in_review','archived','cleanup_failed')`,
     ),
   }),
 );

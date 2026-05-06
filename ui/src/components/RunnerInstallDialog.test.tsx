@@ -109,6 +109,9 @@ describe("<RunnerInstallDialog />", () => {
           lastSeenAt: new Date().toISOString(),
           online: true,
           revokedAt: null,
+          expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+          expiresInDays: 90,
+          rotatedFromTokenId: null,
         },
       ],
     });
@@ -132,6 +135,9 @@ describe("<RunnerInstallDialog />", () => {
           lastSeenAt: null,
           online: false,
           revokedAt: new Date().toISOString(),
+          expiresAt: null,
+          expiresInDays: null,
+          rotatedFromTokenId: null,
         },
       ],
     });
@@ -151,6 +157,9 @@ describe("<RunnerInstallDialog />", () => {
       token: "fos_abcdefghijklmnopqrstuvwxyzabcdef",
       label: "macbook",
       createdAt: new Date().toISOString(),
+      // W0.3 — server response now carries TTL hint.
+      expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+      expiresInDays: 90,
     });
 
     render(true);
@@ -189,6 +198,21 @@ describe("<RunnerInstallDialog />", () => {
     );
     expect(document.body.textContent).toContain("npm install -g @founderos/runner");
     expect(document.body.textContent).toContain("https://founderos.fly.dev");
+
+    // W0.4 (council 2026-05-05) — install snippet MUST export
+    // FOUNDEROS_RUNNER_URL because that's the var the runner reads in
+    // packages/runner/src/config.ts. Pre-W0.4 the snippet exported
+    // FOUNDEROS_API_URL and the runner failed at startup with
+    // "FOUNDEROS_RUNNER_URL is required" — silent install break.
+    expect(document.body.textContent).toContain("FOUNDEROS_RUNNER_URL");
+    expect(document.body.textContent).not.toContain("FOUNDEROS_API_URL");
+
+    // W0.3 — expiry hint visible for buyer trust.
+    const expiryNote = document.body.querySelector(
+      '[data-testid="runner-issued-expiry"]',
+    );
+    expect(expiryNote).not.toBeNull();
+    expect(expiryNote?.textContent).toContain("Expires in 90 days");
   });
 
   it("calls revoke when the revoke button is clicked", async () => {
@@ -201,6 +225,9 @@ describe("<RunnerInstallDialog />", () => {
           lastSeenAt: null,
           online: false,
           revokedAt: null,
+          expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+          expiresInDays: 90,
+          rotatedFromTokenId: null,
         },
       ],
     });

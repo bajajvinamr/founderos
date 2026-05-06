@@ -1,21 +1,47 @@
 name: E2E synthetic monitor
 
-# Runs every 30 min against prod. Uses the `public-only` profile so we never
-# touch auth-required endpoints or mutate anything.
+# Two complementary probes against prod:
+#
+#   1. `probe`        — public-only suite, every 30 min. Catches landing/auth-page
+#                       render breakage, health endpoint regressions, static
+#                       asset 404s, etc. Mutates nothing. Same as before.
+#
+#   2. `auth-canary`  — full auth round-trip (sign-in → /api/companies → board),
+#                       every 15 min AND on every prod deploy via the
+#                       `auth-canary-trigger` repository_dispatch event fired
+#                       from deploy-prod.yml after smoke passes. Pages on-call
+#                       on a single failure (auth being broken in prod is the
+#                       single most expensive failure mode — see G1 / G4 in
+#                       docs/devops/observability-plan.md).
 #
 # Incident-dedup pattern mirrors .github/workflows/uptime.yml: a single open
 # GitHub issue titled INCIDENT_TITLE is kept open while the probe is failing
-# and auto-closed when it recovers. We only open an incident after
-# INCIDENT_THRESHOLD consecutive failures (≈ 90 minutes) so a flaky one-off
-# is a warning, not a page.
+# and auto-closed when it recovers. Public-only opens after 3 consecutive
+# failures (≈ 90 min), auth-canary opens on a single failure.
 
 on:
   schedule:
+    # Public-only suite every 30 min.
     - cron: "*/30 * * * *"
-  workflow_dispatch: {}
+    # Auth canary every 15 min — see jobs.auth-canary.if for the gating logic
+    # that picks which job runs on which schedule.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      run_auth_canary:
+        description: "Run auth-canary instead of public-only"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+  repository_dispatch:
+    # Fired by .github/workflows/deploy-prod.yml after smoke passes. The
+    # post-deploy auth-canary is gated to this event type so we hit prod auth
+    # within ~30s of the new release flipping live.
+    types: [auth-canary-trigger]
 
 concurrency:
-  group: e2e-synthetic
+  group: e2e-synthetic-${{ github.event_name }}-${{ github.event.schedule || 'manual' }}
   cancel-in-progress: false
 
 permissions:
@@ -24,20 +50,27 @@ permissions:
   actions: read
 
 env:
-  FOUNDEROS_E2E_BASE_URL: https://founderos-bice.vercel.app
-  FOUNDEROS_E2E_PROFILE: public-only
+  FOUNDEROS_E2E_BASE_URL: https://founderos.fly.dev
   INCIDENT_LABEL: incident
-  # Stable title — dedup key for the issue the workflow keeps open.
+  # Stable titles — dedup keys for the issues each job keeps open.
   INCIDENT_TITLE: "E2E synthetic failing in production"
+  CANARY_INCIDENT_TITLE: "AUTH CANARY failing in production"
   INCIDENT_THRESHOLD: "3"
 
 jobs:
+  # ─── Public-only synthetic — every 30 min ────────────────────────────
   probe:
     name: Run public-only E2E against prod
+    # Run on the */30 cron only (not the */15 cron, not on canary trigger).
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *')
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_auth_canary != 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       status: ${{ steps.run.outputs.status }}
+    env:
+      FOUNDEROS_E2E_PROFILE: public-only
     steps:
       - uses: actions/checkout@v4
 
@@ -82,12 +115,87 @@ jobs:
             e2e/test-results/
           retention-days: 14
 
+  # ─── Auth round-trip canary — every 15 min + post-deploy ─────────────
+  # Required GitHub Actions secrets:
+  #   CANARY_USER_EMAIL     — pre-created Supabase user, email-confirmed,
+  #                           tagged is_canary=true in public."user".metadata.
+  #   CANARY_USER_PASSWORD  — rotate quarterly (docs/runbooks/secret-rotation.md).
+  # See docs/runbooks/auth-canary.md for the full canary user contract +
+  # the "auth canary failed" oncall playbook.
+  auth-canary:
+    name: Auth round-trip canary
+    # Run on the */15 cron OR on workflow_dispatch with run_auth_canary=true
+    # OR on the post-deploy repository_dispatch.
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *')
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_auth_canary == 'true')
+      || github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      status: ${{ steps.run.outputs.status }}
+    env:
+      # Run only the auth-round-trip spec (default profile, NOT public-only).
+      FOUNDEROS_E2E_PROFILE: default
+      CANARY_USER_EMAIL: ${{ secrets.CANARY_USER_EMAIL }}
+      CANARY_USER_PASSWORD: ${{ secrets.CANARY_USER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify canary credentials present
+        # Fail loud + early if the secrets aren't wired. A missing-creds
+        # canary that silently skips is an observability hole — the spec's
+        # `test.skip(!HAVE_CREDS, ...)` would auto-pass, masking a real outage.
+        run: |
+          if [[ -z "${CANARY_USER_EMAIL:-}" || -z "${CANARY_USER_PASSWORD:-}" ]]; then
+            echo "::error::CANARY_USER_EMAIL and CANARY_USER_PASSWORD secrets must be set in GitHub Actions"
+            echo "::error::See docs/runbooks/auth-canary.md for canary user provisioning."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser (chromium only)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run auth round-trip canary
+        id: run
+        run: |
+          set +e
+          pnpm e2e --grep "auth-round-trip"
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 0 ]]; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-canary-report-${{ github.run_id }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 30
+
   # Opens/updates a single auto-deduplicated incident issue after
   # INCIDENT_THRESHOLD consecutive failures. Dedup key: exact issue title.
   incident:
     name: Manage incident issue
     needs: probe
-    if: always()
+    if: always() && needs.probe.result != 'skipped'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -161,7 +269,7 @@ jobs:
             const body = [
               `The E2E synthetic monitor has failed ${consecutiveFails}+ times in a row against production.`,
               ``,
-              `**Target:** ${process.env.FOUNDEROS_E2E_BASE_URL || 'https://founderos-bice.vercel.app'}`,
+              `**Target:** ${process.env.FOUNDEROS_E2E_BASE_URL || 'https://founderos.fly.dev'}`,
               `**Profile:** public-only (landing, auth, health, composio status, routing, static assets)`,
               ``,
               `**Latest run:** ${runUrl}`,
@@ -190,3 +298,123 @@ jobs:
               });
               core.info(`Opened incident #${issue.number}.`);
             }
+
+  # Auth-canary incident: NO threshold — opens on a single failure because
+  # an authenticated user being unable to sign in is a P0 by definition.
+  # Same auto-close behavior on next-run pass.
+  canary-incident:
+    name: Manage auth-canary incident
+    needs: auth-canary
+    if: always() && needs.auth-canary.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Update canary incident state
+        uses: actions/github-script@v7
+        env:
+          CANARY_STATUS: ${{ needs.auth-canary.result == 'success' && 'pass' || 'fail' }}
+          CANARY_OUTPUT: ${{ needs.auth-canary.outputs.status }}
+        with:
+          script: |
+            const title  = process.env.CANARY_INCIDENT_TITLE || "AUTH CANARY failing in production";
+            const label  = process.env.INCIDENT_LABEL || "incident";
+            const failed = (process.env.CANARY_OUTPUT || process.env.CANARY_STATUS) === "fail";
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: "open",
+              labels: label,
+              per_page: 50,
+            });
+            const existing = openIssues.find(i => i.title === title);
+
+            if (!failed) {
+              if (existing) {
+                const now = new Date().toISOString();
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  issue_number: existing.number,
+                  body: `Auth canary recovered at ${now} (run: ${context.runId}). Auto-closing.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  issue_number: existing.number,
+                  state: "closed",
+                });
+                core.info(`Closed canary incident #${existing.number} — auth recovered.`);
+              } else {
+                core.info("Auth canary passed; nothing to do.");
+              }
+              return;
+            }
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const trigger = context.eventName === "repository_dispatch"
+              ? "post-deploy trigger"
+              : context.eventName === "workflow_dispatch"
+                ? "manual workflow_dispatch"
+                : "scheduled run";
+            const body = [
+              `**P0** — auth canary failed in production. The pre-created canary user`,
+              `cannot complete sign-in → /api/companies → board redirect.`,
+              ``,
+              `**Target:** ${process.env.FOUNDEROS_E2E_BASE_URL || 'https://founderos.fly.dev'}`,
+              `**Trigger:** ${trigger}`,
+              `**Latest run:** ${runUrl}`,
+              ``,
+              `**Runbook:** \`docs/runbooks/auth-canary.md\` (single-failure page; no threshold).`,
+              ``,
+              `**First steps:**`,
+              `  1. Pull \`auth-canary-report-${context.runId}\` artifact (HAR + trace).`,
+              `  2. Manually sign in as the canary user — does it reproduce?`,
+              `  3. Check \`/api/healthz\` and \`/api/readyz\` on prod.`,
+              `  4. \`fly logs --app founderos\` filter by failing test timestamp.`,
+              `  5. If single-recipient (only canary affected): rotate canary password,`,
+              `     check Supabase user lock status. If broad: ROLLBACK.`,
+              ``,
+              `Auto-closes when the next canary run passes.`,
+            ].join("\n");
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: existing.number,
+                body: `Still failing as of run ${runUrl} (${trigger}).`,
+              });
+              core.info(`Commented on existing canary incident #${existing.number}.`);
+            } else {
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                title,
+                body,
+                labels: [label],
+              });
+              core.info(`Opened canary incident #${issue.number}.`);
+            }
+
+      - name: Slack page on canary failure
+        # Sends the canary failure to the on-call Slack webhook. Routed to
+        # #oncall by the webhook config in Slack itself. We use the same
+        # SLACK_DEPLOY_WEBHOOK_URL secret as deploy-prod.yml — the webhook
+        # is shared, the message tag is what the Slack channel filter splits
+        # on.
+        if: needs.auth-canary.result != 'success'
+        env:
+          SLACK_URL: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ -z "${SLACK_URL:-}" ]]; then
+            echo "SLACK_DEPLOY_WEBHOOK_URL not set — skipping Slack page (canary still opens GH issue)."
+            exit 0
+          fi
+          run_url="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+          export TEXT=":rotating_light: *AUTH CANARY FAILED in production* (trigger: ${EVENT})"$'\n'"<${run_url}|View run> · runbook: docs/runbooks/auth-canary.md"
+          payload=$(python3 -c 'import json,os;print(json.dumps({"text":os.environ["TEXT"]}))')
+          curl -sS -X POST -H 'content-type: application/json' --data "$payload" "$SLACK_URL" || true

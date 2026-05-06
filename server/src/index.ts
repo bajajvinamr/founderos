@@ -499,6 +499,19 @@ export async function startServer(): Promise<StartedServer> {
   if (config.deploymentMode === "local_trusted") {
     await ensureLocalTrustedBoardPrincipal(db as any);
   }
+
+  // Council 2026-05-05 P2 (C1) — hydrate telemetry runtime state from
+  // persisted instance-settings consent after DB is ready. Without this the
+  // wizard / settings toggle is cosmetic: writes land in the DB but never
+  // reach the telemetry client. See server/src/telemetry.ts for the
+  // re-init contract (file-config OR DB-consent → enabled).
+  try {
+    const { reinitTelemetryFromInstanceSettings } = await import("./telemetry.js");
+    await reinitTelemetryFromInstanceSettings(db as any);
+  } catch (err) {
+    logger.warn({ err }, "telemetry: instance-settings hydration failed at boot — keeping file-config state");
+  }
+
   let authProvider: "clerk" | "better-auth" | "local_trusted" | "supabase" = "local_trusted";
   let authPublishableKey: string | undefined;
   let authSupabaseAnonKey: string | undefined;

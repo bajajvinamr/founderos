@@ -29,6 +29,8 @@ function summary(over: Partial<RunnerTokenSummary> = {}): RunnerTokenSummary {
     createdAt: new Date().toISOString(),
     lastSeenAt: null,
     online: false,
+    expiresAt: null,
+    expiresInDays: null,
     ...over,
   };
 }

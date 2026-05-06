@@ -19,7 +19,10 @@
  * duplicate the event store.
  */
 
+import { sql } from "drizzle-orm";
 import {
+  check,
+  foreignKey,
   pgTable,
   uuid,
   text,
@@ -65,6 +68,29 @@ export const runnerTokens = pgTable(
      * Auth middleware refuses tokens with non-null revokedAt.
      */
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /**
+     * W0.3 (council 2026-05-05) — TTL for the token. NULL = indefinite
+     * (legacy rows pre-migration 0089). New issuance defaults to 90 days.
+     * Auth middleware rejects rows where expires_at < now() with a
+     * "rotation hint" payload so the runner can prompt the user to
+     * re-mint via the rotation endpoint instead of failing silently.
+     */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /**
+     * W0.3 — chain of rotations. When an operator rotates a token (lost
+     * laptop, near-expiry refresh), the new token's row points back to
+     * the old one via this column. Lets us reconstruct "every token that
+     * descended from compromised token X" with a single recursive CTE.
+     */
+    rotatedFromTokenId: uuid("rotated_from_token_id"),
+    /**
+     * W0.3 — opaque device fingerprint string captured by the runner at
+     * install time (hostname + OS + first-boot UUID, sha256-hashed
+     * client-side). NOT a security boundary — it's an audit signal so
+     * support can spot when a single token starts hitting from two
+     * device fingerprints (= leaked credentials).
+     */
+    deviceFingerprint: text("device_fingerprint"),
   },
   (table) => ({
     // Hash uniqueness — collision is sha256-improbable but the constraint
@@ -76,6 +102,19 @@ export const runnerTokens = pgTable(
       table.companyId,
       table.revokedAt,
     ),
+    // W0.3 — partial index on non-null expires_at; supports the
+    // dashboard "tokens nearing expiry" + the middleware fast-path.
+    expiresAtIdx: index("runner_tokens_expires_at_idx").on(table.expiresAt),
+    // W0.3 — rotation-chain audit query.
+    rotatedFromIdx: index("runner_tokens_rotated_from_idx").on(table.rotatedFromTokenId),
+    // Self-FK for rotation chain (added explicitly so drizzle generates
+    // the `runner_tokens_rotated_from_token_id_fk` constraint matching
+    // the migration SQL).
+    rotatedFromFk: foreignKey({
+      columns: [table.rotatedFromTokenId],
+      foreignColumns: [table.id],
+      name: "runner_tokens_rotated_from_token_id_fk",
+    }).onDelete("set null"),
   }),
 );
 
@@ -94,6 +133,11 @@ export const runnerJobs = pgTable(
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
+    /**
+     * Same-tenant invariant enforced by the composite FK
+     * `runner_jobs_agent_id_company_id_agents_id_company_id_fk` —
+     * see migration 0085_tenant_invariants.sql.
+     */
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
@@ -101,6 +145,10 @@ export const runnerJobs = pgTable(
      * The heartbeat_runs row this job materializes. Created in the same
      * transaction as the job. byo_runner.execute() reads this back to
      * finalize the heartbeat_run record on completion.
+     *
+     * Same-tenant invariant enforced by the composite FK
+     * `runner_jobs_heartbeat_run_id_company_id_heartbeat_runs_id_company_id_fk`
+     * — see migration 0085_tenant_invariants.sql.
      */
     heartbeatRunId: uuid("heartbeat_run_id")
       .notNull()
@@ -160,5 +208,21 @@ export const runnerJobs = pgTable(
     claimedByIdx: index("runner_jobs_claimed_by_idx").on(table.claimedByTokenId),
     // Reverse lookup: heartbeat_runs → runner_jobs (rare but useful for audit UI).
     heartbeatRunIdx: index("runner_jobs_heartbeat_run_idx").on(table.heartbeatRunId),
+    // Same-tenant invariant (composite FK) — migration 0085.
+    agentTenantFk: foreignKey({
+      name: "runner_jobs_agent_id_company_id_agents_id_company_id_fk",
+      columns: [table.agentId, table.companyId],
+      foreignColumns: [agents.id, agents.companyId],
+    }).onDelete("cascade"),
+    heartbeatRunTenantFk: foreignKey({
+      name: "runner_jobs_heartbeat_run_id_company_id_heartbeat_runs_id_company_id_fk",
+      columns: [table.heartbeatRunId, table.companyId],
+      foreignColumns: [heartbeatRuns.id, heartbeatRuns.companyId],
+    }).onDelete("cascade"),
+    // Status enum CHECK — migration 0085. Mirrors RunnerJobStatus.
+    statusCheck: check(
+      "runner_jobs_status_check",
+      sql`${table.status} IN ('queued','claimed','streaming','completed','failed','cancelled')`,
+    ),
   }),
 );

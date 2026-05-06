@@ -95,7 +95,7 @@ describeEmbeddedPostgres("cleanup removal services", () => {
       companyId,
       agentId,
       invocationSource: "assignment",
-      status: "completed",
+      status: "succeeded",
       contextSnapshot: { issueId },
     });
 

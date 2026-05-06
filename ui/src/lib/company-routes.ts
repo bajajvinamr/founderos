@@ -20,6 +20,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   // as a company prefix, producing "No company matches prefix DEPARTMENTS" etc.
   "departments",
   "weekly",
+  "brief",
   "decisions",
   "conversations",
   "hire",
@@ -28,6 +29,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   "settings",
   "onboarding",
   "integrations",
+  "permissions",
 ]);
 
 const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "docs", "instance", "landing", "legal"]);

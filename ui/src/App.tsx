@@ -22,7 +22,7 @@ const FOUNDEROS_ONBOARDING_V2: boolean = (() => {
   }
   return raw !== "false" && raw !== "0";
 })();
-import { healthApi } from "./api/health";
+import { bootstrapStateApi } from "./api/health";
 
 // Hot-path pages are imported eagerly — first paint after login hits these.
 import { Dashboard } from "./pages/Dashboard";
@@ -53,6 +53,7 @@ const ApprovalDetail = lazy(() => import("./pages/ApprovalDetail").then((m) => (
 const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => ({ default: m.DecisionsInbox })));
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
+const Permissions = lazy(() => import("./pages/Permissions").then((m) => ({ default: m.Permissions })));
 const AuditLog = lazy(() => import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })));
 const Alerts = lazy(() => import("./pages/Alerts").then((m) => ({ default: m.Alerts })));
 const CompanySettings = lazy(() => import("./pages/CompanySettings").then((m) => ({ default: m.CompanySettings })));
@@ -80,6 +81,7 @@ const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ de
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
 const WeeklyWrap = lazy(() => import("./pages/WeeklyWrap").then((m) => ({ default: m.WeeklyWrap })));
+const DailyBrief = lazy(() => import("./pages/DailyBrief").then((m) => ({ default: m.DailyBrief })));
 const Conversations = lazy(() => import("./pages/Conversations").then((m) => ({ default: m.Conversations })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
@@ -112,13 +114,11 @@ function CloudAccessGate() {
   const location = useLocation();
   const { session: supabaseSession, loading: supabaseLoading } = useSupabaseAuth();
   const healthQuery = useQuery({
-    queryKey: queryKeys.health,
-    queryFn: () => healthApi.get(),
+    queryKey: queryKeys.bootstrapState,
+    queryFn: () => bootstrapStateApi.get(),
     retry: false,
     refetchInterval: (query) => {
-      const data = query.state.data as
-        | { deploymentMode?: "local_trusted" | "authenticated"; bootstrapStatus?: "ready" | "bootstrap_pending" }
-        | undefined;
+      const data = query.state.data;
       return data?.deploymentMode === "authenticated" && data.bootstrapStatus === "bootstrap_pending"
         ? 2000
         : false;
@@ -277,9 +277,11 @@ function boardRoutes() {
       <Route path="costs" element={<Costs />} />
       <Route path="integrations" element={<Integrations />} />
       <Route path="activity" element={<Activity />} />
+      <Route path="permissions" element={<Permissions />} />
       <Route path="audit" element={<AuditLog />} />
       <Route path="alerts" element={<Alerts />} />
       <Route path="weekly" element={<WeeklyWrap />} />
+      <Route path="brief" element={<DailyBrief />} />
       <Route path="conversations" element={<Conversations />} />
       <Route path="conversations/:convId" element={<Conversations />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
@@ -609,6 +611,7 @@ export function App() {
               wiring that completes the contract. */}
           <Route path="hire" element={<UnprefixedBoardRedirect />} />
           <Route path="weekly" element={<UnprefixedBoardRedirect />} />
+          <Route path="brief" element={<UnprefixedBoardRedirect />} />
           <Route path="decisions" element={<UnprefixedBoardRedirect />} />
           <Route path="departments" element={<UnprefixedBoardRedirect />} />
           <Route path="departments/:dept" element={<UnprefixedBoardRedirect />} />

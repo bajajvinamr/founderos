@@ -1,5 +1,7 @@
 import { Router, type Request } from "express";
+import { eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
+import { workflowRuns, AUTONOMY_LEVELS } from "@founderos/db";
 import {
   addApprovalCommentSchema,
   createApprovalSchema,
@@ -16,6 +18,8 @@ import {
   logActivity,
   secretService,
 } from "../services/index.js";
+import { updateWorkflow } from "../services/workflows.js";
+import { canRunAutonomously } from "../services/workflow-autonomy.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { redactEventPayload } from "../redaction.js";
 
@@ -219,6 +223,60 @@ export function approvalRoutes(db: Db) {
               error: err instanceof Error ? err.message : String(err),
             },
           });
+        }
+      }
+
+      // ── S6.2 — "Approve and skip future similar approvals" ────────────
+      // When the approver opts in AND this approval is linked to a workflow
+      // run, bump the parent workflow's autonomyLevel to 4 so future runs
+      // skip the approval queue. Goes through canRunAutonomously() so the
+      // instance master switch still gates the change — if the switch is
+      // off, the promotion is silently rejected (with a warning logged)
+      // and the approval still resolves normally.
+      if (req.body.promoteWorkflowToAutonomous && approval.workflowRunId) {
+        const [wfRun] = await db
+          .select({ workflowId: workflowRuns.workflowId, companyId: workflowRuns.companyId })
+          .from(workflowRuns)
+          .where(eq(workflowRuns.id, approval.workflowRunId))
+          .limit(1);
+
+        if (wfRun && wfRun.companyId === approval.companyId) {
+          const permitted = await canRunAutonomously(db, {
+            autonomyLevel: AUTONOMY_LEVELS.AUTONOMOUS,
+          });
+          if (permitted) {
+            const actor = getActorInfo(req);
+            await updateWorkflow(db, {
+              companyId: approval.companyId,
+              workflowId: wfRun.workflowId,
+              actorType: actor.actorType,
+              actorId: actor.actorId,
+              agentId: actor.agentId,
+              runId: actor.runId,
+              patch: { autonomyLevel: AUTONOMY_LEVELS.AUTONOMOUS },
+            });
+          } else {
+            logger.warn(
+              {
+                approvalId: approval.id,
+                workflowId: wfRun.workflowId,
+                companyId: approval.companyId,
+              },
+              "promoteWorkflowToAutonomous requested but instance master switch is off; promotion skipped",
+            );
+            await logActivity(db, {
+              companyId: approval.companyId,
+              actorType: "user",
+              actorId: req.actor.userId ?? "board",
+              action: "approval.autonomy_promotion_blocked",
+              entityType: "approval",
+              entityId: approval.id,
+              details: {
+                workflowId: wfRun.workflowId,
+                reason: "instance_master_switch_off",
+              },
+            });
+          }
         }
       }
     }
