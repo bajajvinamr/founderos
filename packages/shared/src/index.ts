@@ -715,6 +715,16 @@ export {
   upsertFinanceSettingsSchema,
   type UpsertFinanceSettings,
   type FinanceSettings,
+  MARKETING_SPEND_CHANNELS,
+  marketingSpendChannelSchema,
+  createMarketingSpendSchema,
+  updateMarketingSpendSchema,
+  listMarketingSpendQuerySchema,
+  type MarketingSpendChannel,
+  type CreateMarketingSpend,
+  type UpdateMarketingSpend,
+  type ListMarketingSpendQuery,
+  type MarketingSpendRow,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";

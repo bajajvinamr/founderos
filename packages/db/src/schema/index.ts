@@ -70,6 +70,11 @@ export { integrationData } from "./integration-data.js";
 export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";
 export { companyFinancials } from "./company_financials.js";
+export {
+  marketingSpend,
+  MARKETING_SPEND_CHANNELS,
+  type MarketingSpendChannel,
+} from "./marketing_spend.js";
 export { decisionOutcomes } from "./decision_outcomes.js";
 export { conversations, type ExtractedInsight } from "./conversations.js";
 export {

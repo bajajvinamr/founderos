@@ -363,3 +363,15 @@ export {
   type UpsertFinanceSettings,
   type FinanceSettings,
 } from "./finance-settings.js";
+export {
+  MARKETING_SPEND_CHANNELS,
+  marketingSpendChannelSchema,
+  createMarketingSpendSchema,
+  updateMarketingSpendSchema,
+  listMarketingSpendQuerySchema,
+  type MarketingSpendChannel,
+  type CreateMarketingSpend,
+  type UpdateMarketingSpend,
+  type ListMarketingSpendQuery,
+  type MarketingSpendRow,
+} from "./marketing-spend.js";
