@@ -1,3 +1,8 @@
+## [0.6.3] - 2026-05-06 20:21:43 UTC
+
+### Fixed
+- fix(security): block agent self-PATCH on privileged fields (P0-1) (#43) (9e212f4)
+
 ## [0.6.1] - 2026-05-06 20:18:57 UTC
 
 ### Fixed
