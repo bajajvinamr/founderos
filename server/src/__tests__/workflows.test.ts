@@ -145,6 +145,9 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
   let otherCompanyId!: string;
 
   beforeAll(async () => {
+    process.env.EMAIL_UNSUBSCRIBE_SECRET =
+      process.env.EMAIL_UNSUBSCRIBE_SECRET ??
+      "test-secret-workflows-tests-32-bytes-min-OK";
     temp = await startEmbeddedPostgresTestDatabase("founderos-workflows-");
     db = createDb(temp.connectionString);
   }, 60_000);
