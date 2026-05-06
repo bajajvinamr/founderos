@@ -326,6 +326,15 @@ export {
 } from "./company-memory.js";
 
 export {
+  notificationKindSchema,
+  notificationRefKindSchema,
+  createNotificationSchema,
+  listNotificationsQuerySchema,
+  type CreateNotificationInput,
+  type ListNotificationsQuery,
+} from "./notification.js";
+
+export {
   agentReviewRecommendationSchema,
   generateAgentReviewSchema,
   createManualAgentReviewSchema,

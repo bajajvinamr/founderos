@@ -71,6 +71,13 @@ export {
   COMPANY_MEMORY_EMBEDDING_DIM,
   type CompanyMemoryCategory,
 } from "./company_memory.js";
+export {
+  notifications,
+  NOTIFICATION_KINDS,
+  NOTIFICATION_REF_KINDS,
+  type NotificationKind,
+  type NotificationRefKind,
+} from "./notifications.js";
 export { integrationData } from "./integration-data.js";
 export { agentReviews } from "./agent_reviews.js";
 export { instanceSubscription } from "./instance_subscription.js";
