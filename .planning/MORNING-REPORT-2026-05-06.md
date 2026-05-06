@@ -65,7 +65,19 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 **Status:** WORKED-AROUND. #196 progressing through 7 layers; 3 done.
 
-**Next-action recommendation for Vinamr:** Resume on next wake with #196 layer 3b (route handler `/api/u/customer/:token`). Estimate ~5-6 wakes to finish #196 entirely. After #196 lands, S4.8 has 1 of its 8 prereqs unblocked; the others (#194 approval state machine, #195 recipient materialization, etc.) remain.
+### [14:09:00 UTC] [LOW] Day 2 second-half progress — 4 more atomic commits, #196 fully closed
+
+**What happened:** User reissued "keep going" directive at 13:42 UTC; loop pivoted from idle ScheduleWakeup cadence to chained execution. Outcome: 4 more atomic commits within ~25 min wall-clock; #196 prereq fully closed (4/4 layers + close-out commit).
+
+**Commits (this session continuation):**
+6. `99f1a3f feat(s4.8-prereq)` — #196 layer 3c-2: HMAC unsubscribe URL injected into onboarding email body + skip-path tests
+7. `a871d08 feat(s4.8-prereq)` — #196 layer 3d: suppression skip + URL in activation-nudge template
+8. `564a38e feat(s4.8-prereq)` — #196 layer 3e: suppression skip + URL in upsell template (Stripe-mocked)
+9. `77a4306 feat(s4.8-prereq)` — #196 layer 4: Resend webhook auto-suppress on hard bounce + spam complaint
+
+**Status:** SHIPPED. #196 fully closed. **88 tests passing across 9 files.** S4.8 has 1 of 8 prereqs unblocked.
+
+**Next-action recommendation for Vinamr:** S4.8 still BLOCKED on the other 7 prereqs (#194 approval state machine, #195 recipient materialization, #197 email-wrapper, #198 typed connectedAccountId, #199 per-tenant rate limit, +#192/#193 idempotency keys / PII allowlist). Council protocol still gates S4.8 dispatch on all 8. Loop continues into the next prereq next wake; suggest #197 (email-wrapper — tightly coupled to the templates I just touched, cleanest follow-on).
 
 ---
 
