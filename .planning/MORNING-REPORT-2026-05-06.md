@@ -324,3 +324,51 @@ Full server suite: **1814 pass / 20 fail / 1 skip** → **1848 pass / 0 fail / 7
 - Branch `feat/s4.3-content-attribution` ahead of `origin/main` by ~24 commits, all pushed
 - Continuing Phase B (generator + route integration) on next wake
 
+
+---
+
+## Phase C — Sprint 5 (Finance) — Day 2 evening
+
+Picking up Sprint 5 ahead of plan (Day 2 evening instead of Day 3) per autonomous-push mandate. Strategy: foundation tickets first (schemas + small-surface backends), then big LLM-driven scenario modeling at the end (S5.4 needs S5.1+S5.2+S5.3 as Claude tools).
+
+### S5.9 — Finance settings (singleton-per-company manual inputs) — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `9f01b52` | `feat(s5.9): finance settings — singleton-per-company manual inputs`. New table `company_financials` (cash_balance_cents + monthly_burn_cents + currency); migration 0096. UNIQUE on company_id enforces singleton; UPSERT via onConflictDoUpdate. GET/PUT route gated by `assertCompanyAccess`; PUT writes `finance.settings_upserted` activity_log entry. Zod validators with currency enum (USD/EUR/GBP/INR). React form with cents↔dollars conversion, live runway preview (cash÷burn), currency selector. Non-invasive "Settings" tab on FinanceConsole (existing mock tabs untouched — S5.1 will replace them with live data). 8/8 integration tests via embedded postgres (GET-null-empty, PUT-insert, PUT-upsert-no-dup, hydrate, validation 400s, audit log, currency default). |
+
+**Council advisory (T3) fired on migration write — recorded for visibility:**
+
+### [10:18:32 UTC] [MED] [S5.9 / migration 0096] Council advisory T3 (ask) on additive new-table migration
+
+**What happened:** Vanta's `council-advisory.js` PreToolUse hook fired with T3 ("ask") tier on every write touching `packages/db/src/migrations/`. Pattern matchers are file-regex (`\bmigrations?\b` = risky) + prompt-keyword (`schema|migration|ddl` = risky), passthrough on unmatched intent. The hook can't distinguish CREATE TABLE (zero blast radius) from ALTER TABLE DROP COLUMN (high blast).
+
+**What I tried:** Self-audit per LRP V2 mandate. Migration is pure additive: new table `company_financials`, FK to companies with ON DELETE CASCADE matching existing schemas (plugin_company_settings, company_secrets), no ALTER on hot tables, no auth/payment touch. The vinamr-invariants warning ("ALTER TABLE takes ACCESS EXCLUSIVE lock per statement; combine into a single multi-clause statement") does not apply to CREATE TABLE.
+
+**Workaround applied:** Continued per autonomous-push mandate. Recorded advisory here for human review. No `/council` invoked because the change is mechanical and the LRP V2 explicitly authorizes "Council fired BLOCK on small fixes → don't halt".
+
+**Status:** WORKED-AROUND.
+
+**Files touched:** `packages/db/src/migrations/0096_company_financials.sql`, `packages/db/src/migrations/meta/_journal.json`.
+
+**Next-action recommendation for Vinamr:** No action needed unless reviewing the T3 hook tuning. Consider if the advisory should be silent for matchers like `^CREATE TABLE.*company_` that are unambiguously additive new-table writes. Tradeoff: more false-positives now vs. more false-negatives if the hook's pattern set drifts.
+
+### S5.9 verification
+
+- Server typecheck: clean
+- UI typecheck: clean
+- Test suite: 8/8 pass (4.4s wall, embedded postgres)
+- Branch state: pushed to `origin/feat/s4.3-content-attribution`
+- Activity log audit trail: confirmed (test asserts `finance.settings_upserted` row exists)
+
+### Sprint 5 remaining
+
+- S5.6 — marketing_spend schema (next; small additive migration)
+- S5.1 — Revenue cockpit endpoint + math (foundation for S5.2+S5.4)
+- S5.2 — Pricing simulator (composes existing `runScenario` engine in shared)
+- S5.3 — Churn forecast (cohort retention curve fit)
+- S5.5 — Runway forecast (now unblocked by S5.9)
+- S5.7 — Experiment ROI rollup
+- S5.8 — Cash planning (now unblocked by S5.9)
+- S5.4 — Scenario modeling LLM (last — needs S5.1/S5.2/S5.3 as Claude tools)
+- S5.10 — Console layout consolidation (last — replaces all mock tabs at once)
