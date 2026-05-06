@@ -1,6 +1,92 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-06 late evening (Day 5 of 7-day LRP; **Sprint 5 closed at 10/10 + Sprint 6 closed at 10/10 — MVP scope-complete**; +125 tests this run, 0 regressions) by Claude_
+_Last updated: 2026-05-06 late evening (Day 6 of 7-day LRP; **Sprint 6 closed at 10/10 + Day 6 E2E gate landed with 2 user-action items surfaced**; client-readiness suite shipped) by Claude_
+
+## 🟡 2026-05-06 night — Day 6 E2E protocol — gate state PARTIAL (2 items need your call)
+
+**Status:** Day 6 gate exercised across all three suites per LRP spec. Client-readiness suite shipped (5 specs in `e2e/tests/client-readiness/`). Two pre-existing issues surfaced that need your action — neither is a code regression from this LRP run.
+
+### Gate posture
+
+| Suite | Result | Notes |
+|---|---|---|
+| **#1** — `pnpm e2e` against `founderos.fly.dev` (prod, public-only) | 43 pass / 63 skip / **2 fail** | Failures both target task #139's `/api/health` strip — the branch has the fix (`cc1d891` on `feat/s4.3-content-attribution`) but **prod is serving pre-task-#139 shape** because the branch hasn't been merged + redeployed. Deploy-mismatch, not a code bug. |
+| **#2** — `pnpm test:e2e` (local-server, branch code under test) | **BLOCKED on bootstrap** | The webServer config invokes `pnpm founderos run` which detects non-TTY and refuses (`No config found and terminal is non-interactive`). Requires one-time interactive `founderos onboard` to seed `~/.founderos/instances/default/config.json` — the runtime data dirs exist but the config.json doesn't. Dev-onboarding gap, not a code bug. |
+| **#3** — `e2e/tests/client-readiness/*.spec.ts` (5 NEW specs) | **5 pass / 5 skip / 0 fail** | Every spec landed with the right shape: a `[server-alive]` smoke that always runs + a `[deep]` happy-path that skips with `fixture-needed: <VAR> — <hint>` until staging fixtures are wired. |
+
+### Items needing your action (per "ask my advice at the end" mandate)
+
+**Item A — Deploy `feat/s4.3-content-attribution` to fix Suite #1's 2 failures.**
+
+- The 2 failures are both `/api/health` shape assertions: the spec expects `{status, version}` (task #139's strip, commit `cc1d891`) but prod returns the pre-#139 fat health body, and `/api/health/bootstrap-state` returns 404 (S6.x route, branch-only).
+- The branch has been pushed to origin since Day 4; CONTINUE.md's standing decision was "branch lands once merged to main, then `fly deploy -a founderos --strategy immediate`."
+- **One-way door: live customer-facing deploy.** Per project guardrails I did not auto-deploy. Your call.
+- After deploy, suite #1 will be 45 pass / 63 skip / 0 fail.
+
+**Item B — Choose how to unblock Suite #2 for CI / future LRPs.**
+
+- The webServer config invokes `pnpm founderos run` which refuses non-interactive bootstrap. Three options:
+  1. **One-time `founderos onboard` locally** — seeds `~/.founderos/instances/default/config.json` once; suite #2 then runs cleanly across future LRPs and locally. Simplest.
+  2. **Add a non-interactive bootstrap path** — e.g. `pnpm founderos onboard --yes --auto` that writes a default config from env. Best for CI repeatability but a code change.
+  3. **Skip suite #2 in `local_trusted` mode** — Playwright `webServer.command: "pnpm dev"` with `reuseExistingServer: true`. Same outcome, different boot path. Code change to `tests/e2e/playwright.config.ts`.
+- Recommendation: **(1) for now, (2) when you next touch CLI**. (1) unblocks the LRP; (2) makes CI self-sufficient.
+
+### Day 6 deliverable shipped (this commit)
+
+**`e2e/tests/client-readiness/`** — 5 named specs (matching LRP Day 6 spec verbatim) + 1 shared helper:
+
+```
+_helpers.ts                                            (envFixture + fixtureMissing helpers)
+new-founder-onboards-and-runs-first-workflow.spec.ts   (LRP §a)
+founder-pauses-and-resumes-workflow.spec.ts            (LRP §b)
+billing-gate-blocks-on-cancellation.spec.ts            (LRP §c)
+runner-token-expires-and-rotates.spec.ts               (LRP §d)
+workflow-actually-sends-email.spec.ts                  (LRP §e — wire-test for W0.1+W0.2)
+```
+
+**Two-tier shape per spec:** `[server-alive]` smoke (always runs against `/api/health`) + `[deep]` happy-path (runs only when fixture envs are present, otherwise skips with precise `fixture-needed: VAR_NAME — hint`). When the deferred fixtures land (Resend test inbox API, Stripe signed-webhook fixtures, Composio sandbox userId, runner-token TTL override), the deep tests flip from skipped → green automatically with no spec rewrite.
+
+### Missing-fixture inventory (what each deep test needs to flip from skip → green)
+
+Surfaced by the spec themselves; pasted here for the user's morning glance:
+
+| Fixture env | Used by | Hint |
+|---|---|---|
+| `FOUNDEROS_E2E_SUPABASE_TEST_EMAIL` + `_PASSWORD` | spec a | pre-confirmed Supabase test user for onboarding signup |
+| `FOUNDEROS_E2E_COMPOSIO_TEST_USER_ID` | spec a | Composio sandbox userId with Stripe + PostHog test-mode connected accounts |
+| `FOUNDEROS_E2E_RESEND_INBOX_TOKEN` + `_ADDRESS` | specs a, e | Resend test-mode inbox API key + destination address for delivery polling |
+| `FOUNDEROS_E2E_BOARD_API_KEY` | specs b, c, d, e | board API key for an isolated test workspace |
+| `FOUNDEROS_E2E_TEST_WORKFLOW_ID` | spec b | pre-seeded paused-resume test workflow id |
+| `FOUNDEROS_E2E_BILLING_GATE_AGENT_ID` | spec c | agent id whose tenant has an active stripe subscription in test mode |
+| `FOUNDEROS_E2E_STRIPE_WEBHOOK_SECRET` | spec c | Stripe webhook signing secret for HMAC fixture construction |
+| `FOUNDEROS_E2E_STRIPE_TEST_CUSTOMER_ID` | spec c | Stripe customer.id bound to the test workspace |
+| `FOUNDEROS_E2E_RUNNER_TOKEN_TTL_OVERRIDE` | spec d | server-side env letting the test issue a token with seconds-level TTL (so we don't wait a day) |
+| `FOUNDEROS_E2E_TEST_WORKFLOW_TEMPLATE` | spec e | name of a pre-installed template (e.g. `onboarding-emails`) |
+| `FOUNDEROS_E2E_AUTONOMY4_OPT_IN` | spec e | explicit opt-in (any non-empty value) to fire real email through Resend test mode |
+
+The opt-in fixture (`FOUNDEROS_E2E_AUTONOMY4_OPT_IN`) is load-bearing safety: if a future contributor leaks a real-customer address into the inbox env, the opt-in gate prevents accidental real-email fires.
+
+### What ships next (Day 7 — PRD verification)
+
+Per the 7-day LRP plan: with Day 6 documented, the autonomous run pivots to **Day 7 — PRD verification**:
+1. Read `.planning/PROJECT.md` "MVP promise" + the 6-week ship table — emit per-goal PASS/FAIL with file:line / test-name / staging URL evidence.
+2. Read `docs/prds/PRD-001-decision-inbox.md` + `PRD-002-composio-integration.md` + `PRD-003-founder-onboarding-6step.md` — extract acceptance criteria; emit PASS/FAIL per criterion.
+3. Read `~/Downloads/FounderOS -DoubtBuddy.md` (buyer contract) — flag any acceptance criterion not covered by the PRDs above as PASS/FAIL/OUT-OF-SCOPE-PER-MVP.
+4. Read each `.planning/PHASES/PHASE-S<N>-*.md` exit criterion — PASS/FAIL with evidence.
+5. Final verdict: `READY FOR CLIENT` if all PASS, `NOT READY — N items FAIL` otherwise. Write to `.planning/PRD-VERIFICATION.md`.
+
+### Decisions still standing (added Day 6 items in **bold**)
+
+1. **Stripe live key flip** — must be done by you, not me. Procedure documented in §2 of `docs/ops/design-partner-onboarding-kit.md`.
+2. **S4.8 Stripe webhook → triggerChurnRescue() wire-up** — needs per-tenant config decision: auto-fire on every cancellation, or opt-in via active workflow row? (Recommendation: latter.)
+3. **GitHub Actions billing exhaustion** — all CI workflows broken since 2026-05-02. Local gates green; deploy-prod.yml is the source of truth until you unblock billing.
+4. **Embedder choice for S6.4 cosine recall** — text-embedding-3-small via OpenAI? via Anthropic embedding endpoint when available? Defer to v1.1.
+5. **Sprint 6 deferred consumer wiring (6 surfaces)** — order + priority for landing the 6 ~half-day wires. Recommend: S6.8 wizard rewire FIRST (most user-visible win); S6.6 UI bell second; rest can land async.
+6. **Day 6 Item A — Deploy `feat/s4.3-content-attribution` to prod** — closes suite #1's 2 deploy-mismatch failures. One-way door; not auto-executed.
+7. **Day 6 Item B — Suite #2 bootstrap unblock** — choose between one-time local `founderos onboard`, a non-interactive `--yes --auto` flag, or `pnpm dev` reuse. Recommendation: (1) for now, (2) when you next touch CLI.
+8. **Client-readiness fixture wiring (11 envs across 5 specs)** — when you land staging-side test infrastructure (Resend test inbox, Stripe signed-webhook secret, Composio sandbox userId, runner-token TTL override, opt-in flag), the 5 deep tests auto-flip from skipped → green. The fixture inventory above is the picklist.
+
+---
 
 ## 🟢 2026-05-06 late evening — Sprint 6 10/10 — MVP scope-complete
 
