@@ -638,6 +638,13 @@
       "when": 1780200000000,
       "tag": "0093_customer_email_suppressions",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1780250000000,
+      "tag": "0094_company_physical_address",
+      "breakpoints": true
     }
   ]
 }

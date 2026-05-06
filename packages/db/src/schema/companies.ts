@@ -50,6 +50,20 @@ export const companies = pgTable(
     feedbackDataSharingConsentByUserId: text("feedback_data_sharing_consent_by_user_id"),
     feedbackDataSharingTermsVersion: text("feedback_data_sharing_terms_version"),
     brandColor: text("brand_color"),
+    /**
+     * Per-tenant postal address rendered into customer-email footer for
+     * CAN-SPAM/GDPR compliance (#197). Set via Settings UI. NULL means the
+     * founder hasn't configured it yet; the email-wrapper fails-closed at
+     * send time when NULL — better to refuse to send than to ship a legally
+     * non-compliant email on the founder's behalf.
+     */
+    physicalAddress: text("physical_address"),
+    /**
+     * Per-tenant reply-to / support email for customer-facing communications.
+     * NULL falls back to the From address. Used by the email-wrapper to render
+     * "Questions? Reply to this email" or "support@<company>" in the footer.
+     */
+    supportEmail: text("support_email"),
     metrics: jsonb("metrics").$type<CompanyMetrics>().notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
