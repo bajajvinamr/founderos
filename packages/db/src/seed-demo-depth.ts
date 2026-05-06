@@ -98,7 +98,10 @@ for (const agent of demoAgents) {
     const finishedAt = new Date(NOW - daysAgo * DAY_MS - Math.random() * 3_600_000);
     const durationMs = 20_000 + Math.random() * 280_000; // 20s–5min
     const startedAt = new Date(finishedAt.getTime() - durationMs);
-    const status = Math.random() < 0.94 ? "completed" : Math.random() < 0.7 ? "failed" : "cancelled";
+    // heartbeat_runs.status enum (migration 0085_tenant_invariants.sql:168):
+    // 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'coalesced'.
+    // Pre-0085 nomenclature was 'completed'; the seed lagged behind the rename.
+    const status = Math.random() < 0.94 ? "succeeded" : Math.random() < 0.7 ? "failed" : "cancelled";
     const model = models[Math.floor(Math.random() * models.length)];
     const inputTokens = 800 + Math.floor(Math.random() * 12_000);
     const outputTokens = 200 + Math.floor(Math.random() * 3_500);
@@ -112,8 +115,8 @@ for (const agent of demoAgents) {
       triggerDetail: triggers[Math.floor(Math.random() * triggers.length)],
       status,
       startedAt,
-      finishedAt: status === "completed" ? finishedAt : null,
-      exitCode: status === "completed" ? 0 : status === "failed" ? 1 : null,
+      finishedAt: status === "succeeded" ? finishedAt : null,
+      exitCode: status === "succeeded" ? 0 : status === "failed" ? 1 : null,
       usageJson: {
         model,
         input_tokens: inputTokens,
