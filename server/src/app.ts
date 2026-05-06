@@ -70,6 +70,7 @@ import { workflowRoutes } from "./routes/workflows.js";
 import { contentBriefRoutes } from "./routes/content-briefs.js";
 import { contentDraftRoutes } from "./routes/content-drafts.js";
 import { contentTrackingRoutes } from "./routes/content-tracking.js";
+import { customerEmailUnsubscribeRoutes } from "./routes/customer-email-unsubscribe.js";
 import { funnelRoutes } from "./routes/funnel.js";
 import { isByoRunnerEnabled } from "./lib/byo-runner-flag.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
@@ -446,6 +447,12 @@ export async function createApp(
 
   // Content tracking links (S4.3) — public-facing /c/:trackingId endpoint
   app.use(contentTrackingRoutes(db));
+
+  // Customer email unsubscribe (S4.8 prereq #196 layer 3b) — public-facing
+  // /u/customer/:token endpoint. HMAC-trusted, no auth/session. CAN-SPAM
+  // RFC 8058 compliant: GET (legacy clients) + POST (List-Unsubscribe-Post).
+  // Council 2026-05-06 finding #4 BLOCK closure.
+  app.use(customerEmailUnsubscribeRoutes(db));
 
   app.use("/api", api);
   app.use("/api", (_req, res) => {

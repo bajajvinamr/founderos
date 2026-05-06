@@ -134,8 +134,12 @@ function isUnsubscribeTokenPayload(
 /**
  * Build the full one-click unsubscribe URL.
  *
- * Path: `/api/u/customer/:token` (route handler lands in layer 3).
- * Distinct from the founder-digest unsubscribe at `/api/digest/unsubscribe/:token`.
+ * Path: `/u/customer/:token` — public, no `/api` prefix. Mirrors the
+ * `contentTrackingRoutes` precedent at `app.ts:446` for customer-clickable
+ * endpoints (mounted at app-level, outside the auth-guarded `/api` router).
+ *
+ * Distinct from the founder-digest unsubscribe at `/api/digest/unsubscribe/:token`
+ * which lives behind the same boardMutationGuard.
  */
 export function buildUnsubscribeUrl(
   baseUrl: string,
@@ -144,5 +148,5 @@ export function buildUnsubscribeUrl(
   const token = generateUnsubscribeToken(payload);
   // Strip any trailing slash on baseUrl to avoid double-slash.
   const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-  return `${base}/api/u/customer/${token}`;
+  return `${base}/u/customer/${token}`;
 }

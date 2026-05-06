@@ -12,7 +12,7 @@
  *   6. missing EMAIL_UNSUBSCRIBE_SECRET throws on generate AND verify
  *   7. uppercase email rejected by validator (must be lowercase)
  *   8. non-positive ts rejected by validator
- *   9. buildUnsubscribeUrl strips trailing slash + uses /api/u/customer/:token path
+ *   9. buildUnsubscribeUrl strips trailing slash + uses /u/customer/:token path
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -159,13 +159,13 @@ describe("email-unsubscribe-tokens", () => {
   });
 
   describe("buildUnsubscribeUrl", () => {
-    it("constructs URL at /api/u/customer/:token", () => {
+    it("constructs URL at /u/customer/:token", () => {
       const url = buildUnsubscribeUrl(
         "https://founderos.fly.dev",
         validPayload,
       );
       expect(url).toMatch(
-        /^https:\/\/founderos\.fly\.dev\/api\/u\/customer\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/,
+        /^https:\/\/founderos\.fly\.dev\/u\/customer\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/,
       );
     });
 
@@ -175,7 +175,7 @@ describe("email-unsubscribe-tokens", () => {
         validPayload,
       );
       expect(url).not.toContain(".dev//");
-      expect(url).toMatch(/founderos\.fly\.dev\/api\/u\/customer\//);
+      expect(url).toMatch(/founderos\.fly\.dev\/u\/customer\//);
     });
 
     it("verify round-trip works on the URL-embedded token", () => {
@@ -183,7 +183,7 @@ describe("email-unsubscribe-tokens", () => {
         "https://founderos.fly.dev",
         validPayload,
       );
-      const token = url.split("/api/u/customer/")[1];
+      const token = url.split("/u/customer/")[1];
       expect(verifyUnsubscribeToken(token)).toEqual(validPayload);
     });
   });
