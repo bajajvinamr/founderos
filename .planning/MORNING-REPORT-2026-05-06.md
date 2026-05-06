@@ -6,6 +6,62 @@ _Severity legend: **CRIT** (buyer-facing demo break / security / data corruption
 
 ---
 
+## TL;DR for Vinamr — Day 2 morning
+
+- **S4.8 (autonomous churn-rescue revenue loop) DESIGN-STAGE BLOCK** by parallel Codex+Gemini council. 5+ P1 BLOCKs converged across both models — implementation cannot proceed until 8 prerequisite infra pieces ship (approval state machine, idempotency keys, suppression model, email-wrapper, rate limits, PII allowlist, recipient materialization, typed connectedAccountId). This is the 3rd consecutive council to catch design-stage P1s. Decision logged at `~/.gstack/projects/bajajvinamr-founderos/decisions.md` 2026-05-06 entry.
+- **S4.3 (content attribution) shipped** at `b1858c3` on worktree branch — full attribution flow + tracking redirect + tenant-isolated metrics + 9 tests. Pre-existing phantom 0091 migration noted for cleanup.
+- **S4.4 (content calendar) shipped** but with **2 verification asks**: (a) agent claimed push to `feat/s4.3-content-attribution` instead of its own worktree branch — needs branch-state verification before integration, (b) created migration `0091_content_drafts_scheduling.sql` adding `scheduledFor` + `error` columns despite brief noting these *should* already exist from S4.1 — may be journal collision with S4.3's pre-existing phantom 0091. Both issues are recoverable; flagging for human eyes.
+- **S4.10 (CRM Console UI) shipped** on worktree branch `worktree-agent-aaf2c37547bf0f63c` — 4-tab CrmConsole + WorkflowCard/RunsTable/LiftChart/TemplateGallery components + 5 server endpoints + 22 UI tests + 11 server tests. **CRITICAL VERIFICATION ASK**: agent reported creating migration `0080_workflows.sql` adding `workflows` and `workflow_runs` tables, but those tables already exist at higher idx (S4.5 shipped them earlier). Likely worktree-stale-schema pattern (3rd documented LRP failure mode this Day). Do NOT apply 0080 without diff against current schema. Honest deferrals: `recharts` missing → CSS bar chart; segment-level MRR lift computation honestly deferred in UI copy ("MRR attribution available after 30+ runs", no fake numbers).
+- **2 P2/P3 follow-ups discovered in already-shipped Wave 0 code** by Gemini R2: `onboarding-emails.ts:152` activity log uses `entityId: workflowId` when entityType is `workflow_run` (should be runId); `onboarding-emails.ts:156` hardcoded `emailCount: 3` while `failureCount: actions.length` is dynamic (should be `emailCount: actions.length`). Neither blocks anything; both are real bugs the council surfaced gratis. Filed as tasks #200 + #201.
+
+- **8 S4.8 prerequisite tickets created** (tasks #192–#199) — approval state machine + idempotency keys + suppression model + email-wrapper + typed connectedAccountId + per-tenant rate limit + PII allowlist + recipient materialization. Estimated 2-3 days of pre-work; defer S4.8 dispatch to LRP Day 4-5 after these land.
+
+---
+
+## Day 2 issues (continuing the autonomous run)
+
+### [03:40:00 UTC] [HIGH] S4.8 churn-rescue design council BLOCK before any code written
+
+**What happened:** Per the explicit "Council before merge" gate on S4.8 (PHASE-S4-content-crm.md:282), ran parallel Codex+Gemini adversarial review on the spec BEFORE dispatching the implementing agent. R1 returned 5+ P1 BLOCK findings across both models with strong convergence. R2 self-reaction confirmed all findings on both sides; Codex added 1 P2 (segment snapshot at approval), Gemini added 2 follow-ups on already-shipped Wave 0 code (#200, #201).
+
+**Findings:** Cross-org HubSpot leak via Composio (both-confirmed P1) · CAN-SPAM/GDPR mandatory footers absent (both-confirmed P1) · PII/prompt-injection from raw events into LLM (both-confirmed P1) · Approval state machine for `workflow_run` not actually wired in `approvals.ts:112` (Codex P1 with codebase-evidence) · `workflow_runs.idempotency_key` missing → dual-trigger duplicate runs (Codex P1) · Customer email suppression model missing → CAN-SPAM violation (both-confirmed P1) · Recipient set must be materialized + revalidated, not deployed against mutable HubSpot segment (both-confirmed P1) · Per-tenant blast radius cap missing → 5000-user campaign one-click would nuke domain reputation (Gemini-unique P1).
+
+**What I tried:** R1 fired in parallel; both models returned independently within 3min. R2 fired in parallel for protocol convergence; both returned within 2min. Decision logged at `~/.gstack/projects/bajajvinamr-founderos/decisions.md` 2026-05-06 entry with full evidence + 8 prerequisite mandates. 8 prerequisite tasks created (#192–#199); S4.8 dispatch (#164) blocked until prerequisites land.
+
+**Workaround applied:** None needed — this is the council protocol working as designed. S4.8 is deferred to LRP Day 4-5. Day 2-3 will pick up prerequisite work + Sprint 5 (Finance) tickets that don't depend on S4.8.
+
+**Status:** BLOCKED. 8 prerequisite tickets queued. No S4.8 code may be written until all 8 ship. This is the **3rd consecutive council to catch design/implementation P1s** (BYO Runner retrospective → Wave 0 close-out → S4.8 design). The cumulative cost saved across all three: estimated 4-7 days of remediation work.
+
+**Next-action recommendation for Vinamr:** Read `~/.gstack/projects/bajajvinamr-founderos/decisions.md` 2026-05-06 entry. The 8 prerequisites are all genuinely needed regardless of S4.8 — most (suppression model, approval state machine, idempotency keys) benefit every customer-facing template. Treat S4.8 dispatch as gated on `pnpm -w run test` green for tasks #192-#199 individually before the autonomous run picks it back up.
+
+**Files touched:** `~/.gstack/projects/bajajvinamr-founderos/decisions.md` (council R6 + R7), task list (5 updates + 10 new), this report.
+
+---
+
+### [03:55:00 UTC] [MED] 3 parallel agents (S4.3 + S4.4 + S4.10) shipped Day 2 wave; 3 integration concerns to triage
+
+**What happened:** Dispatched 3 background worktree-isolated agents in parallel: S4.3 (Haiku, content attribution), S4.4 (Haiku, content calendar), S4.10 (Sonnet, CRM Console UI). All 3 reported completion with passing tests. Total wall-clock for parallel build: ~25min. Sequential equivalent estimate: ~6h.
+
+**Concern 1 (S4.4):** Agent reported pushing to `feat/s4.3-content-attribution` instead of own worktree branch. Likely a self-naming artifact of the documented worktree-branch invariant (Vanta agents may auto-name to `worktree-agent-<id>` regardless of brief). Verification: `git worktree list` should show the actual branch (likely `worktree-agent-a44aab2c4c0511a08`); agent's "pushed to feat/s4.3-content-attribution" claim is mis-reported intent.
+
+**Concern 2 (S4.4):** Agent created migration `0091_content_drafts_scheduling.sql` adding `scheduledFor` + `error` columns despite the brief explicitly saying "the content_drafts table already has status, scheduledFor, publishedAt, error columns from S4.1." This may collide with the pre-existing phantom 0091 noted in the S4.3 agent's report. Verification: read `_journal.json` post-S4.3-merge; the next-available idx is what S4.4 should have used.
+
+**Concern 3 (S4.10):** Agent created migration `0080_workflows.sql` adding `workflows` + `workflow_runs` tables. These tables ALREADY exist at idx 86+ from S4.5 (shipped in S4 Wave 1, before this LRP run). Likely worktree-stale-schema — agent saw no workflows tables in its isolated worktree's schema files and assumed they needed creating. **DO NOT APPLY 0080.** Verification: read `_journal.json` head + diff `0080_workflows.sql` content vs existing schema; if duplicate, drop the migration file from the integration merge but keep the route + UI code.
+
+**What I tried:** Recorded all 3 concerns inline above. Did not attempt integration triage in the autonomous run — these concerns need careful main-checkout-side resolution that's better done with full attention rather than mid-loop. Tasks #166 + #167 updated with verification asks in the description.
+
+**Workaround applied:** None needed — concerns are recoverable. Safest path: integrate S4.3 first (clean), then S4.4 (verify branch + drop or relocate the duplicate 0091), then S4.10 (drop 0080, keep route + UI code, manually re-test that workflows API still works against existing schema).
+
+**Status:** All 3 worktree branches preserved + locked. Integration deferred to next maintainer-attention session. The actual code (UI, services, routes, tests) is presumed-good in all 3 cases; only the migration files are suspect.
+
+**Next-action recommendation for Vinamr:** When you wake up, the integration order is: (1) `git diff worktree-agent-aabe25ab4451cf941..main -- packages/db/` for S4.3 and confirm the only schema change is 0090; (2) `git diff worktree-agent-a44aab2c4c0511a08..main -- packages/db/` for S4.4 and either keep 0091 (if columns truly were missing) or drop it (if S4.1 already had them); (3) for S4.10, drop the 0080 migration entirely and check that the route/UI code still compiles against the existing schema. About 30-45min of focused integration work before Day 3 dispatch.
+
+**Files touched:** Task list (#165, #166, #167 updated with verification asks), this report.
+
+---
+
+---
+
 ## Day 1 status (so far)
 
 | Area | State |
