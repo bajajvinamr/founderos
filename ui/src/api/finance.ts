@@ -33,7 +33,32 @@ export interface CockpitMetrics {
   cash: { cents: number | null; runwayMonths: number | null };
 }
 
+export interface ScenarioKeyNumber {
+  label: string;
+  value: string;
+  delta?: string;
+}
+
+export interface ScenarioResponse {
+  headline: string;
+  narrative: string;
+  keyNumbers: ScenarioKeyNumber[];
+  warnings: string[];
+  toolsUsed: string[];
+}
+
+export interface ScenarioRunResult {
+  response: ScenarioResponse;
+  steps: number;
+  toolCalls: Array<{ name: string; isError: boolean }>;
+}
+
 export const financeApi = {
   cockpit: (companyId: string) =>
     api.get<CockpitMetrics>(`/companies/${companyId}/finance/cockpit`),
+  scenario: (companyId: string, question: string) =>
+    api.post<ScenarioRunResult>(
+      `/companies/${companyId}/finance/scenario`,
+      { question },
+    ),
 };
