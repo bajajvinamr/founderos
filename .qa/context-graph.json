@@ -1,0 +1,771 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-05-06",
+  "generated_by": "founderos-hardening-run-1",
+  "companion_doc": "docs/FOUNDEROS-CRITICAL-FLOWS.md",
+  "scorecard": ".qa/dream-state-scorecard.md",
+  "nodes": [
+    {
+      "node_id": "founder_onboarding",
+      "name": "Founder onboarding",
+      "business_logic": {
+        "product_promise": "First-time founder signs up, names their company, hires first agent, lands on dashboard — never half-built.",
+        "actors": ["founder", "system"],
+        "valid_states": ["signed_up", "company_created", "agents_provisioned", "dashboard_first_paint"],
+        "invalid_states": [
+          "orphan instance_user_roles without public.user mirror",
+          "agents provisioned but company.id rollback",
+          "dashboard with zero agents and no recovery CTA"
+        ],
+        "critical_invariants": [
+          "post-signup mirror is idempotent",
+          "company creation + agent bootstrap atomic or fully reversible",
+          "first-user-wins promotion excludes LOCAL_BOARD_USER_ID synthetic principal"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [
+          "POST /api/onboarding/bootstrap",
+          "GET /api/onboarding/draft",
+          "PUT /api/onboarding/draft",
+          "POST /api/onboarding/draft/complete",
+          "POST /api/auth/webhook"
+        ],
+        "services": [
+          "server/src/services/onboarding-bootstrap.ts",
+          "server/src/services/onboarding-drafts.ts",
+          "server/src/auth/post-signup-hook.ts"
+        ],
+        "db_tables": [
+          "auth.users",
+          "public.user",
+          "instance_user_roles",
+          "company",
+          "company_membership",
+          "agent",
+          "onboarding_drafts"
+        ],
+        "frontend_components": [
+          "ui/src/components/onboarding/FounderOnboardingWizard.tsx"
+        ],
+        "tests": [
+          "server/src/__tests__/onboarding*",
+          "tests/e2e/onboarding-*.spec.ts"
+        ],
+        "logs_or_audit_events": [
+          "onboarding.started",
+          "onboarding.draft_saved",
+          "onboarding.completed",
+          "agent.hired"
+        ],
+        "known_issues": [
+          "onboarding-bootstrap.ts:201 hardcodes claude_local even when user picks anthropic_api"
+        ],
+        "risk_hypotheses": [
+          "Supabase mirror failure mid-bootstrap leaves orphan state",
+          "Wizard 3→7 field expansion (W2.6) not yet shipped",
+          "Step5Bootstrap progress UX may swallow backend errors"
+        ]
+      }
+    },
+    {
+      "node_id": "auth_actor_resolution",
+      "name": "Auth / session / actor resolution",
+      "business_logic": {
+        "product_promise": "Every request resolves to one actor with their tenant scope before any query.",
+        "actors": ["founder", "agent", "runner", "board", "system", "anonymous"],
+        "valid_states": ["authenticated_with_company", "authenticated_no_company", "unauthenticated"],
+        "invalid_states": [
+          "actor without companyId calling tenant-scoped route",
+          "agent JWT honored cross-company",
+          "system cron carrying ambient request context",
+          "runner token plaintext reconstruction"
+        ],
+        "critical_invariants": [
+          "runWithRequestContext wraps every HTTP entry",
+          "cron-initiated work injects explicit system actor",
+          "magic-link consume is single conditional UPDATE (TOCTOU-safe)",
+          "runner token sha256-at-rest, timing-safe compare"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [
+          "/api/authz",
+          "/api/auth/webhook",
+          "/api/runner/*"
+        ],
+        "services": [
+          "server/src/middleware/auth.ts",
+          "server/src/middleware/runner-auth.ts",
+          "server/src/middleware/require-company-access.ts",
+          "server/src/middleware/request-id.ts",
+          "server/src/services/magic-link.ts",
+          "server/src/services/board-auth.ts",
+          "server/src/services/instance-api-keys.ts",
+          "server/src/lib/request-context.ts"
+        ],
+        "db_tables": [
+          "magic_link_tokens",
+          "runner_tokens",
+          "instance_api_keys",
+          "instance_user_roles",
+          "auth.users",
+          "public.user"
+        ],
+        "frontend_components": [],
+        "tests": [
+          "server/src/__tests__/magic-link*",
+          "server/src/__tests__/runner-auth*"
+        ],
+        "logs_or_audit_events": [
+          "auth.invite_consumed",
+          "magic_link.issued",
+          "magic_link.consumed",
+          "runner.token_issued",
+          "runner.token_revoked"
+        ],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "agent JWT lacking companyId fingerprint",
+          "magic_link.issued may not be auditable (verify activity_log writes)",
+          "lastSeenAt timing oracle on /api/runner endpoints"
+        ]
+      }
+    },
+    {
+      "node_id": "tenant_isolation",
+      "name": "Company / tenant isolation",
+      "business_logic": {
+        "product_promise": "Nothing in Org A is visible, mutable, or guessable from Org B.",
+        "actors": ["founder", "agent", "runner", "board"],
+        "valid_states": ["query_scoped_to_actor_company"],
+        "invalid_states": [
+          "route reads companyId from req.params and queries directly",
+          "service-to-service call drops companyId scope",
+          "agent in Org A executes Composio tool against Org B account"
+        ],
+        "critical_invariants": [
+          "every tenant-scoped query includes WHERE companyId = $1 from actor",
+          "URL companyId checked against actor companyId",
+          "Composio runComposioTool requires connectedAccountId: string"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["all routes under /api/companies/:companyId/*"],
+        "services": [
+          "server/src/middleware/require-company-access.ts",
+          "server/src/middleware/board-mutation-guard.ts",
+          "server/src/services/composio-skill-bridge.ts",
+          "server/src/services/composio-connection-resolver.ts"
+        ],
+        "db_tables": ["all tenant-scoped tables"],
+        "frontend_components": [],
+        "tests": [
+          "server/src/__tests__/cross-company-*",
+          "server/src/__tests__/composio-skill-bridge*"
+        ],
+        "logs_or_audit_events": [],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Routes that bypass require-company-access (audit needed)",
+          "Routes accepting companyId in body without re-checking against actor",
+          "WebSocket subscribeCompanyLiveEvents — verify subscription filter scopes by actor company"
+        ]
+      }
+    },
+    {
+      "node_id": "agent_credentials_roles",
+      "name": "Agent onboarding / credentials / roles",
+      "business_logic": {
+        "product_promise": "Founders create AI agents with bounded roles, scoped credentials, revocable access.",
+        "actors": ["founder", "agent"],
+        "valid_states": ["created", "provisioned", "active", "paused", "terminated"],
+        "invalid_states": [
+          "agent role = instance_admin or founder",
+          "agent credentials usable across companies",
+          "revoked agent JWT still accepted",
+          "agent creates another agent"
+        ],
+        "critical_invariants": [
+          "agent role cannot be promoted to admin via PATCH",
+          "credentials scoped to single companyId",
+          "revocation immediate (next request rejected)"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["/api/agents/*", "/api/agent-handoffs/*", "/api/agent-reviews/*"],
+        "services": [
+          "server/src/services/agents.ts",
+          "server/src/services/agent-permissions.ts",
+          "server/src/services/agent-instructions.ts",
+          "server/src/services/adapter-resolver.ts",
+          "server/src/services/hire-hook.ts"
+        ],
+        "db_tables": [
+          "agent",
+          "agent_api_keys",
+          "agent_config_revisions",
+          "agent_runtime_state",
+          "agent_task_sessions",
+          "agent_wakeup_requests"
+        ],
+        "frontend_components": ["ui/src/pages/AgentRoster.tsx", "ui/src/pages/AgentDetail.tsx"],
+        "tests": ["server/src/__tests__/agents*", "server/src/__tests__/agent-permissions*"],
+        "logs_or_audit_events": [
+          "agent.hired",
+          "agent.paused",
+          "agent.resumed",
+          "agent.terminated",
+          "agent.config_changed"
+        ],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "PATCH /agents/:id may accept role in body — verify validator strips role",
+          "Revoked-agent JWT validity window (until expiry) may exceed acceptable",
+          "Agent could spawn agent via Composio chained call"
+        ]
+      }
+    },
+    {
+      "node_id": "issue_lifecycle",
+      "name": "Issue lifecycle",
+      "business_logic": {
+        "product_promise": "Issues move through triaged → assigned → in_progress → in_review → approved → done with audited transitions.",
+        "actors": ["founder", "agent", "system"],
+        "valid_states": ["triaged", "assigned", "in_progress", "in_review", "changes_requested", "approved", "done", "archived", "cancelled"],
+        "invalid_states": [
+          "transition not logged",
+          "issue reaches done without approval when policy requires it",
+          "assignment to paused/terminated agent succeeds"
+        ],
+        "critical_invariants": [
+          "every transition writes activity_log",
+          "approval gate on done transition when policy.requireApproval",
+          "assignment to paused agent rejected at write"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [
+          "/api/issues",
+          "/api/companies/:companyId/issues",
+          "/api/issues/:id",
+          "/api/issues/:id/checkout",
+          "/api/issues/:id/wakeup"
+        ],
+        "services": [
+          "server/src/services/issues.ts",
+          "server/src/services/issue-approvals.ts",
+          "server/src/services/issue-assignment-wakeup.ts",
+          "server/src/services/issue-execution-policy.ts",
+          "server/src/services/issue-goal-fallback.ts"
+        ],
+        "db_tables": ["issues"],
+        "frontend_components": ["ui/src/pages/IssueDetail.tsx"],
+        "tests": ["server/src/__tests__/issues*"],
+        "logs_or_audit_events": [
+          "issue.created",
+          "issue.assigned",
+          "issue.checked_out",
+          "issue.status_changed",
+          "issue.archived"
+        ],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "PATCH /issues/:id status field may bypass state machine",
+          "Concurrent writes to issue.status leave stale state",
+          "Closing issue with unresolved approvals"
+        ]
+      }
+    },
+    {
+      "node_id": "execution_locks",
+      "name": "Issue checkout / execution locks",
+      "business_logic": {
+        "product_promise": "Only one agent holds active execution on an issue at a time. Stale locks expire safely.",
+        "actors": ["agent", "system"],
+        "valid_states": ["unlocked", "held", "stale_recoverable"],
+        "invalid_states": [
+          "two agents holding lock simultaneously",
+          "permanent zombie lock after agent crash"
+        ],
+        "critical_invariants": [
+          "lock acquisition atomic (DB-level)",
+          "stale-lock takeover requires timeout + heartbeat staleness",
+          "lock release on crash bounded by heartbeat interval"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["/api/issues/:id/checkout", "/api/issues/:id/wakeup"],
+        "services": [
+          "server/src/routes/issues-checkout-wakeup.ts",
+          "server/src/services/heartbeat.ts",
+          "server/src/services/heartbeat-helpers.ts",
+          "server/src/services/heartbeat-run-summary.ts",
+          "server/src/services/local-service-supervisor.ts"
+        ],
+        "db_tables": ["heartbeat_runs", "heartbeat_run_events", "agent_runtime_state"],
+        "frontend_components": [],
+        "tests": ["server/src/__tests__/heartbeat*"],
+        "logs_or_audit_events": ["heartbeat.run_started", "heartbeat.run_terminated", "issue.checked_out"],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "PID-based liveness across server restarts (vinamr-invariant)",
+          "Lock takeover too aggressive → premature steal under transient slowness"
+        ]
+      }
+    },
+    {
+      "node_id": "review_approval",
+      "name": "Review / approval / request-changes",
+      "business_logic": {
+        "product_promise": "Founders approve, reject, or request changes; work closes only after required approval; agents cannot self-approve.",
+        "actors": ["founder", "agent", "system"],
+        "valid_states": ["pending", "approved", "rejected", "changes_requested"],
+        "invalid_states": [
+          "agent approves own request",
+          "cross-company actor reviews",
+          "decision has no audit trail",
+          "request-changes leaves work in done state"
+        ],
+        "critical_invariants": [
+          "agent cannot self-approve (compare requestedBy vs resolvedBy actor)",
+          "decisions audited with reason",
+          "request-changes returns to in_progress"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [
+          "POST /api/approvals/:id/approve",
+          "POST /api/approvals/:id/reject",
+          "POST /api/approvals/:id/resubmit",
+          "GET /api/approvals/:id",
+          "GET /api/approvals/:id/comments",
+          "POST /api/approvals/:id/comments"
+        ],
+        "services": [
+          "server/src/services/approvals.ts",
+          "server/src/services/agent-reviews.ts",
+          "server/src/services/notifications.ts"
+        ],
+        "db_tables": ["approvals", "approval_comments", "agent_reviews"],
+        "frontend_components": ["ui/src/pages/ApprovalDetail.tsx", "ui/src/components/ApprovalCard.tsx"],
+        "tests": ["server/src/__tests__/approvals*", "server/src/__tests__/agent-reviews*"],
+        "logs_or_audit_events": [
+          "approval.created",
+          "approval.approved",
+          "approval.rejected",
+          "approval.changes_requested",
+          "approval.resubmitted"
+        ],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Self-approval guard may rely on UI hiding the button rather than route check",
+          "Resubmit flow may not return state cleanly to in_progress"
+        ]
+      }
+    },
+    {
+      "node_id": "goals_projects_inbox",
+      "name": "Goals / Projects / Inbox",
+      "business_logic": {
+        "product_promise": "Founders organize work; inbox holds unsorted items until conversion.",
+        "actors": ["founder", "agent"],
+        "valid_states": ["draft", "active", "archived", "completed"],
+        "invalid_states": [
+          "cross-company list returns Org B data",
+          "inbox conversion creates duplicate issue + orphan inbox row"
+        ],
+        "critical_invariants": [
+          "list endpoints filter by actor companyId",
+          "archive reversible",
+          "inbox→issue conversion idempotent"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["/api/goals", "/api/projects", "/api/inbox-dismissals", "/api/issues/:id/inbox-archive"],
+        "services": [
+          "server/src/services/goals.ts",
+          "server/src/services/projects.ts",
+          "server/src/services/inbox-dismissals.ts"
+        ],
+        "db_tables": ["goals", "projects", "inbox_dismissals", "issues"],
+        "frontend_components": ["ui/src/pages/Goals.tsx", "ui/src/pages/Projects.tsx", "ui/src/pages/Inbox.tsx"],
+        "tests": ["server/src/__tests__/goals*", "server/src/__tests__/projects*"],
+        "logs_or_audit_events": ["goal.created", "project.created", "inbox.dismissed", "inbox.archived"],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Empty-state UX on Goals/Projects/Inbox",
+          "Cross-company filter present on every list endpoint?"
+        ]
+      }
+    },
+    {
+      "node_id": "budget_hard_stop",
+      "name": "Budget policy / hard-stop",
+      "business_logic": {
+        "product_promise": "Agents cannot exceed plan budget; new runs refused; in-flight runs checkpoint.",
+        "actors": ["agent", "system"],
+        "valid_states": ["under_budget", "near_limit", "exceeded"],
+        "invalid_states": [
+          "over-budget agent starts new run",
+          "budget block silent (no audit row)",
+          "FOUNDEROS_BILLING_GATE_ENABLED unset in prod allows unbounded spend"
+        ],
+        "critical_invariants": [
+          "gate evaluated at wakeup AND at route layer (defense in depth)",
+          "over-budget returns 402",
+          "budget incidents audited"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["all wakeup paths"],
+        "services": [
+          "server/src/middleware/billing-gate.ts",
+          "server/src/services/budgets.ts",
+          "server/src/services/subscription.ts",
+          "server/src/services/quota-windows.ts",
+          "server/src/services/costs.ts"
+        ],
+        "db_tables": ["budget_policies", "budget_incidents", "cost_events", "instance_subscription"],
+        "frontend_components": ["ui/src/components/BudgetWarningBanner.tsx (verify exists)"],
+        "tests": ["server/src/__tests__/billing-gate*", "server/src/__tests__/budgets*"],
+        "logs_or_audit_events": ["budget.incident_created", "billing.gate_blocked"],
+        "known_issues": [
+          "Gate is OPT-IN — FOUNDEROS_BILLING_GATE_ENABLED=1 must be set in prod"
+        ],
+        "risk_hypotheses": [
+          "Service-layer wake paths (issue assignment, approval, comment, plugin-internal) bypass middleware — verify enqueueWakeup re-check still in place",
+          "Gate UI message clarity for end users"
+        ]
+      }
+    },
+    {
+      "node_id": "pause_resume",
+      "name": "Pause / resume controls",
+      "business_logic": {
+        "product_promise": "Pausing halts execution within one heartbeat tick; resume restores prior queue.",
+        "actors": ["founder", "system"],
+        "valid_states": ["active", "paused"],
+        "invalid_states": [
+          "paused agent receives wakeup",
+          "company pause does not cascade to agents",
+          "resume auto-replays missed cron windows"
+        ],
+        "critical_invariants": [
+          "paused agent rejects new wakeups",
+          "company pause cascades",
+          "resume idempotent"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["/api/agents/:id/pause", "/api/agents/:id/resume", "/api/companies/:id/pause"],
+        "services": ["server/src/services/agents.ts", "server/src/services/companies.ts", "server/src/services/heartbeat.ts"],
+        "db_tables": ["agent.pausedAt", "company.pausedAt"],
+        "frontend_components": [],
+        "tests": [],
+        "logs_or_audit_events": ["agent.paused", "agent.resumed", "company.paused", "company.resumed"],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Cascade test may not exist",
+          "Cron tick honors paused state? verify slack-daily-summary-cron and daily-founder-brief"
+        ]
+      }
+    },
+    {
+      "node_id": "audit_logs",
+      "name": "Audit / activity logs",
+      "business_logic": {
+        "product_promise": "Every safety-relevant decision replayable from activity_log.",
+        "actors": ["all"],
+        "valid_states": ["written", "redacted"],
+        "invalid_states": ["secret in log", "decision missing log row"],
+        "critical_invariants": [
+          "writes best-effort + durable",
+          "secrets never present",
+          "redaction tested"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["/api/activity", "/api/audit-lineage"],
+        "services": ["server/src/services/activity-log.ts", "server/src/services/activity.ts", "server/src/services/audit-lineage.ts"],
+        "db_tables": ["activity_log", "notifications"],
+        "frontend_components": ["ui/src/pages/AuditTimeline.tsx (W5 — verify exists)"],
+        "tests": [],
+        "logs_or_audit_events": ["covers most flows; gaps below"],
+        "known_issues": [
+          "Audit timeline UI viewer (W5) may not be shipped",
+          "Trust Center page (W5) not yet shipped"
+        ],
+        "risk_hypotheses": [
+          "Budget block audit gap",
+          "Pause cascade audit gap",
+          "Forbidden-action attempt audit gap",
+          "Magic-link issuance audit gap"
+        ]
+      }
+    },
+    {
+      "node_id": "billing_stripe",
+      "name": "Billing / Stripe",
+      "business_logic": {
+        "product_promise": "Stripe state determines plan/budget/features; webhooks idempotent; plan changes audited.",
+        "actors": ["system", "founder"],
+        "valid_states": ["trialing", "active", "past_due", "canceled"],
+        "invalid_states": [
+          "webhook body parsed before signature verify",
+          "duplicate subscription rows on webhook retry",
+          "plan change not audited"
+        ],
+        "critical_invariants": [
+          "express.raw before express.json on Stripe webhook",
+          "unique index on stripeSubscriptionId",
+          "plan rotation refreshes budget windows"
+        ]
+      },
+      "engineering_logic": {
+        "routes": ["/api/billing/*", "/api/stripe-backfill"],
+        "services": ["server/src/services/subscription.ts", "server/src/services/stripe-client.ts", "server/src/services/stripe-backfill.ts"],
+        "db_tables": ["instance_subscription"],
+        "frontend_components": ["ui/src/pages/Settings/Billing.tsx (verify path)"],
+        "tests": ["server/src/__tests__/subscription*", "server/src/__tests__/stripe*"],
+        "logs_or_audit_events": ["billing.plan_changed", "billing.webhook_received"],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Live key flip is one-way door — covered by docs/ops/design-partner-onboarding-kit.md",
+          "Webhook signature verification regression if route registration order shifts"
+        ]
+      }
+    },
+    {
+      "node_id": "frontend_dashboard",
+      "name": "Frontend dashboard / Chief of Staff",
+      "business_logic": {
+        "product_promise": "Founder lands on dashboard; sees what needs attention; acts on next CTA.",
+        "actors": ["founder"],
+        "valid_states": ["empty", "active", "loading", "error"],
+        "invalid_states": [
+          "empty state with no next CTA",
+          "loading state allows double submit",
+          "401/403/409 shown as 'something went wrong'"
+        ],
+        "critical_invariants": [
+          "every empty state has a next action",
+          "mutation buttons disabled while pending",
+          "specific error messages for 401/403/409"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [],
+        "services": [],
+        "db_tables": [],
+        "frontend_components": [
+          "ui/src/pages/Dashboard.tsx",
+          "ui/src/components/CapitalAllocationCard.tsx",
+          "ui/src/components/CompanyPulseWidget.tsx",
+          "ui/src/components/LiveCompanyHeartbeat.tsx",
+          "ui/src/components/NotificationsBell.tsx"
+        ],
+        "tests": ["ui/src/__tests__/Dashboard*"],
+        "logs_or_audit_events": [],
+        "known_issues": [
+          "W2.5 capital allocation widget — verify CapitalAllocationCard fully wired",
+          "W4 cosmetic polish (Top 3 actions framing, bulk approval toolbar) pending"
+        ],
+        "risk_hypotheses": [
+          "Empty states across goals/projects/inbox/agents — verify each has a CTA",
+          "Mutation buttons may not disable on pending"
+        ]
+      }
+    },
+    {
+      "node_id": "frontend_review_ui",
+      "name": "Frontend issue detail / review UI",
+      "business_logic": {
+        "product_promise": "Approve/reject/request-changes from the browser maps cleanly to backend state.",
+        "actors": ["founder"],
+        "valid_states": ["matches backend"],
+        "invalid_states": ["UI allows action backend rejects", "UI hides action backend allows"],
+        "critical_invariants": [
+          "disabled state derived from backend rules, not UI heuristics",
+          "self-approval not just hidden in UI but rejected by route"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [],
+        "services": [],
+        "db_tables": [],
+        "frontend_components": [
+          "ui/src/pages/IssueDetail.tsx",
+          "ui/src/components/ApprovalCard.tsx"
+        ],
+        "tests": [],
+        "logs_or_audit_events": [],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Self-approval may be UI-hidden but route-allowed",
+          "Resubmit UI flow not tested"
+        ]
+      }
+    },
+    {
+      "node_id": "e2e_critical",
+      "name": "E2E critical flows",
+      "business_logic": {
+        "product_promise": "Browser-driven critical journeys pass on every release.",
+        "actors": ["founder"],
+        "valid_states": ["green"],
+        "invalid_states": ["quarantined without repro", "green-on-skipped"],
+        "critical_invariants": ["every quarantine has issue + repro + removal criteria"]
+      },
+      "engineering_logic": {
+        "routes": [],
+        "services": [],
+        "db_tables": [],
+        "frontend_components": [],
+        "tests": [
+          "e2e/playwright.config.ts",
+          "tests/e2e/*"
+        ],
+        "logs_or_audit_events": [],
+        "known_issues": [
+          "GitHub Actions billing exhausted — E2E workflows do not run"
+        ],
+        "risk_hypotheses": [
+          "Quarantines documented at docs/CI-KNOWN-FLAKES.md may be growing unchecked",
+          "E2E artifacts (screenshots/video) may not be uploaded on failure"
+        ]
+      }
+    },
+    {
+      "node_id": "observability_health",
+      "name": "Observability / health / diagnostics",
+      "business_logic": {
+        "product_promise": "When something fails, an engineer can answer who/what/when/why from logs.",
+        "actors": ["operator"],
+        "valid_states": ["debuggable"],
+        "invalid_states": ["error without requestId", "background failure silent", "Sentry tags empty for cron-originated work"],
+        "critical_invariants": [
+          "requestId on every JSON error",
+          "ALS context per request",
+          "explicit system actor for cron"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [
+          "/api/health",
+          "/api/health/bootstrap-state",
+          "/api/health/diagnostics",
+          "/api/health/deep",
+          "/api/readyz"
+        ],
+        "services": ["server/src/middleware/sentry.ts", "server/src/middleware/logger.ts"],
+        "db_tables": [],
+        "frontend_components": [],
+        "tests": ["server/src/__tests__/health*"],
+        "logs_or_audit_events": [],
+        "known_issues": [
+          "OPENAI_API_KEY missing from env validator (added embedder uses it; degraded silently to local)"
+        ],
+        "risk_hypotheses": [
+          "Cron ticks may carry stale ALS context if scheduled at boot",
+          "Background promise rejections may not surface to Sentry"
+        ]
+      }
+    },
+    {
+      "node_id": "deployment_startup",
+      "name": "Deployment / env / startup guards",
+      "business_logic": {
+        "product_promise": "Deployment failures are loud; missing env is caught at boot, not at first user request.",
+        "actors": ["operator"],
+        "valid_states": ["healthy_deploy"],
+        "invalid_states": ["server boots with missing critical env", "rolling deploy serves traffic against stale schema"],
+        "critical_invariants": [
+          "env validator at boot",
+          "migrations in pre-traffic release_command",
+          "deploy via deploy-prod.yml (CI billing blocker)"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [],
+        "services": ["server/src/index.ts", "server/src/lib/env.ts (verify path)"],
+        "db_tables": [],
+        "frontend_components": [],
+        "tests": [],
+        "logs_or_audit_events": [],
+        "known_issues": [
+          "GitHub Actions CI billing exhausted since 2026-05-02",
+          "main branch protection not enforced per CONTINUE.md"
+        ],
+        "risk_hypotheses": [
+          "Env validator may not catch OPENAI_API_KEY, COMPOSIO_API_KEY, RESEND_*"
+        ]
+      }
+    },
+    {
+      "node_id": "security_privacy",
+      "name": "Security / privacy / log redaction",
+      "business_logic": {
+        "product_promise": "No secrets in logs or audit; trust boundaries enforced; malformed input safe.",
+        "actors": ["all"],
+        "valid_states": ["redacted"],
+        "invalid_states": [
+          "secret in log",
+          "wrong-company id in URL accepted",
+          "agent JWT companyId mismatch accepted"
+        ],
+        "critical_invariants": [
+          "log redaction covers Authorization, mlt_*, fos_*, sk_*, pcp_bootstrap_*, Anthropic/OpenAI key prefix",
+          "path traversal validated where filenames consumed",
+          "CSP connect-src up to date"
+        ]
+      },
+      "engineering_logic": {
+        "routes": [],
+        "services": [
+          "server/src/middleware/security-headers.ts",
+          "server/src/middleware/logger.ts",
+          "server/src/services/feedback-redaction.ts"
+        ],
+        "db_tables": [],
+        "frontend_components": [],
+        "tests": [],
+        "logs_or_audit_events": [],
+        "known_issues": [],
+        "risk_hypotheses": [
+          "Magic-link plaintext may appear in email-template render logs",
+          "Stripe webhook body logged before signature verify",
+          "Agent invocation logs may include API key prefix"
+        ]
+      }
+    }
+  ],
+  "blockers": [
+    {
+      "id": "ci_billing",
+      "severity": "P0",
+      "description": "GitHub Actions billing exhausted since 2026-05-02 — repo-wide CI cannot run; merge gates unreachable.",
+      "owner": "human",
+      "blocks": ["all PR merges via merge-rules"]
+    },
+    {
+      "id": "uncommitted_blob",
+      "severity": "P1",
+      "description": "40-file uncommitted W1–W6 work on main. Mega-PR-in-waiting violates merge-rules. Must be staged into 5–8 reviewable slices before fix loop can start.",
+      "owner": "this run",
+      "blocks": ["DREAM-3 PR queue"]
+    },
+    {
+      "id": "branch_protection",
+      "severity": "P1",
+      "description": "main branch protection not enforced — merge rules cannot be enforced even if CI runs.",
+      "owner": "human",
+      "blocks": ["safe merge of any PR"]
+    }
+  ],
+  "open_decisions": [
+    "Flip FOUNDEROS_BILLING_GATE_ENABLED=1 in prod?",
+    "Quarantine policy: removal date for workspace-runtime.test.ts and friends",
+    "Dream-state cutoff date — when does this run stop?"
+  ]
+}
