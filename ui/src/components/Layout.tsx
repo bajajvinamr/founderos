@@ -25,7 +25,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useCompanyPageMemory } from "../hooks/useCompanyPageMemory";
-import { healthApi } from "../api/health";
+import { bootstrapStateApi, diagnosticsApi, healthApi } from "../api/health";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { shouldSyncCompanySelectionFromRoute } from "../lib/company-selection";
 import {
@@ -88,12 +88,26 @@ export function Layout() {
   }, [companies, companyPrefix]);
   const hasUnknownCompanyPrefix =
     Boolean(companyPrefix) && !companiesLoading && companies.length > 0 && !matchedCompany;
+  // Task #139 split: deploymentMode lives on /api/health/bootstrap-state
+  // (public), devServer + features live on /api/health/diagnostics
+  // (admin-gated; local_trusted short-circuits via local_implicit).
+  // Server version (for the v-tooltip) lives on /api/health ROOT.
   const { data: health } = useQuery({
+    queryKey: queryKeys.bootstrapState,
+    queryFn: () => bootstrapStateApi.get(),
+    retry: false,
+  });
+  const { data: healthRoot } = useQuery({
     queryKey: queryKeys.health,
     queryFn: () => healthApi.get(),
     retry: false,
+  });
+  const { data: diagnostics } = useQuery({
+    queryKey: queryKeys.diagnostics,
+    queryFn: () => diagnosticsApi.get(),
+    retry: false,
     refetchInterval: (query) => {
-      const data = query.state.data as { devServer?: { enabled?: boolean } } | undefined;
+      const data = query.state.data;
       return data?.devServer?.enabled ? 2000 : false;
     },
     refetchIntervalInBackground: true,
@@ -321,7 +335,7 @@ export function Layout() {
         Skip to Main Content
       </a>
       <WorktreeBanner />
-      <DevRestartBanner devServer={health?.devServer} />
+      <DevRestartBanner devServer={diagnostics?.devServer} />
       <div className={cn("min-h-0 flex-1", isMobile ? "w-full" : "flex overflow-hidden")}>
         {isMobile && sidebarOpen && (
           <button
@@ -354,12 +368,12 @@ export function Layout() {
                   <BookOpen className="h-4 w-4 shrink-0" />
                   <span className="truncate">Documentation</span>
                 </a>
-                {health?.version && (
+                {healthRoot?.version && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="px-2 text-xs text-muted-foreground shrink-0 cursor-default">v</span>
                     </TooltipTrigger>
-                    <TooltipContent>v{health.version}</TooltipContent>
+                    <TooltipContent>v{healthRoot.version}</TooltipContent>
                   </Tooltip>
                 )}
                 <Button variant="ghost" size="icon-sm" className="text-muted-foreground shrink-0" asChild>
@@ -413,12 +427,12 @@ export function Layout() {
                   <BookOpen className="h-4 w-4 shrink-0" />
                   <span className="truncate">Documentation</span>
                 </a>
-                {health?.version && (
+                {healthRoot?.version && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="px-2 text-xs text-muted-foreground shrink-0 cursor-default">v</span>
                     </TooltipTrigger>
-                    <TooltipContent>v{health.version}</TooltipContent>
+                    <TooltipContent>v{healthRoot.version}</TooltipContent>
                   </Tooltip>
                 )}
                 <Button variant="ghost" size="icon-sm" className="text-muted-foreground shrink-0" asChild>

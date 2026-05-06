@@ -22,7 +22,7 @@ const FOUNDEROS_ONBOARDING_V2: boolean = (() => {
   }
   return raw !== "false" && raw !== "0";
 })();
-import { healthApi } from "./api/health";
+import { bootstrapStateApi } from "./api/health";
 
 // Hot-path pages are imported eagerly — first paint after login hits these.
 import { Dashboard } from "./pages/Dashboard";
@@ -113,13 +113,11 @@ function CloudAccessGate() {
   const location = useLocation();
   const { session: supabaseSession, loading: supabaseLoading } = useSupabaseAuth();
   const healthQuery = useQuery({
-    queryKey: queryKeys.health,
-    queryFn: () => healthApi.get(),
+    queryKey: queryKeys.bootstrapState,
+    queryFn: () => bootstrapStateApi.get(),
     retry: false,
     refetchInterval: (query) => {
-      const data = query.state.data as
-        | { deploymentMode?: "local_trusted" | "authenticated"; bootstrapStatus?: "ready" | "bootstrap_pending" }
-        | undefined;
+      const data = query.state.data;
       return data?.deploymentMode === "authenticated" && data.bootstrapStatus === "bootstrap_pending"
         ? 2000
         : false;
