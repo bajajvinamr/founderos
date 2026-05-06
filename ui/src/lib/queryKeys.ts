@@ -105,6 +105,7 @@ export const queryKeys = {
   diagnostics: ["diagnostics"] as const,
   finance: {
     settings: (companyId: string) => ["finance", companyId, "settings"] as const,
+    cockpit: (companyId: string) => ["finance", companyId, "cockpit"] as const,
   },
   secrets: {
     list: (companyId: string) => ["secrets", companyId] as const,

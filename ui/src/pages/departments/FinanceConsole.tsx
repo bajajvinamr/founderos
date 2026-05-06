@@ -10,6 +10,7 @@ import type { Agent } from "@founderos/shared";
 import { runScenario, type TierCurrent } from "@founderos/shared";
 import { agentsInDepartment } from "../../lib/departments";
 import { FinanceSettings } from "./finance/FinanceSettings";
+import { RevenueCockpit } from "./finance/RevenueCockpit";
 
 // MOCK — Wave 5 replaces with real finance service (Stripe/QuickBooks/etc)
 
@@ -1031,7 +1032,9 @@ export function FinanceConsole({ companyId: _companyId, agents }: {
           />
         ) : (
           <>
-            {activeTab === "revenue"  && <RevenueTab />}
+            {activeTab === "revenue"  && (
+              _companyId ? <RevenueCockpit companyId={_companyId} /> : <RevenueTab />
+            )}
             {activeTab === "forecast" && <ForecastTab />}
             {activeTab === "pricing"  && <PricingTab />}
             {activeTab === "burn"     && <BurnTab />}
