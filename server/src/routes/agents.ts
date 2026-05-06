@@ -351,6 +351,46 @@ export function agentRoutes(db: Db) {
     };
   }
 
+  /**
+   * Privileged fields an agent CANNOT set on itself via PATCH /agents/:id.
+   *
+   * Threat (synthesis P0-1, 2026-05-07): without this guard, an authenticated
+   * agent calls `PATCH /agents/<self>` with `{role: "ceo"}` → triggers the
+   * `actorAgent.role === "ceo"` blanket-grant in `assertCanUpdateAgent`,
+   * unlocking company-wide agent mutation. Pair-attacks: `{status: "active"}`
+   * un-pauses self; `{spentMonthlyCents: 0}` resets the budget counter.
+   *
+   * Allowlist would be safer long-term, but a denylist matches the existing
+   * route shape and minimises blast-radius for the P0 close-out PR. Future
+   * fields added to `updateAgentSchema` MUST be evaluated against this list.
+   */
+  const SELF_PATCH_PRIVILEGED_FIELDS: ReadonlySet<string> = new Set([
+    "role",
+    "status",
+    "budgetMonthlyCents",
+    "spentMonthlyCents",
+    "reportsTo",
+    "permissionLevel",
+  ]);
+
+  function assertNoPrivilegedSelfPatch(
+    req: Request,
+    targetAgent: { id: string },
+    body: unknown,
+  ) {
+    if (req.actor.type !== "agent") return;
+    if (req.actor.agentId !== targetAgent.id) return;
+    if (!body || typeof body !== "object") return;
+    const violators = Object.keys(body as object).filter((k) =>
+      SELF_PATCH_PRIVILEGED_FIELDS.has(k),
+    );
+    if (violators.length > 0) {
+      throw forbidden(
+        `Agents cannot self-PATCH privileged fields: ${violators.join(", ")}`,
+      );
+    }
+  }
+
   async function assertCanUpdateAgent(req: Request, targetAgent: { id: string; companyId: string }) {
     assertCompanyAccess(req, targetAgent.companyId);
     if (req.actor.type === "board") return;
@@ -1896,6 +1936,10 @@ export function agentRoutes(db: Db) {
       res.status(404).json({ error: "Agent not found" });
       return;
     }
+    // P0-1: block agents from PATCHing privileged fields on themselves.
+    // Runs BEFORE assertCanUpdateAgent so the self-short-circuit cannot
+    // approve a payload that contains role/status/budget/etc.
+    assertNoPrivilegedSelfPatch(req, existing, req.body);
     await assertCanUpdateAgent(req, existing);
 
     if (hasOwn(req.body as object, "permissions")) {
