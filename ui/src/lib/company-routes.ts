@@ -29,6 +29,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   "settings",
   "onboarding",
   "integrations",
+  "permissions",
 ]);
 
 const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "docs", "instance", "landing", "legal"]);

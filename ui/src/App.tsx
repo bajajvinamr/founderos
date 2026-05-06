@@ -53,6 +53,7 @@ const ApprovalDetail = lazy(() => import("./pages/ApprovalDetail").then((m) => (
 const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => ({ default: m.DecisionsInbox })));
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
+const Permissions = lazy(() => import("./pages/Permissions").then((m) => ({ default: m.Permissions })));
 const AuditLog = lazy(() => import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })));
 const Alerts = lazy(() => import("./pages/Alerts").then((m) => ({ default: m.Alerts })));
 const CompanySettings = lazy(() => import("./pages/CompanySettings").then((m) => ({ default: m.CompanySettings })));
@@ -276,6 +277,7 @@ function boardRoutes() {
       <Route path="costs" element={<Costs />} />
       <Route path="integrations" element={<Integrations />} />
       <Route path="activity" element={<Activity />} />
+      <Route path="permissions" element={<Permissions />} />
       <Route path="audit" element={<AuditLog />} />
       <Route path="alerts" element={<Alerts />} />
       <Route path="weekly" element={<WeeklyWrap />} />

@@ -177,6 +177,9 @@ export const queryKeys = {
     list: (companyId: string) => ["departments", companyId] as const,
     status: (companyId: string) => ["departments", "status", companyId] as const,
   },
+  permissions: {
+    matrix: (companyId: string) => ["permissions-matrix", companyId] as const,
+  },
   integrationHealth: {
     list: (companyId: string) => ["integration-health", companyId] as const,
     kpiFreshness: (companyId: string) => ["kpi-freshness", companyId] as const,

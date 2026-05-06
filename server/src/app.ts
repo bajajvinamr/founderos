@@ -67,6 +67,7 @@ import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
 import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
 import { departmentRoutes } from "./routes/departments.js";
+import { permissionsMatrixRoutes } from "./routes/permissions-matrix.js";
 import { departmentStatusRoutes } from "./routes/department-status.js";
 import { experimentRoutes } from "./routes/experiments.js";
 import { workflowRoutes } from "./routes/workflows.js";
@@ -338,6 +339,7 @@ export async function createApp(
   api.use(sidebarBadgeRoutes(db));
   api.use(departmentRoutes(db));
   api.use(departmentStatusRoutes(db));
+  api.use(permissionsMatrixRoutes(db));
   api.use(experimentRoutes(db));
   api.use(workflowRoutes(db));
   api.use(contentBriefRoutes(db));
