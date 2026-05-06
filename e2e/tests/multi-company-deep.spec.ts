@@ -608,7 +608,17 @@ test.describe("[health-under-load] deep health stays green", () => {
     api,
     profile,
   }) => {
-    // Deep-health doesn't need auth context, so we run regardless of profile.
+    // /api/health/deep was admin-gated by the 2026-05-03 council
+    // (server/src/routes/health.ts ~L132 `assertInstanceAdmin`). The
+    // public-only synthetic monitor profile does not carry admin
+    // credentials, so the probe returns 403 and flaps incident #42.
+    // Skip in public-only; the multi-tenant authenticated profiles
+    // continue to exercise this check end-to-end.
+    test.skip(
+      profile === "public-only",
+      "deep-health is admin-gated; public-only profile cannot authenticate as admin",
+    );
+
     const before = await api.get("/api/health/deep");
     expect(
       before.status,
