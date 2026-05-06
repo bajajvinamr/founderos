@@ -3,6 +3,7 @@ import type { Db } from "@founderos/db";
 import { pricingSimulateSchema } from "@founderos/shared";
 import { computeCockpitMetrics } from "../services/finance/cockpit.js";
 import { runPricingSimulation } from "../services/finance/pricing-simulator.js";
+import { computeChurnForecast } from "../services/finance/churn-forecast.js";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
 
@@ -27,6 +28,17 @@ export function financeRoutes(db: Db) {
     const metrics = await computeCockpitMetrics(db, companyId);
     res.json(metrics);
   });
+
+  router.get(
+    "/companies/:companyId/finance/churn-forecast",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const forecast = await computeChurnForecast(db, companyId);
+      res.json(forecast);
+    },
+  );
 
   router.post(
     "/companies/:companyId/finance/pricing-simulate",
