@@ -69,6 +69,7 @@ import { runnerAuthMiddleware } from "./middleware/runner-auth.js";
 import { departmentRoutes } from "./routes/departments.js";
 import { permissionsMatrixRoutes } from "./routes/permissions-matrix.js";
 import { auditLineageRoutes } from "./routes/audit-lineage.js";
+import { templateRegistryRoutes } from "./routes/template-registry.js";
 import { departmentStatusRoutes } from "./routes/department-status.js";
 import { experimentRoutes } from "./routes/experiments.js";
 import { workflowRoutes } from "./routes/workflows.js";
@@ -342,6 +343,7 @@ export async function createApp(
   api.use(departmentStatusRoutes(db));
   api.use(permissionsMatrixRoutes(db));
   api.use(auditLineageRoutes(db));
+  api.use(templateRegistryRoutes());
   api.use(experimentRoutes(db));
   api.use(workflowRoutes(db));
   api.use(contentBriefRoutes(db));
