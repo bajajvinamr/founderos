@@ -4,6 +4,7 @@ import { pricingSimulateSchema } from "@founderos/shared";
 import { computeCockpitMetrics } from "../services/finance/cockpit.js";
 import { runPricingSimulation } from "../services/finance/pricing-simulator.js";
 import { computeChurnForecast } from "../services/finance/churn-forecast.js";
+import { computeRunwayForecast } from "../services/finance/runway-forecast.js";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
 
@@ -37,6 +38,26 @@ export function financeRoutes(db: Db) {
 
       const forecast = await computeChurnForecast(db, companyId);
       res.json(forecast);
+    },
+  );
+
+  router.get(
+    "/companies/:companyId/finance/runway",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const forecast = await computeRunwayForecast(db, companyId);
+      // JSON.stringify drops Infinity → null; serialize explicitly so
+      // the UI can render an "∞" affordance for cash-flow-positive months.
+      res.json({
+        ...forecast,
+        bands: {
+          conservative: serializeBand(forecast.bands.conservative),
+          base: serializeBand(forecast.bands.base),
+          optimistic: serializeBand(forecast.bands.optimistic),
+        },
+      });
     },
   );
 
@@ -75,4 +96,25 @@ export function financeRoutes(db: Db) {
   );
 
   return router;
+}
+
+/**
+ * JSON.stringify drops Infinity → null (RFC 8259 forbids non-finite
+ * numbers). The UI needs to distinguish "we don't know" (null) from
+ * "cash-flow-positive forever" (Infinity) — sentinel value 'infinite'
+ * threads the meaning through.
+ */
+function serializeBand(band: {
+  band: string;
+  monthsRemaining: number;
+  projectedCashOutDate: string | null;
+  monthlyBalances: Array<{ month: number; cashCents: number; mrrCents: number; netBurnCents: number }>;
+}) {
+  return {
+    band: band.band,
+    monthsRemaining:
+      band.monthsRemaining === Infinity ? "infinite" : band.monthsRemaining,
+    projectedCashOutDate: band.projectedCashOutDate,
+    monthlyBalances: band.monthlyBalances,
+  };
 }
