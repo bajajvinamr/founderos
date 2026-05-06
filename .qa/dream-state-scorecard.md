@@ -25,7 +25,7 @@ Legend: `[ ]` open · `[x]` verified by test or browser flow · `[~]` partial ·
 - [ ] Budget hard-stop tested — agent cannot start a new run when over policy
 - [ ] Pause/resume tested — paused agent does not consume work
 - [ ] Pause cascades — paused company halts all its agents
-- [ ] Secret redaction tested — logs/audit never contain raw API keys, runner tokens, magic-link plaintext, Stripe secrets
+- [x] **Secret redaction tested — logs/audit never contain raw API keys, runner tokens, magic-link plaintext, Stripe secrets** — closed by PR #50 (commit `c554539`, merged 2026-05-07). Pino's `redact.paths` extracted into exported `REDACT_PATHS` constant covering 25+ sensitive keys across HTTP request headers (Authorization, Cookie, x-runner-token, x-api-key, x-auth-token) and top-level fields used in custom `logger.*` calls (`signupUrl`, `token`, `password`, `apiKey`, `secret`, `magicLinkToken`, `runnerToken`, `refreshToken`, `accessToken`, `clientSecret`, `privateKey`, `credentials`, etc). Lowercase `[redacted]` censor unifies sentinel with the `redactSensitive` JSON-tree helper. Tests: `logger-redaction.test.ts` — 5 cases including a data-driven loop over `REDACT_PATHS` (any new sensitive field auto-covered) + a source-guard regex that catches `signupUrl` re-introduction in any `logger.{info,warn,debug}({ ... })` call site of `instance-invites.ts`.
 - [ ] Destructive actions gated (deploy, migration, billing change, permission change)
 
 ## UX
@@ -72,10 +72,10 @@ Legend: `[ ]` open · `[x]` verified by test or browser flow · `[~]` partial ·
 ### P1 (14, themed)
 - [~] **PR-2** — Bootstrap prefix-collision atomicity test failing — investigated 2026-05-07: turned out to be W1-W6 stash artifact (modification to `services/onboarding-bootstrap.ts`), not a clean-main bug. Cancelled from queue; will re-investigate when re-staging W6.
 - [ ] **PR-3** — Notifications dedup partial unique index missing from migration `0100`. Requires `/council`.
-- [ ] **PR-4** — Invite consume + role grant non-atomic (`instance-invite.ts:130-194`). **Cycle 2 — IN PROGRESS.**
+- [x] **PR-4 — CLOSED** — Invite consume + role grant atomicity. PR #49 (commit `565c5eb`, merged 2026-05-07). Wrapped consume + grant in `db.transaction(async (tx) => ...)`; replaced try/catch swallow with `.onConflictDoNothing({ target: [userId, role] })` so the unique-violation idempotent re-grant case is preserved while FK / constraint / network errors propagate and roll back the consume. 3 new tests in `instance-invite.test.ts` (RED→GREEN: 9/9 pass post-fix). Caller (`post-signup-hook.ts:92-109`) already wraps in try/catch and treats failures as non-fatal — invite stays pending, user reclaims on next auth attempt.
 - [ ] **PR-5** — Cron observability: 7 of 8 schedulers bypass `runInCronContext`; zero `captureException` in any cron file.
 - [ ] **PR-6** — Audit log gaps: billing-gate 402, pause/resume/terminate, magic-link issuance/consume.
-- [ ] **PR-7** — Secret-leakage hygiene: invite token plaintext logged at info (`instance-invites.ts:137`); pino redact array near-empty (`logger.ts:50`). **Cycle 2 — IN PROGRESS.**
+- [x] **PR-7 — CLOSED** — Secret-leakage hygiene. PR #50 (commit `c554539`, merged 2026-05-07). Pino redact paths expanded from 1 entry (`req.headers.authorization`) to 25+ across HTTP headers and top-level keys used in custom logger calls. Configuration extracted into exported `REDACT_PATHS` + `REDACT_CENSOR` constants so production and tests share one source of truth. Censor unified to lowercase `[redacted]` matching `redactSensitive`. Route-level fix: `instance-invites.ts:137` no longer logs `signupUrl` (defense in depth). 5 new tests in `logger-redaction.test.ts` including a data-driven coverage loop (adding a new redact path automatically gets test coverage) and a source-guard regex against future `signupUrl`-in-log regressions.
 - [ ] **PR-8** — Onboarding wizard silent draft restore + bootstrap submit error swallows requestId.
 - [x] **PR-9 — CLOSED** — `[health-deep]` E2E spec asserted against admin-gated `/api/health/deep` in public-only profile; PR #45 (commit `c594760`, merged 2026-05-07) skips the test in public-only mode. Closes incident #42.
 
