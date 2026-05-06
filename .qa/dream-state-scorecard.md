@@ -42,7 +42,7 @@ Legend: `[ ]` open · `[x]` verified by test or browser flow · `[~]` partial ·
 
 - [ ] `/api/readyz` returns 200 deterministically post-boot
 - [ ] `/api/health` ROOT exposes only `{status, version}` (verified 2026-05-06)
-- [ ] Startup env validation logs missing vars before serving traffic
+- [x] **Startup env validation logs missing vars before serving traffic** — closed by PR #57 (commit `aac7d9e`, merged 2026-05-07). Pre-existing `validateEnvOrExit` helper at `server/src/lib/env-validation.ts` already wrote a structured `env: ⚠ <name> not set` line per missing key at boot; PR-11 extended the data table to cover three keys flagged in the audit (OPENAI_API_KEY, RESEND_API_KEY, SUPABASE_URL+SUPABASE_ANON_KEY compound). Tests: `env-validation.test.ts` adds a "production CHECKS — coverage" describe block (4 cases including a partial-multi-key invariant for the SUPABASE bundle) — guards against silent removal of validator coverage in future refactors. 12/12 GREEN.
 - [x] **Background job (cron) failure is logged with structured fields + alerts** — fully closed by PR #52 + PR #55 (commits `06f442c` + `ea40caf`, merged 2026-05-07). All 7 business crons wrapped: 6 setInterval schedulers via `runCronTick` (daily-digest, decision-followup, linkedin-sync, notion-sync, slack-sync, weekly-wrap-delivery) and 1 BullMQ Worker via the sibling `runCronTaskWithRethrow` (hubspot-sync — rethrows after Sentry capture so BullMQ's retry/DLQ machinery sees the failure with cron requestId attached). Both helpers live at `server/src/lib/cron-tick.ts`; 17 helper tests + 29 hubspot suites + 4 setInterval-cron suites all green. Sentry capture is a no-op until `SENTRY_DSN` is set, so the wiring lands cleanly ahead of secret rotation.
 - [ ] `requestId` present on every JSON error response (verified 2026-05-03 council)
 - [ ] Sentry tags include `requestId`, `companyId`, `userId`, `route`
@@ -83,7 +83,7 @@ Legend: `[ ]` open · `[x]` verified by test or browser flow · `[~]` partial ·
 
 ### P2 (10, abbreviated)
 - [ ] **PR-10** — 14+ enum-shaped TEXT columns lack CHECK constraints. Requires `/council`.
-- [ ] **PR-11** — `OPENAI_API_KEY`, `RESEND_API_KEY`, Supabase keys absent from env validator + delete `refresh-lockfile.yml` master-branch dead code.
+- [x] **PR-11 — CLOSED** — Env validator coverage + dead workflow delete. PR #57 (commit `aac7d9e`, merged 2026-05-07). Two audit items in one PR: (a) extended `server/src/lib/env-validation.ts` `CHECKS` table with OPENAI_API_KEY (WARN, codex adapter fallback), RESEND_API_KEY (WARN, transactional email transport — welcome / magic-link / daily-digest / weekly-wrap all silently no-op without it), and SUPABASE_URL+SUPABASE_ANON_KEY compound (WARN, load-bearing under FOUNDEROS_AUTH_PROVIDER=supabase); (b) deleted `.github/workflows/refresh-lockfile.yml` (triggered on push.branches=master, dead code per CLAUDE.md "Never commit to or target master"). 4 new tests in `env-validation.test.ts` under "production CHECKS — coverage" describe block, including a partial-multi-key invariant test (SUPABASE_URL set + SUPABASE_ANON_KEY unset still treated as missing). 12/12 GREEN.
 
 ### Source artifacts
 - `.qa/synthesis.md` — full P0/P1/P2 list with file:line evidence, attack chain for P0, recommended PR queue
