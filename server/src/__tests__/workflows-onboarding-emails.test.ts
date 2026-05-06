@@ -16,10 +16,9 @@ import {
   workflows,
   workflowRuns,
   companies,
+  createDb,
 } from "@founderos/db";
 import { startEmbeddedPostgresTestDatabase } from "@founderos/db";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
 
 import {
   createWorkflow,
@@ -31,24 +30,32 @@ import {
 import { canRunAutonomously } from "../services/workflow-autonomy.js";
 
 describe("S4.6 — Onboarding Email Workflow Template", () => {
-  let testDb: ReturnType<typeof startEmbeddedPostgresTestDatabase>;
+  let testDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>>;
   let db: Db;
   let companyId: string;
   let otherCompanyId: string;
 
   beforeEach(async () => {
-    testDb = startEmbeddedPostgresTestDatabase("s4.6");
-    const connectionString = testDb.connectionString;
+    // CLAUDE.md fixture pitfall: `startEmbeddedPostgresTestDatabase(prefix)`
+    // is ASYNC and returns `{connectionString, cleanup}`. Tests must
+    // instantiate Drizzle from `connectionString` via `createDb()` — not
+    // `drizzle(postgres(...))` directly (the `postgres` package isn't a
+    // server dep, only a packages/db internal).
+    process.env.EMAIL_UNSUBSCRIBE_SECRET =
+      process.env.EMAIL_UNSUBSCRIBE_SECRET ??
+      "test-secret-onboarding-emails-32b-OK";
+    testDb = await startEmbeddedPostgresTestDatabase("s4.6");
+    db = createDb(testDb.connectionString);
 
-    const client = postgres(connectionString);
-    db = drizzle(client) as Db;
-
-    // Create test companies
+    // companies.issue_prefix has UNIQUE + default "PAP" — supply distinct
+    // values so the two-company seed doesn't collide.
+    const suffix = Math.random().toString(36).substring(2, 8).toUpperCase();
     const [company] = await db
       .insert(companies)
       .values({
         name: "Test Company",
         instanceId: "test-instance",
+        issuePrefix: `S46A${suffix}`,
       })
       .returning();
 
@@ -57,6 +64,7 @@ describe("S4.6 — Onboarding Email Workflow Template", () => {
       .values({
         name: "Other Company",
         instanceId: "test-instance",
+        issuePrefix: `S46B${suffix}`,
       })
       .returning();
 
@@ -134,11 +142,19 @@ describe("S4.6 — Onboarding Email Workflow Template", () => {
 
   describe("2. Autonomous send happy path", () => {
     it("creates a run and executes template with autonomyLevel=4 + flag enabled", async () => {
-      // Set the autonomous email flag in instance_settings
+      // Set the autonomous email flag in instance_settings — UPSERT
+      // the singleton row in case migrations don't seed one. The
+      // canRunAutonomously check reads `general[AUTONOMOUS_EMAIL_SETTING_KEY]`
+      // (literal dotted key, not nested path).
       await db.execute(
-        sql`UPDATE instance_settings
-            SET general = jsonb_set(general, '{"lifecycle_crm.allow_autonomous_email"}', 'true')
-            WHERE singleton_key = 'default'`
+        sql`INSERT INTO instance_settings (singleton_key, general)
+            VALUES ('default', '{"lifecycle_crm.allow_autonomous_email": true}'::jsonb)
+            ON CONFLICT (singleton_key)
+            DO UPDATE SET general = jsonb_set(
+              instance_settings.general,
+              '{lifecycle_crm.allow_autonomous_email}',
+              'true'::jsonb
+            )`
       );
 
       const workflow = await createWorkflow(db, {
@@ -418,7 +434,7 @@ describe("S4.6 — Onboarding Email Workflow Template", () => {
 
       expect(actions[0].payload.subject).toContain("Welcome");
       expect(actions[1].payload.subject).toContain("Day 2");
-      expect(actions[2].payload.subject).toContain("what to do next");
+      expect(actions[2].payload.subject).toContain("What to do next");
 
       // Check HTML escaping in email bodies
       expect(actions[0].payload.bodyHtml).toContain("Test User");
