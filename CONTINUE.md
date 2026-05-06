@@ -1,10 +1,96 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-06 evening (Day 5 of 7-day LRP; **Sprint 5 closed at 10/10 + Sprint 6 at 8/10**; +94 tests this run, 0 regressions; bug bash in progress) by Claude_
+_Last updated: 2026-05-06 late evening (Day 5 of 7-day LRP; **Sprint 5 closed at 10/10 + Sprint 6 closed at 10/10 — MVP scope-complete**; +125 tests this run, 0 regressions) by Claude_
 
-## 🟢 2026-05-06 evening — Sprint 6 8/10 complete (LRP autonomous run)
+## 🟢 2026-05-06 late evening — Sprint 6 10/10 — MVP scope-complete
 
-**Status:** Autonomous LRP run continuing per standing mandate ("Keep going as said dont stop until product is complete... till sprint 6 stop for no blockers ask my advice at the end run e2e testing resolve all bugs"). Sprint 5 closed at 10/10 earlier in the run; Sprint 6 now at 8/10.
+**Status:** Autonomous LRP run hit the Sprint 6 finish line. **MVP is structurally scope-complete per ADR-012.** Sprint 5 closed at 10/10 earlier in the run; Sprint 6 now closed at 10/10. Next phase per LRP plan: Day 6 E2E protocol → Day 7 PRD verification.
+
+### Sprint 6 final ticket scoreboard (all ✅ shipped, all on `feat/s4.3-content-attribution`)
+
+| Ticket | Status | Commit | Tests |
+|---|---|---|---:|
+| S6.1 — Permissions matrix | ✅ shipped | `240c2fe` | 12/12 |
+| S6.2 — Approval engine + autonomy promotion gate | ✅ shipped | `cc0bb6e` | 8/8 |
+| S6.3 — Audit lineage trace | ✅ shipped | `e2262c5` | 11/11 |
+| S6.4 — Agent memory schema (category + embedding + TTL) | ✅ shipped | `031463a` | 11/11 |
+| S6.5 — Named workflow templates registry | ✅ shipped | `bbe16dd` | 8/8 |
+| S6.6 — Notifications data layer | ✅ shipped | `47c1351` | 27/27 |
+| S6.7 — Magic-link tokens (sha256 + atomic single-use) | ✅ shipped | `cf871f7` | 21/21 |
+| S6.8 — Onboarding draft persistence | ✅ shipped | `ab47910` | 27/27 |
+| S6.9 — Bug bash + test-flake fixes | ✅ shipped | `f232984` + `2fda41c` | flake fixes only — no new tests |
+| S6.10 — MVP cutover docs (ADR-012 + buyer kit) | ✅ shipped | _(this commit)_ | docs-only |
+
+**Sprint 6 final tally:** +125 tests across 8 feature tickets, 0 regressions. 8 atomic commits + 2 flake-fix commits + 1 docs commit = 11 Sprint-6 commits this run.
+
+### S6.10 deliverables (this commit)
+
+1. **`docs/adr/012-mvp-cutover-doubtbuddy.md`** — cutover decision record. Status: Proposed 2026-05-06. 6-sprint scope summary, deferred-to-v1.1 list (6 consumer-wires + Known Flake #7 backup-lib), 4 alternatives considered (cut at S5 / ship S6-minus-wires / extend S6 to full E2E+a11y / self-execute Stripe flip — all rejected).
+2. **`docs/ops/design-partner-onboarding-kit.md`** — buyer playbook. §1 pricing ($500–$1000/mo Beta, single tier), §2 **Stripe live key flip ONE-WAY DOOR procedure** (pre-flight checklist + flip itself + recovery + post-flip validation), §3 cold-warm outreach template + filter signals, §4 first-week-of-customer timeline (Day 0 / Days 1–3 / Days 4–7 / Day 7+), §5 escalation table.
+3. **`CLAUDE.md`** — added 6 new pitfall entries: magic-link atomic-claim pattern, partial-UNIQUE race in onboarding drafts, notifications dedupe semantic, CHECK-constrained `company_memory.category`, MVP cutover doc surface. (Future contributors will step on these without the gotcha note.)
+
+**Hard halt respected:** the Stripe live key flip is documented but NOT executed (per LRP V2 + project mandate). The user/operator runs §2 of the kit knowingly. Self-executing the flip was an explicit rejected alternative in ADR-012.
+
+### What ships next (Day 6 — E2E protocol)
+
+Per the 7-day LRP plan: with Sprint 6 closed, the autonomous run pivots to **Day 6 — E2E protocol**:
+1. `pnpm e2e` against `founderos.fly.dev` with `FOUNDEROS_E2E_PROFILE=public-only` (the production-safe profile that skips auth-mutation specs)
+2. Full local suite (`pnpm -w run test`) re-run + per-package vitest as a gate
+3. Investigate any failures; fix or quarantine in `docs/CI-KNOWN-FLAKES.md`
+4. Day 7 produces `.planning/PRD-VERIFICATION.md` (PRD ↔ shipped surface coverage matrix)
+
+### Architectural pattern (preserved across Sprint 6 — IMPORTANT for the user)
+
+**6 of 10 Sprint 6 tickets shipped the data layer atomically + deferred consumer wiring** (UI bell, WS push, Slack daily summary cron, email-template magic-link issuance, /brief route token consumption, wizard rewiring, embedder for memory cosine recall). Each consumer surface has its own infra dependency (BullMQ workers, Composio Slack auth, email sender config, embedding endpoint choice). Coupling them in one commit means any single infra failure blocks the whole ticket. **All 6 deferred wires can land in parallel against the stable contracts that just shipped** — none of them require new schema or new service-layer code, just thin wiring.
+
+**The 6 deferred consumer wires (each ~half-day, all ~stable-contract):**
+1. **S6.6 UI bell + WS push** — top bar bell component reads `unreadCount` endpoint; WS push fires on any `notifications.create()` invocation (server already has WS infra)
+2. **S6.6 Slack daily summary** — BullMQ recurring job at 9am workspace-local; reads last 24h notifications + queries pending approvals; posts via existing Composio Slack skill
+3. **S6.7 email-template magic-link issuance** — daily-brief email send job calls `magicLinkService.issue({purpose: 'view_brief', ttl: 1440})`, embeds `${baseUrl}/brief?token=${plaintext}`
+4. **S6.7 /brief route token consumption** — read query param, call `consume(plaintext, req.ip)`, set read-only session, render brief
+5. **S6.8 wizard rewiring** — `FounderOnboardingWizard.tsx` calls GET on mount, debounced PUT on each step transition, POST complete on final submit
+6. **S6.4 embedder wiring** — when an embedder is wired, populate `company_memory.embedding` on insert + add cosine search to `recall()`
+
+### Council T3 self-audit on Sprint 6 migrations (per LRP V2 mandate)
+
+| Migration | Verdict | Notes |
+|---|---|---|
+| 0099 — company_memory category + embedding + TTL | PASS | Mirrors 0084 pgvector pattern; pure additive |
+| 0100 — notifications | PASS | CREATE TABLE; pair-invariant CHECK enforces "both null or both set" at DB |
+| 0101 — magic_link_tokens | PASS | Mirrors runner-token security model (sha256, atomic single-use) |
+| 0102 — onboarding_drafts | PASS | Partial UNIQUE on `(user_id) WHERE completed_at IS NULL` — supports re-onboarding |
+
+The Vanta hook fired council advisories on all 4 (matched on `DROP TABLE` strings inside rollback documentation comments) — none were actual destructive DDL. False-positive across all 4. Proceeded with self-audit per LRP V2.
+
+### Decisions still standing (per "ask my advice at the end" mandate — surface when user returns)
+
+1. **Stripe live key flip** — must be done by you, not me. Procedure documented in §2 of `docs/ops/design-partner-onboarding-kit.md` (pre-flight checklist + flip + recovery + post-flip validation). The kit is the source of truth for the procedure.
+2. **S4.8 Stripe webhook → triggerChurnRescue() wire-up** — needs per-tenant config decision: auto-fire on every cancellation, or opt-in via active workflow row? (Recommendation: latter — gives founder explicit autonomy ladder control.)
+3. **GitHub Actions billing exhaustion** — all CI workflows broken since 2026-05-02. Local gates green; deploy-prod.yml is the source of truth until you unblock billing.
+4. **Embedder choice for S6.4 cosine recall** — text-embedding-3-small via OpenAI? via Anthropic embedding endpoint when available? Defer to v1.1.
+5. **Sprint 6 deferred consumer wiring (6 surfaces)** — order + priority for landing the 6 ~half-day wires above. Recommend: S6.8 wizard rewire FIRST (most user-visible win); S6.6 UI bell second; rest can land async.
+
+### Day 5 close-out commit ladder (this LRP session, top → bottom — all on `feat/s4.3-content-attribution`)
+
+```
+<this commit>  feat(s6.10): MVP cutover ADR-012 + design partner onboarding kit
+2fda41c        fix(s6.9): defensive header read in api client + log v1.1 backup-lib flake
+f232984        fix(s6.9): drain drizzle pool before embedded-pg cleanup (test flake)
+ab47910        feat(s6.8): onboarding draft persistence — save-and-resume backbone (+27 tests)
+cf871f7        feat(s6.7): magic-link tokens — service + schema + tests (+21 tests)
+47c1351        feat(s6.6): notifications data layer (schema + service + route) (+27 tests)
+bbe16dd        feat(s6.5): named workflow templates registry (+8 tests)
+031463a        feat(s6.4): agent memory schema — category + embedding + TTL (+11 tests)
+e2262c5        feat(s6.3): audit lineage trace endpoint (+11 tests)
+cc0bb6e        feat(s6.2): approval engine — workflow link + autonomy promotion gate (+8 tests)
+240c2fe        feat(s6.1): permissions matrix read endpoint (+12 tests)
+```
+
+---
+
+## 🟢 2026-05-06 evening — Sprint 6 8/10 complete (LRP autonomous run — earlier this session)
+
+**Status:** Autonomous LRP run continuing per standing mandate ("Keep going as said dont stop until product is complete... till sprint 6 stop for no blockers ask my advice at the end run e2e testing resolve all bugs"). Sprint 5 closed at 10/10 earlier in the run; Sprint 6 was at 8/10 at this checkpoint (now 10/10 — see top section).
 
 ### Sprint 6 commit ladder (this LRP session, top → bottom — all on `feat/s4.3-content-attribution`, pushed)
 
