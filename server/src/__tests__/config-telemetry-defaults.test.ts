@@ -26,7 +26,7 @@
  *
  * Owner: TC-1 (telemetry consent), council 2026-05-05 R1+R2.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   founderosConfigSchema,
   telemetryConfigSchema,
@@ -35,6 +35,21 @@ import {
   DEFAULT_TELEMETRY_CONSENT,
 } from "@founderos/shared";
 import { resolveTelemetryConfig } from "@founderos/shared/telemetry";
+
+// Kill-switch env vars consulted by `resolveTelemetryConfig`. The Layer 2
+// suite asserts behavior on a "clean" environment — CI runners set CI=true
+// and GITHUB_ACTIONS=true which short-circuit the resolver to enabled=false
+// regardless of consent, so the "enabled=true ONLY when explicitly true"
+// assertion fails in CI without these guards.
+const TELEMETRY_KILL_SWITCH_ENV = [
+  "FOUNDEROS_TELEMETRY_DISABLED",
+  "DO_NOT_TRACK",
+  "CI",
+  "CONTINUOUS_INTEGRATION",
+  "BUILD_NUMBER",
+  "GITHUB_ACTIONS",
+  "GITLAB_CI",
+] as const;
 
 describe("telemetry consent defaults — council 2026-05-05 P1 (TC-1)", () => {
   describe("Layer 1 — file-config schema (shared/config-schema.ts)", () => {
@@ -69,6 +84,24 @@ describe("telemetry consent defaults — council 2026-05-05 P1 (TC-1)", () => {
   });
 
   describe("Layer 2 — runtime resolver (shared/telemetry/config.ts)", () => {
+    // Save / clear / restore kill-switch env vars so the suite is deterministic
+    // regardless of the runtime environment (CI runners set CI=true and
+    // GITHUB_ACTIONS=true; either short-circuits to enabled=false). Inner
+    // tests that set kill switches use their own try/finally for symmetry.
+    const saved: Record<string, string | undefined> = {};
+    beforeEach(() => {
+      for (const key of TELEMETRY_KILL_SWITCH_ENV) {
+        saved[key] = process.env[key];
+        delete process.env[key];
+      }
+    });
+    afterEach(() => {
+      for (const key of TELEMETRY_KILL_SWITCH_ENV) {
+        if (saved[key] === undefined) delete process.env[key];
+        else process.env[key] = saved[key];
+      }
+    });
+
     it("returns enabled=false when no fileConfig is passed", () => {
       // Empty fileConfig — fresh install, no operator decision recorded.
       const cfg = resolveTelemetryConfig(undefined);
