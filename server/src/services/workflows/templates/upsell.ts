@@ -22,6 +22,8 @@ import { logActivity } from "../../activity-log.js";
 import { logger } from "../../../middleware/logger.js";
 import { createStripeClient } from "../../stripe-client.js";
 import { getEmailTransport } from "../../transports/email-transport.js";
+import { isSuppressed } from "../../customer-email-suppressions.js";
+import { buildUnsubscribeUrl } from "../../email-unsubscribe-tokens.js";
 
 export interface UpsellConfig {
   /** Email of the engaged free user */
@@ -53,7 +55,7 @@ export interface UpsellEmailAction {
     /** Transport mode tag — "resend" / "capture" — for observability. */
     transportMode?: string;
   };
-  status: "pending" | "completed" | "failed";
+  status: "pending" | "completed" | "failed" | "skipped";
   executedAt?: string;
   error?: string;
 }
@@ -119,14 +121,24 @@ export async function executeUpsellTemplate(
     return;
   }
 
+  // CAN-SPAM unsubscribe URL — built once for this workflow_run.
+  // Same shape as onboarding-emails.ts (#196 layer 3c-2).
+  const baseUrl = process.env.APP_URL ?? "https://founderos.io";
+  const unsubscribeUrl = buildUnsubscribeUrl(baseUrl, {
+    c: workflow.companyId,
+    e: config.contactEmail.toLowerCase(),
+    t: "upsell",
+    ts: Date.now(),
+  });
+
   // Build the upsell email action
   const action: UpsellEmailAction = {
     type: "send_email",
     payload: {
       recipientEmail: config.contactEmail,
       subject: `Ready to unlock ${companyName} Pro?`,
-      bodyText: buildUpsellEmailText(contactName, companyName, primaryFeature),
-      bodyHtml: buildUpsellEmailHtml(contactName, companyName, primaryFeature, checkoutUrl),
+      bodyText: buildUpsellEmailText(contactName, companyName, primaryFeature, unsubscribeUrl),
+      bodyHtml: buildUpsellEmailHtml(contactName, companyName, primaryFeature, checkoutUrl, unsubscribeUrl),
       checkoutUrl,
     },
     status: "pending",
@@ -143,7 +155,9 @@ export async function executeUpsellTemplate(
     );
     // Council 2026-05-05 W0.2 fix: persist transport result as-is, do NOT
     // .map(status: "completed") — that obliterated real per-action outcomes.
-    const sentAction = await sendUpsellEmail(workflow, runId, action);
+    // #196 layer 3e — db threaded through for the pre-send suppression gate.
+    const sentAction = await sendUpsellEmail(db, workflow, runId, action);
+    // Skipped runs are NOT failures from the run's POV — collapse to completed.
     const runStatus = sentAction.status === "failed" ? "failed" : "completed";
     await updateWorkflowRunStatus(db, runId, runStatus, {
       actions: [sentAction],
@@ -198,6 +212,7 @@ export async function executeUpsellTemplate(
  * to "delivered" or downgrade to "bounced" by providerMessageId.
  */
 async function sendUpsellEmail(
+  db: Db,
   workflow: Workflow,
   runId: string,
   action: UpsellEmailAction,
@@ -205,6 +220,30 @@ async function sendUpsellEmail(
   const transport = getEmailTransport();
   const fromAddress =
     process.env.FOUNDEROS_EMAIL_FROM ?? "FounderOS <onboarding@founderos.io>";
+
+  // Pre-send suppression check (#196 layer 3e). Skip if recipient has a
+  // customer_email_suppressions row for either topic="upsell" OR topic="all".
+  const suppressed = await isSuppressed(
+    db,
+    workflow.companyId,
+    action.payload.recipientEmail,
+    "upsell",
+  );
+  if (suppressed) {
+    logger.info(
+      { workflowId: workflow.id, runId, to: action.payload.recipientEmail },
+      "upsell email skipped — recipient is suppressed",
+    );
+    return {
+      ...action,
+      status: "skipped",
+      executedAt: new Date().toISOString(),
+      payload: {
+        ...action.payload,
+        skipReason: "customer_email_suppressed",
+      } as UpsellEmailAction["payload"] & { skipReason: string },
+    };
+  }
 
   logger.info(
     { workflowId: workflow.id, runId, to: action.payload.recipientEmail, mode: transport.mode },
@@ -291,6 +330,7 @@ function buildUpsellEmailText(
   contactName: string,
   companyName: string,
   primaryFeature: string,
+  unsubscribeUrl: string,
 ): string {
   return [
     `Hey ${contactName},`,
@@ -309,6 +349,10 @@ function buildUpsellEmailText(
     "",
     "Best,",
     `The ${companyName} team`,
+    "",
+    "—",
+    `You're receiving this because you signed up for ${companyName}.`,
+    `To unsubscribe from these emails: ${unsubscribeUrl}`,
   ].join("\n");
 }
 
@@ -317,12 +361,14 @@ function buildUpsellEmailHtml(
   companyName: string,
   primaryFeature: string,
   checkoutUrl: string,
+  unsubscribeUrl: string,
 ): string {
   const escaped = {
     contactName: escapeHtml(contactName),
     companyName: escapeHtml(companyName),
     primaryFeature: escapeHtml(primaryFeature),
     checkoutUrl: escapeHtml(checkoutUrl),
+    unsubscribeUrl: escapeHtml(unsubscribeUrl),
   };
 
   return `<!DOCTYPE html>
@@ -347,6 +393,11 @@ function buildUpsellEmailHtml(
   </p>
   <p style="color:#666;font-size:14px">Not ready yet? No problem — we'll be here when you are.</p>
   <p>Best,<br>The ${escaped.companyName} team</p>
+  <hr style="margin-top:32px;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999;line-height:1.5">
+    You're receiving this because you signed up for ${escaped.companyName}.<br>
+    <a href="${escaped.unsubscribeUrl}" style="color:#999;text-decoration:underline">Unsubscribe</a>
+  </p>
 </body>
 </html>`;
 }
