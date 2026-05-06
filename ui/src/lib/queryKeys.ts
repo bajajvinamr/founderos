@@ -180,6 +180,9 @@ export const queryKeys = {
   permissions: {
     matrix: (companyId: string) => ["permissions-matrix", companyId] as const,
   },
+  auditLineage: {
+    expand: (logId: string) => ["audit-lineage", logId] as const,
+  },
   integrationHealth: {
     list: (companyId: string) => ["integration-health", companyId] as const,
     kpiFreshness: (companyId: string) => ["kpi-freshness", companyId] as const,

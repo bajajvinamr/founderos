@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { History, Bot, User, Cpu, ChevronDown, ChevronRight } from "lucide-react";
 import type { ActivityEvent, Agent } from "@founderos/shared";
+import { LineageTrace } from "../components/LineageTrace";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -149,10 +150,11 @@ function EventRow({ event, agentMap }: EventRowProps) {
       </tr>
       {expanded && (
         <tr className="border-b border-border bg-muted/20">
-          <td colSpan={5} className="px-4 py-3">
+          <td colSpan={5} className="px-4 py-3 space-y-3">
             <pre className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap break-all">
               {event.details ? JSON.stringify(event.details, null, 2) : "No details."}
             </pre>
+            <LineageTrace logId={event.id} />
           </td>
         </tr>
       )}
