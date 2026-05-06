@@ -39,6 +39,7 @@ import { logActivity } from "./activity-log.js";
 import { executeOnboardingEmailTemplate } from "./workflows/templates/onboarding-emails.js";
 import { executeUpsellTemplate } from "./workflows/templates/upsell.js";
 import { executeActivationNudgeTemplate } from "./workflows/templates/activation-nudge.js";
+import { executeChurnRescueTemplate } from "./workflows/templates/churn-rescue.js";
 import { logger } from "../middleware/logger.js";
 
 // ── List / get ────────────────────────────────────────────────────────────────
@@ -367,7 +368,12 @@ export async function executeWorkflowTemplate(
       // Codex flagged in the Wave 0 close-out council.
       await executeActivationNudgeTemplate(db, workflow, workflowRun);
       break;
-    // Future templates: churn-rescue (S4.8 — task #164)
+    case "churn-rescue":
+      // S4.8 demo ticket — autonomous churn-rescue email flow. Composes
+      // 8 prereqs (#192-#199) into a thin dispatch layer. See template
+      // file for the rationale and council finding #4 trace.
+      await executeChurnRescueTemplate(db, workflow, workflowRun);
+      break;
     default:
       logger.warn(
         { template: workflow.template, workflowId: workflow.id },
