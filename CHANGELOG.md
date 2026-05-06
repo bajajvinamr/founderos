@@ -1,3 +1,9 @@
+## [0.6.7] - 2026-05-06 21:25:01 UTC
+
+### Fixed
+- fix(observability): wrap 6 cron schedulers in runCronTick helper (P1-5) (#52) (06f442c)
+- fix(seed): align heartbeat_runs demo status with 0085 enum (P1-5c) (#53) (5c937ad)
+
 ## [0.6.6] - 2026-05-06 21:08:28 UTC
 
 ## [0.6.5] - 2026-05-06 20:54:44 UTC
