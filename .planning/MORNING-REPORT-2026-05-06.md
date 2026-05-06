@@ -415,3 +415,40 @@ Picking up Sprint 5 ahead of plan (Day 2 evening instead of Day 3) per autonomou
 | S5.10 — Console layout consolidation | ⏳ pending (last) |
 
 3/10 tickets shipped — foundation tickets complete. The remaining 7 tickets compose the foundation.
+
+### S5.2 — Pricing simulator — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `156ed66` | `feat(s5.2): pricing simulator — composes runScenario with elasticity`. Composes existing `runScenario` engine in `@founderos/shared`. New endpoint POST `/api/companies/:id/finance/pricing-simulate`. Tier derivation via DISTINCT ON (subscription_id) latest event grouped by amount_cents. Elasticity ε=-1.2 (SaaS industry default). Forgiving fallback: stale tierId matched by currentPriceCents. Empty workspace → 422 with clear error. Confidence ALWAYS 'low' (elasticity is assumed, not data). 9/9 integration tests including 12-month projection shape, doubled-price warning propagation, tenant isolation. |
+
+### S5.3 — Churn forecast — SHIPPED
+
+| Commit | Description |
+|---|---|
+| `8045f57` | `feat(s5.3): churn forecast — exp(-b·t) cohort retention curve fit`. Service collects per-cohort retention from events stream over last 12 months. Aggregates to global_retention[t], drops t=0, runs OLS fit on log(retention) = log(a) - b·t. Returns {a, b, R²} + 3-month forward projection of retention + lost MRR cents. Confidence bands tied to observation density (high: 8+ cohorts at t=6, medium: 4+ at t=3, etc). Weak-fit (R²<0.5) warning when retention doesn't follow exponential decay. 7/7 tests including OLS recovery from synthetic 5%/month decay (b≈0.05 ± tolerance), tenant isolation, projection monotonicity. |
+
+### Sprint 5 status (after this iteration)
+
+| Ticket | Status |
+|---|---|
+| S5.1 — Revenue cockpit | ✅ SHIPPED |
+| S5.2 — Pricing simulator | ✅ SHIPPED |
+| S5.3 — Churn forecast | ✅ SHIPPED |
+| S5.4 — Scenario modeling LLM | ⏳ pending (last — uses S5.1/S5.2/S5.3 as Claude tools) |
+| S5.5 — Runway forecast | ⏳ pending (now unblocked by S5.3 + S5.9) |
+| S5.6 — Marketing spend ledger | ✅ SHIPPED |
+| S5.7 — Experiment ROI rollup | ⏳ pending |
+| S5.8 — Cash planning | ⏳ pending (composes S5.5 + S5.6) |
+| S5.9 — Finance settings | ✅ SHIPPED |
+| S5.10 — Console layout consolidation | ⏳ pending (last) |
+
+**5/10 tickets shipped.** All foundation + composition tickets done; remaining 5 stitch them together for the demo line.
+
+### Server test suite delta
+
+| | Before iteration | After iteration |
+|---|---|---|
+| Sprint 5 tests | 0 | 49 |
+| Files touched | — | 9 new + 4 modified |
+| Migrations | — | 0 (S5.2/S5.3 are pure compute) |
