@@ -63,6 +63,18 @@ const mockInstanceSettingsService = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({}),
 }));
 
+// Council-2026-05-05 R1 (PR #35) — onboarding route checks subscription
+// status to gate the analytics-integration requirement. The route imports
+// subscriptionService directly (not via services/index.js), so we stub it
+// here to return inactive (free tier) — bypassing the gate is the
+// conservative default for these mock-based tests.
+vi.mock("../services/subscription.js", () => ({
+  subscriptionService: () => ({
+    getCurrentSubscription: vi.fn().mockResolvedValue(null),
+    isSubscriptionActive: vi.fn().mockResolvedValue(false),
+  }),
+}));
+
 vi.mock("../services/index.js", () => ({
   companyService: () => mockCompanyService,
   accessService: () => mockAccessService,
@@ -108,6 +120,12 @@ async function createApp() {
   // needed.
   const fakeDb: Record<string, unknown> = {};
   fakeDb.transaction = async (cb: (tx: unknown) => unknown) => cb(fakeDb);
+  // S3.10 magic-gate added `txDb.insert(workspaceDepartments).values([...])`
+  // inside the bootstrap transaction. Stub a chainable insert that no-ops —
+  // mock-based tests don't observe the row, only that the route returns 201.
+  fakeDb.insert = () => ({
+    values: async () => undefined,
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   app.use("/api", onboardingRoutes(fakeDb as any));
   app.use(errorHandler);
