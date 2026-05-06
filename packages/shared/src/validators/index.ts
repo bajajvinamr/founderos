@@ -387,3 +387,7 @@ export {
   type CashPlanHire,
   type CashPlanInput,
 } from "./cash-plan.js";
+export {
+  financeScenarioInputSchema,
+  type FinanceScenarioInput,
+} from "./finance-scenario.js";

@@ -1,12 +1,17 @@
 import { Router } from "express";
 import type { Db } from "@founderos/db";
-import { pricingSimulateSchema, cashPlanInputSchema } from "@founderos/shared";
+import {
+  pricingSimulateSchema,
+  cashPlanInputSchema,
+  financeScenarioInputSchema,
+} from "@founderos/shared";
 import { computeCockpitMetrics } from "../services/finance/cockpit.js";
 import { runPricingSimulation } from "../services/finance/pricing-simulator.js";
 import { computeChurnForecast } from "../services/finance/churn-forecast.js";
 import { computeRunwayForecast } from "../services/finance/runway-forecast.js";
 import { computeExperimentRoi } from "../services/finance/experiment-roi.js";
 import { computeCashPlan } from "../services/finance/cash-planning.js";
+import { runFinanceScenario } from "../services/agents/finance-scenario.js";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
 
@@ -83,6 +88,35 @@ export function financeRoutes(db: Db) {
 
       const plan = await computeCashPlan(db, companyId, req.body);
       res.json(plan);
+    },
+  );
+
+  router.post(
+    "/companies/:companyId/finance/scenario",
+    validate(financeScenarioInputSchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      try {
+        const result = await runFinanceScenario(
+          db,
+          companyId,
+          req.body.question,
+          req.body.maxSteps,
+        );
+        res.json(result);
+      } catch (err) {
+        if (err instanceof Error && err.message === "no_anthropic_key") {
+          res.status(412).json({
+            error: "no_anthropic_key",
+            message:
+              "Set an Anthropic API key under Instance → Providers to use scenario modeling.",
+          });
+          return;
+        }
+        throw err;
+      }
     },
   );
 

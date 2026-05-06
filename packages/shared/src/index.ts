@@ -733,6 +733,8 @@ export {
   cashPlanInputSchema,
   type CashPlanHire,
   type CashPlanInput,
+  financeScenarioInputSchema,
+  type FinanceScenarioInput,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
