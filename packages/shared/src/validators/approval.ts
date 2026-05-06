@@ -6,6 +6,10 @@ export const createApprovalSchema = z.object({
   requestedByAgentId: z.string().uuid().optional().nullable(),
   payload: z.record(z.unknown()),
   issueIds: z.array(z.string().uuid()).optional(),
+  /** S6.2 — link this approval to a workflow_run so the UI can show
+   *  "see full plan." Optional; non-workflow approvals (hire/budget/
+   *  plugin) leave this null. */
+  workflowRunId: z.string().uuid().optional().nullable(),
 });
 
 export type CreateApproval = z.infer<typeof createApprovalSchema>;
@@ -13,6 +17,12 @@ export type CreateApproval = z.infer<typeof createApprovalSchema>;
 export const resolveApprovalSchema = z.object({
   decisionNote: z.string().optional().nullable(),
   decidedByUserId: z.string().optional().default("board"),
+  /** S6.2 — when true on an approve action with a linked workflow_run,
+   *  also bumps the parent workflow.autonomyLevel to 4 ("Approve and
+   *  skip future similar approvals"). Goes through the existing
+   *  guardAutonomousUpgrade path so the instance master switch still
+   *  gates the change. */
+  promoteWorkflowToAutonomous: z.boolean().optional().default(false),
 });
 
 export type ResolveApproval = z.infer<typeof resolveApprovalSchema>;
