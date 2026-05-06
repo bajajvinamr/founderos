@@ -118,6 +118,21 @@ const CHECKS: EnvCheck[] = [
       "Strongly recommended in prod — without Sentry, server errors are only visible in pino logs which " +
       "are not searched for production triage. Verify post-deploy with `GET /api/debug/sentry-canary`.",
   },
+  // --- email transport (S4.8 prereq #196 + earlier W0.2) ---
+  {
+    name: "EMAIL_UNSUBSCRIBE_SECRET",
+    keys: ["EMAIL_UNSUBSCRIBE_SECRET"],
+    enables:
+      "HMAC signing key for one-click unsubscribe tokens on customer-facing workflow emails " +
+      "(onboarding, activation-nudge, upsell, churn-rescue). CAN-SPAM/GDPR compliance gate.",
+    severity: "WARN",
+    hint:
+      "Effectively REQUIRED before any customer-email send: server/src/services/email-unsubscribe-tokens.ts " +
+      "throws at runtime when this is unset. WARN-severity at boot ONLY because customer-email autonomy=4 " +
+      "is gated separately and not yet GA. Graduate to REQUIRED_IN_PROD when the customer-email templates " +
+      "ship to design partners (S6 polish or sooner). Generate with `openssl rand -hex 48`. Council " +
+      "2026-05-06 finding #4 (CAN-SPAM/GDPR BLOCK) — see decisions.md.",
+  },
 ];
 
 interface ValidationResult {
