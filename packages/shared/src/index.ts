@@ -729,6 +729,10 @@ export {
   pricingSimulateSchema,
   type TierChange,
   type PricingSimulateBody,
+  cashPlanHireSchema,
+  cashPlanInputSchema,
+  type CashPlanHire,
+  type CashPlanInput,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";

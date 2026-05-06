@@ -381,3 +381,9 @@ export {
   type TierChange,
   type PricingSimulateBody,
 } from "./pricing-simulator.js";
+export {
+  cashPlanHireSchema,
+  cashPlanInputSchema,
+  type CashPlanHire,
+  type CashPlanInput,
+} from "./cash-plan.js";

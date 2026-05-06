@@ -1,11 +1,12 @@
 import { Router } from "express";
 import type { Db } from "@founderos/db";
-import { pricingSimulateSchema } from "@founderos/shared";
+import { pricingSimulateSchema, cashPlanInputSchema } from "@founderos/shared";
 import { computeCockpitMetrics } from "../services/finance/cockpit.js";
 import { runPricingSimulation } from "../services/finance/pricing-simulator.js";
 import { computeChurnForecast } from "../services/finance/churn-forecast.js";
 import { computeRunwayForecast } from "../services/finance/runway-forecast.js";
 import { computeExperimentRoi } from "../services/finance/experiment-roi.js";
+import { computeCashPlan } from "../services/finance/cash-planning.js";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
 
@@ -70,6 +71,18 @@ export function financeRoutes(db: Db) {
           optimistic: serializeBand(forecast.bands.optimistic),
         },
       });
+    },
+  );
+
+  router.post(
+    "/companies/:companyId/finance/cash-plan",
+    validate(cashPlanInputSchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const plan = await computeCashPlan(db, companyId, req.body);
+      res.json(plan);
     },
   );
 
