@@ -17,6 +17,13 @@ beforeEach(() => {
     "COMPOSIO_API_KEY",
     "COMPOSIO_V3_READY",
     "SENTRY_DSN",
+    // PR-11 (council 2026-05-07 P1-11): expanded coverage.
+    "OPENAI_API_KEY",
+    "RESEND_API_KEY",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "EMAIL_UNSUBSCRIBE_SECRET",
+    "FOUNDEROS_BYO_RUNNER_ENABLED",
   ]) {
     delete process.env[k];
   }
@@ -103,6 +110,52 @@ describe("evaluateEnv", () => {
   it("default (no override) uses the production CHECKS table without crashing", () => {
     // Sanity — the default path must work even when nothing is set.
     expect(() => evaluateEnv()).not.toThrow();
+  });
+
+  // PR-11 (council 2026-05-07 P1-11): regression guard against silent removal
+  // of validator coverage for keys the prior council audit flagged as missing.
+  // The production CHECKS list is data; without a coverage smoke test, a
+  // refactor could drop an entry and the only signal would be a prod boot
+  // log that no longer mentions the key.
+  describe("production CHECKS — coverage", () => {
+    it("classifies OPENAI_API_KEY as a known WARN entry when unset", () => {
+      delete process.env.OPENAI_API_KEY;
+      const result = evaluateEnv(); // production CHECKS
+      const warnNames = result.warns.map((c) => c.name);
+      const okNames = result.oks.map((c) => c.name);
+      const infoNames = result.infos.map((c) => c.name);
+      const all = [...warnNames, ...okNames, ...infoNames, ...result.hardFails.map((c) => c.name)];
+      expect(all).toContain("OPENAI_API_KEY");
+      // Must be unset (we deleted it above), so it lands in warns.
+      expect(warnNames).toContain("OPENAI_API_KEY");
+    });
+
+    it("classifies RESEND_API_KEY as a known WARN entry when unset", () => {
+      delete process.env.RESEND_API_KEY;
+      const result = evaluateEnv();
+      const warnNames = result.warns.map((c) => c.name);
+      expect(warnNames).toContain("RESEND_API_KEY");
+    });
+
+    it("classifies the SUPABASE auth bundle (URL + ANON_KEY) as a single compound entry when fully unset", () => {
+      delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_ANON_KEY;
+      const result = evaluateEnv();
+      const warnNames = result.warns.map((c) => c.name);
+      // The compound entry is named after the bundle, not individual keys.
+      expect(warnNames.some((n) => n.includes("SUPABASE_URL") && n.includes("SUPABASE_ANON_KEY"))).toBe(true);
+    });
+
+    it("treats partial Supabase auth bundle as missing (URL set, ANON_KEY unset)", () => {
+      // Compound multi-key gates require ALL keys; partial = treated as missing.
+      // Verifies the bundle entry uses the multi-key check semantics, not a
+      // single representative key.
+      process.env.SUPABASE_URL = "https://example.supabase.co";
+      delete process.env.SUPABASE_ANON_KEY;
+      const result = evaluateEnv();
+      const warnNames = result.warns.map((c) => c.name);
+      expect(warnNames.some((n) => n.includes("SUPABASE_URL") && n.includes("SUPABASE_ANON_KEY"))).toBe(true);
+    });
   });
 });
 

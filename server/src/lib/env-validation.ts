@@ -81,6 +81,16 @@ const CHECKS: EnvCheck[] = [
       "Founders can BYO key per-company; this server-level key is only the fallback. Without it AND " +
       "without a per-company key, all agent runs fail at first invocation.",
   },
+  {
+    name: "OPENAI_API_KEY",
+    keys: ["OPENAI_API_KEY"],
+    enables: "OpenAI / Codex adapter fallback for agent execution",
+    severity: "WARN",
+    hint:
+      "Used by server/src/adapters/codex-models.ts as the host-level fallback when a founder hasn't " +
+      "configured per-company codex auth. Without it AND without ~/.codex/auth.json, codex_local " +
+      "agents fall through to the no-auth path and run-time invocation throws. PR-11 (council 2026-05-07).",
+  },
   // --- integrations ---
   {
     name: "COMPOSIO_API_KEY",
@@ -118,7 +128,31 @@ const CHECKS: EnvCheck[] = [
       "Strongly recommended in prod — without Sentry, server errors are only visible in pino logs which " +
       "are not searched for production triage. Verify post-deploy with `GET /api/debug/sentry-canary`.",
   },
+  // --- auth provider: Supabase (load-bearing when FOUNDEROS_AUTH_PROVIDER=supabase, the prod default) ---
+  {
+    name: "SUPABASE_URL + SUPABASE_ANON_KEY",
+    keys: ["SUPABASE_URL", "SUPABASE_ANON_KEY"],
+    enables:
+      "Supabase auth provider — JWKS endpoint base for ES256 JWT verification + UI client signin/signup",
+    severity: "WARN",
+    hint:
+      "Effectively REQUIRED in prod when FOUNDEROS_AUTH_PROVIDER=supabase (the Fly default). server/src/" +
+      "index.ts:530 throws at boot when SUPABASE_URL is unset under that provider, so this WARN is the " +
+      "early signal before the throw. SUPABASE_ANON_KEY is needed by the UI client; without it, signin " +
+      "lands on a non-functional Supabase client. PR-11 (council 2026-05-07).",
+  },
   // --- email transport (S4.8 prereq #196 + earlier W0.2) ---
+  {
+    name: "RESEND_API_KEY",
+    keys: ["RESEND_API_KEY"],
+    enables: "Resend transactional email transport (welcome, magic-link, daily digest, weekly wrap)",
+    severity: "WARN",
+    hint:
+      "Used by server/src/app.ts:542 / index.ts:602. Without it, all email sends silently no-op (Resend " +
+      "client errors are caught and logged). The daily-digest, weekly-wrap, magic-link, and welcome " +
+      "flows ALL depend on this; missing it in prod = customer-facing email surface goes dark. " +
+      "PR-11 (council 2026-05-07).",
+  },
   {
     name: "EMAIL_UNSUBSCRIBE_SECRET",
     keys: ["EMAIL_UNSUBSCRIBE_SECRET"],
