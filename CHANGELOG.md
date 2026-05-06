@@ -1,3 +1,8 @@
+## [0.6.9] - 2026-05-06 21:45:16 UTC
+
+### Fixed
+- fix(observability): wrap hubspot-sync BullMQ worker in runCronTaskWithRethrow (P1-5b) (#55) (ea40caf)
+
 ## [0.6.7] - 2026-05-06 21:25:01 UTC
 
 ### Fixed
