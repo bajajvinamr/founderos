@@ -33,8 +33,11 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
+import { eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
+import { agents } from "@founderos/db";
 import { subscriptionService } from "../services/subscription.js";
+import { logActivity } from "../services/index.js";
 import { logger } from "./logger.js";
 import { getRequestId } from "../lib/request-context.js";
 
@@ -45,6 +48,16 @@ export function isBillingGateEnabled(): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
+/**
+ * Event passed to the audit hook on the 402 path. Production wires this
+ * to a closure that resolves the agent's tenant from req.params.id and
+ * writes the activity_log row; tests inject a vi.fn() stub.
+ */
+export interface BillingGateAuditEvent {
+  req: Request;
+  actor: Request["actor"];
+}
+
 export interface BillingGateOptions {
   /**
    * Override the active-check resolver. Tests inject a stub here so they
@@ -52,6 +65,68 @@ export interface BillingGateOptions {
    * branch. Production wires this to subscriptionService(db).isSubscriptionActive.
    */
   isActive?: () => Promise<boolean>;
+  /**
+   * PR-6c (ADR-013) — forensic audit hook fired on the 402 path. Receives
+   * the request + actor; production resolves req.params.id → agent.companyId
+   * and writes an activity_log row with action="billing.gate_blocked".
+   * Tests inject a spy. Audit-write failures are isolated — they NEVER mask
+   * the 402 response, which is the load-bearing cost-surface protection.
+   */
+  audit?: (event: BillingGateAuditEvent) => Promise<void>;
+}
+
+/**
+ * PR-6c default audit closure. Resolves the agent ID from req.params.id,
+ * looks up the agent's tenant, and writes the audit row. Failures (no
+ * agent in URL, agent not found, DB error on logActivity) emit logger.warn
+ * and short-circuit — the 402 response continues uninterrupted.
+ */
+async function defaultBillingGateAudit(
+  db: Db,
+  event: BillingGateAuditEvent,
+): Promise<void> {
+  const agentId = (event.req.params as { id?: string }).id;
+  if (!agentId) {
+    logger.warn(
+      { actorUserId: event.actor.userId, path: event.req.path },
+      "billing-gate: 402 without resolvable agent id — audit row skipped",
+    );
+    return;
+  }
+
+  const [agent] = await db
+    .select({ companyId: agents.companyId })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  if (!agent) {
+    logger.warn(
+      { agentId, path: event.req.path },
+      "billing-gate: 402 with unknown agent id — audit row skipped",
+    );
+    return;
+  }
+
+  const actorType: "agent" | "user" =
+    event.actor.type === "agent" ? "agent" : "user";
+  const actorId =
+    event.actor.userId ??
+    (event.actor.type === "agent" ? event.actor.agentId ?? null : null) ??
+    "unknown";
+
+  await logActivity(db, {
+    companyId: agent.companyId,
+    actorType,
+    actorId,
+    action: "billing.gate_blocked",
+    entityType: "agent",
+    entityId: agentId,
+    details: {
+      route: event.req.path,
+      reason: "subscription_inactive",
+    },
+  });
 }
 
 /**
@@ -74,6 +149,9 @@ export function billingGate(db: Db, opts: BillingGateOptions = {}) {
   }
   const isActive =
     opts.isActive ?? (() => subscriptionService(db).isSubscriptionActive());
+  const audit =
+    opts.audit ??
+    ((event: BillingGateAuditEvent) => defaultBillingGateAudit(db, event));
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!enabled) {
@@ -116,6 +194,21 @@ export function billingGate(db: Db, opts: BillingGateOptions = {}) {
       // 402 here is safer than fail-open. The UI's loading state will
       // surface this as a billing block, the founder reaches support,
       // we fix the underlying error.
+    }
+
+    // PR-6c (ADR-013) — forensic audit on every 402 (including the
+    // fail-CLOSED branch above). Wrapped in try/catch so a failed audit
+    // write NEVER masks the 402 — the cost-surface protection is load-
+    // bearing; audit is forensic. Sequential await (not fire-and-forget)
+    // so the row commits before the response flushes; under load the
+    // race would create gaps in the audit trail at the worst time.
+    try {
+      await audit({ req, actor });
+    } catch (auditErr) {
+      logger.warn(
+        { err: auditErr, actorUserId: actor.userId, path: req.path },
+        "billing-gate: audit row write failed — 402 still returned",
+      );
     }
 
     const requestId = getRequestId();

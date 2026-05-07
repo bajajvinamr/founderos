@@ -184,3 +184,181 @@ describe("billingGate — boot banner is logged once", () => {
     expect(true).toBe(true);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────
+// PR-6c (ADR-013) — billing.gate_blocked audit row on 402 path
+// ────────────────────────────────────────────────────────────────────────
+describe("billingGate — audit row on 402 (PR-6c)", () => {
+  beforeEach(() => {
+    process.env.FOUNDEROS_BILLING_GATE_ENABLED = "1";
+  });
+  afterEach(() => {
+    delete process.env.FOUNDEROS_BILLING_GATE_ENABLED;
+  });
+
+  function makeAppWithAudit(opts: {
+    actor?: ActorShape;
+    isActive?: () => Promise<boolean>;
+    audit?: (event: { req: unknown; actor: ActorShape }) => Promise<void>;
+    routePath?: string;
+  }) {
+    const app = express();
+    if (opts.actor) {
+      app.use((req, _res, next) => {
+        (req as unknown as { actor: ActorShape }).actor = opts.actor!;
+        next();
+      });
+    }
+    app.post(
+      opts.routePath ?? "/agents/:id/wakeup",
+      billingGate({} as never, {
+        isActive: opts.isActive,
+        audit: opts.audit as never,
+      }),
+      (_req, res) => res.status(200).json({ ok: true }),
+    );
+    return app;
+  }
+
+  it("calls audit hook with {req, actor} on the 402 path", async () => {
+    const audit = vi.fn().mockResolvedValue(undefined);
+    const app = makeAppWithAudit({
+      actor: { type: "board", userId: "u-1", source: "supabase" },
+      isActive: async () => false,
+      audit,
+    });
+
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+
+    expect(res.status).toBe(402);
+    expect(audit).toHaveBeenCalledTimes(1);
+    const event = audit.mock.calls[0][0] as {
+      req: { params: { id: string }; path: string };
+      actor: ActorShape;
+    };
+    expect(event.req.params.id).toBe("11111111-1111-4111-8111-111111111111");
+    expect(event.actor.userId).toBe("u-1");
+  });
+
+  it("does NOT call audit on the 200 path (active subscription)", async () => {
+    const audit = vi.fn().mockResolvedValue(undefined);
+    const app = makeAppWithAudit({
+      actor: { type: "board", userId: "u-1", source: "supabase" },
+      isActive: async () => true,
+      audit,
+    });
+
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+    expect(res.status).toBe(200);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call audit when local_implicit bypasses the gate", async () => {
+    const audit = vi.fn().mockResolvedValue(undefined);
+    const app = makeAppWithAudit({
+      actor: { type: "board", userId: "local-board", source: "local_implicit" },
+      isActive: async () => false,
+      audit,
+    });
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+    expect(res.status).toBe(200);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call audit when instance_admin bypasses the gate", async () => {
+    const audit = vi.fn().mockResolvedValue(undefined);
+    const app = makeAppWithAudit({
+      actor: {
+        type: "board",
+        userId: "u-admin",
+        source: "supabase",
+        isInstanceAdmin: true,
+      },
+      isActive: async () => false,
+      audit,
+    });
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+    expect(res.status).toBe(200);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("calls audit BEFORE returning 402 (audit gets to run, not fire-and-forget)", async () => {
+    // Ordering invariant: the response must not flush before audit
+    // resolves. If we fire-and-forget the promise, an audit-write
+    // failure would still leak via Sentry (good) but a fast-failing
+    // 402 would race the audit row commit, creating gaps in the
+    // forensic trail under load. Sequential is safer.
+    let auditResolved = false;
+    const audit = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            auditResolved = true;
+            resolve();
+          }, 20),
+        ),
+    );
+    const app = makeAppWithAudit({
+      actor: { type: "board", userId: "u-1", source: "supabase" },
+      isActive: async () => false,
+      audit,
+    });
+
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+
+    expect(res.status).toBe(402);
+    expect(auditResolved).toBe(true);
+  });
+
+  it("returns 402 even if audit throws (forensic write must not break the gate)", async () => {
+    const audit = vi.fn().mockRejectedValue(new Error("db unreachable"));
+    const app = makeAppWithAudit({
+      actor: { type: "board", userId: "u-1", source: "supabase" },
+      isActive: async () => false,
+      audit,
+    });
+
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+
+    // The cost-surface protection is load-bearing; audit is forensic.
+    // An audit-write failure must NEVER mask the 402 — that would
+    // silently fail-open the very gate the audit is supposed to record.
+    expect(res.status).toBe(402);
+    expect(res.body.error).toBe("subscription_inactive");
+    expect(audit).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls audit even when isActive throws (fail-CLOSED branch is also audited)", async () => {
+    // Council BLOCK 2026-05-03 forced isActive() exceptions to fail
+    // CLOSED (return 402). That refusal is also forensically interesting
+    // — a sustained burst of subscription-lookup failures might be a DB
+    // outage masquerading as billing churn. Audit the closed-fail path.
+    const audit = vi.fn().mockResolvedValue(undefined);
+    const app = makeAppWithAudit({
+      actor: { type: "board", userId: "u-1", source: "supabase" },
+      isActive: async () => {
+        throw new Error("subscription service unreachable");
+      },
+      audit,
+    });
+
+    const res = await request(app).post(
+      "/agents/11111111-1111-4111-8111-111111111111/wakeup",
+    );
+
+    expect(res.status).toBe(402);
+    expect(audit).toHaveBeenCalledTimes(1);
+  });
+});
