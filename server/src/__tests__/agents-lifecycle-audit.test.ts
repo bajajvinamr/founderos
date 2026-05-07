@@ -210,8 +210,26 @@ describe("PR-6b — agent lifecycle audit regression guard", () => {
       status: "terminated",
     });
     mockAgentService.remove.mockResolvedValue(baseAgent);
+    mockAgentService.create.mockResolvedValue(baseAgent);
     mockHeartbeatService.cancelActiveForAgent.mockResolvedValue(undefined);
     mockLogActivity.mockResolvedValue(undefined);
+    // Create-path mock defaults — pause/resume/terminate/delete don't
+    // touch these, but POST /companies/:companyId/agents does.
+    mockSecretService.normalizeAdapterConfigForPersistence.mockImplementation(
+      async (_companyId: string, config: Record<string, unknown>) => config,
+    );
+    mockSecretService.resolveAdapterConfigForRuntime.mockResolvedValue({
+      config: {},
+      lookups: [],
+    });
+    mockCompanySkillService.listRuntimeSkillEntries.mockResolvedValue([]);
+    mockCompanySkillService.resolveRequestedSkillKeys.mockResolvedValue([]);
+    mockAgentInstructionsService.materializeManagedBundle.mockImplementation(
+      async (agent: unknown) => agent,
+    );
+    mockAccessService.ensureMembership.mockResolvedValue(undefined);
+    mockAccessService.setPrincipalPermission.mockResolvedValue(undefined);
+    mockBudgetService.upsertPolicy.mockResolvedValue(undefined);
   });
 
   // -- pause --------------------------------------------------------
@@ -398,6 +416,77 @@ describe("PR-6b — agent lifecycle audit regression guard", () => {
 
       expect(res.status).toBe(404);
       expect(mockLogActivity).not.toHaveBeenCalled();
+    });
+  });
+
+  // -- create --------------------------------------------------------
+  //
+  // The create route (POST /companies/:companyId/agents at agents.ts:1549)
+  // emits one `agent.created` activity_log row at agents.ts:1594-1608. The
+  // four lifecycle handlers above (pause/resume/terminate/delete) all
+  // pin their own audit calls; create completes the lifecycle audit
+  // surface. Without this pin, a refactor of the create handler that
+  // strips logActivity (or moves it inside a side branch that doesn't
+  // execute on the happy path) would silently break the founder's
+  // ability to see "I hired this agent at <ts>" in their activity feed.
+
+  describe("POST /companies/:companyId/agents", () => {
+    it("writes activity_log row on success with action='agent.created'", async () => {
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .post(`/api/companies/${companyId}/agents`)
+        .send({ name: "Builder", adapterType: "claude_local" });
+
+      expect(res.status).toBe(201);
+      expect(mockAgentService.create).toHaveBeenCalledTimes(1);
+      expect(mockLogActivity).toHaveBeenCalledTimes(1);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          companyId,
+          actorType: "user",
+          actorId: "user-abc",
+          action: "agent.created",
+          entityType: "agent",
+          entityId: agentId,
+        }),
+      );
+    });
+
+    it("audit row carries name + role in details (founder-visible context)", async () => {
+      // The activity timeline UI surfaces these details to give the
+      // founder a "I hired Builder (engineer)" hint without joining
+      // back to the agents table — pinning the contract so a refactor
+      // can't silently drop the details payload.
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .post(`/api/companies/${companyId}/agents`)
+        .send({ name: "Builder", adapterType: "claude_local" });
+
+      expect(res.status).toBe(201);
+      const callArg = mockLogActivity.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(callArg).toBeDefined();
+      const details = callArg.details as Record<string, unknown>;
+      expect(details).toMatchObject({
+        name: "Builder",
+        role: "engineer",
+      });
+    });
+
+    it("falls back to actorId='board' when userId is absent (local_implicit)", async () => {
+      const app = createApp(boardActorNoUserId);
+      const res = await request(app)
+        .post(`/api/companies/${companyId}/agents`)
+        .send({ name: "Builder", adapterType: "claude_local" });
+
+      expect(res.status).toBe(201);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          actorId: "board",
+          action: "agent.created",
+        }),
+      );
     });
   });
 
