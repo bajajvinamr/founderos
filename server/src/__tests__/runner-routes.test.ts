@@ -148,7 +148,13 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
   }
 
   /** Insert a queued runner_jobs row directly (skips the adapter materialization). */
-  async function makeQueuedJob(args: { companyId: string; agentId: string; runId: string }) {
+  async function makeQueuedJob(args: {
+    companyId: string;
+    agentId: string;
+    runId: string;
+    /** S7.0.1 — adapter the runner should dispatch to. Defaults to claude_local. */
+    adapterType?: string;
+  }) {
     const [row] = await db
       .insert(runnerJobs)
       .values({
@@ -158,6 +164,7 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
         prompt: "test prompt",
         promptHash: "a".repeat(64),
         runtimeConfig: JSON.stringify({ timeoutSec: 60 }),
+        adapterType: args.adapterType ?? "claude_local",
         status: "queued",
       })
       .returning();
@@ -762,6 +769,63 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
 
       const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
       expect(res.status).toBe(404);
+    });
+
+    /**
+     * S7.0.1 (council R1+R2 P1, Codex+Gemini both rounds) — round-trip test
+     * for `runner_jobs.adapter_type`. Without this column flowing from
+     * enqueue → DB → claim API → JobPayload, the multi-CLI dispatcher
+     * (S7.1) has nothing to dispatch on. Pin the contract so a future
+     * regression that drops the field can't merge silently.
+     */
+    it("S7.0.1 — claim API returns adapterType from runner_jobs row", async () => {
+      const company = await makeCompany("Adapter Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        adapterType: "gemini_local",
+      });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "g".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(res.status).toBe(200);
+      expect(res.body.adapterType).toBe("gemini_local");
+
+      // DB row should also carry the adapter type unchanged across the claim.
+      const [updated] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
+      expect(updated.adapterType).toBe("gemini_local");
+    });
+
+    it("S7.0.1 — claim API defaults adapterType to claude_local when row predates the column", async () => {
+      // Simulate a row inserted via raw SQL bypassing the Drizzle default
+      // (this is the "agent rows that slipped through migration" defensive
+      // path — the NOT NULL DEFAULT in the migration normally handles this,
+      // but the dispatcher legacy-fallback should be belt+suspenders).
+      const company = await makeCompany("Legacy Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        // Default → claude_local (mirrors the production default).
+      });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "L".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(res.status).toBe(200);
+      expect(res.body.adapterType).toBe("claude_local");
     });
   });
 

@@ -715,6 +715,13 @@
       "when": 1781100000000,
       "tag": "0104_enum_text_check_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1781200000000,
+      "tag": "0105_runner_jobs_adapter_type",
+      "breakpoints": true
     }
   ]
 }

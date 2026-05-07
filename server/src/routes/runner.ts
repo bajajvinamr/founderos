@@ -265,6 +265,9 @@ export function runnerJobRoutes(db: Db): Router {
         promptHash: runnerJobs.promptHash,
         sessionIdHint: runnerJobs.sessionIdHint,
         runtimeConfig: runnerJobs.runtimeConfig,
+        // S7.0.1 — surfaced to runner so the dispatcher can pick the
+        // right CLI handler (Claude vs Gemini vs Codex etc.).
+        adapterType: runnerJobs.adapterType,
         status: runnerJobs.status,
         heartbeatRunId: runnerJobs.heartbeatRunId,
       })
@@ -333,6 +336,12 @@ export function runnerJobRoutes(db: Db): Router {
       sessionId: existing.sessionIdHint,
       runtimeConfig,
       promptHash: existing.promptHash,
+      // S7.0.1 — adapter type drives the runner-side dispatcher.
+      // Defaults to "claude_local" if the row predates the schema column
+      // (legacy fallback for any rows that slipped through during
+      // migration; the column has a NOT NULL DEFAULT so this is a belt
+      // alongside the suspenders).
+      adapterType: existing.adapterType ?? "claude_local",
       // OpenAPI: `addDirs` is optional. v0 has no cloud-suggested add-dirs;
       // the runner derives them from runtimeConfig if present.
       addDirs: Array.isArray((runtimeConfig as { addDirs?: unknown }).addDirs)

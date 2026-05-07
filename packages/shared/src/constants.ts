@@ -34,6 +34,27 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+/**
+ * Canonical list of agent adapter types.
+ *
+ * Mirror to the CHECK constraint on `runner_jobs.adapter_type` in
+ * migration `0105_runner_jobs_adapter_type.sql`. When adding a new value
+ * here, ALSO add it to that CHECK constraint via a follow-up migration —
+ * per vinamr-invariants the TS union is a compile-time hint, the DB CHECK
+ * is the runtime backstop.
+ *
+ * `byo_runner` is retained as a deprecated value used by pre-S7 prod
+ * agents (where onboarding-bootstrap.ts:307 collapsed all CLI choices
+ * to this single value). New rows after S7.0.1 + S7.2 should write the
+ * actual CLI adapter type. Dispatcher legacy-fallback maps `byo_runner`
+ * to claude for backward compatibility.
+ *
+ * `hermes_local` is registered in
+ * `packages/adapter-utils/src/session-compaction.ts:80-85` and the
+ * UI display registry; the actual runtime is `hermes-paperclip-adapter`
+ * already in `server/package.json`. Per S7.0.3, the policy decision
+ * (keep paperclip vs externalize per AGENTS.md) is open.
+ */
 export const AGENT_ADAPTER_TYPES = [
   "process",
   "http",
@@ -48,6 +69,8 @@ export const AGENT_ADAPTER_TYPES = [
   "pi_local",
   "cursor",
   "openclaw_gateway",
+  "hermes_local",
+  "byo_runner",
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number] | (string & {});
 

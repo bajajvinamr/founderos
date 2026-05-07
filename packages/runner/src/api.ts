@@ -23,6 +23,31 @@ export interface JobDescriptor {
   createdAt: string;
 }
 
+/**
+ * Adapter type carried from the cloud through to the runner.
+ *
+ * S7.0.1 — kept as a plain string union here (NOT `AgentAdapterType` from
+ * `@founderos/shared`) so the runner package can stay free of the shared
+ * deep dep. The DB CHECK constraint at migration 0105 + the cloud-side
+ * Zod schema enforce validity before this field reaches the runner.
+ *
+ * Default fallback: "claude_local". Pre-S7 rows that wrote "byo_runner"
+ * still map to claude via the dispatcher's legacy-fallback path.
+ */
+export type RunnerAdapterType =
+  | "claude_local"
+  | "codex_local"
+  | "gemini_local"
+  | "opencode_local"
+  | "pi_local"
+  | "cursor"
+  | "openclaw_gateway"
+  | "hermes_local"
+  | "byo_runner"
+  | "process"
+  | "http"
+  | (string & {}); // tolerate unknown values for forward-compatibility
+
 export interface JobPayload {
   jobId: string;
   agentId: string;
@@ -37,6 +62,13 @@ export interface JobPayload {
     [k: string]: unknown;
   };
   promptHash: string;
+  /**
+   * S7.0.1 — adapter type the runner should dispatch on. Server returns
+   * this from the claim API (`server/src/routes/runner.ts:303`). May be
+   * absent on responses from a pre-S7.0.1 server build — defaults to
+   * "claude_local" at the consumer.
+   */
+  adapterType?: RunnerAdapterType;
   addDirs?: string[];
 }
 
