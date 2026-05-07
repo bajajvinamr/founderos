@@ -37,8 +37,17 @@ export function notificationsService(db: Db) {
    *
    * If `refKind`+`refId` are present and a notification of the same kind
    * already exists for the same ref + user that is unread, this is a
-   * no-op (returns the existing row). This dedupes the "we already told
-   * the user about approval=abc" case without requiring a unique index.
+   * no-op (returns the existing row). The dedup key is
+   * (companyId, userId, kind, refKind, refId) and is backed by the
+   * partial unique index `uniq_notifications_unread_dedup` (migration
+   * 0103) which enforces atomicity under concurrent writes — closing
+   * the SELECT-then-INSERT TOCTOU window the prior implementation had.
+   *
+   * Marked-read race handling: if the conflicting unread row is
+   * marked-read between our INSERT failure and the re-SELECT, we retry
+   * the insert once (bounded). The retry will succeed because the
+   * partial unique no longer carries the now-read row. After two
+   * attempts we give up and throw — not silently retry forever.
    */
   async function create(
     params: CreateNotificationParams,
@@ -47,14 +56,61 @@ export function notificationsService(db: Db) {
       throw new Error("refKind and refId must be both set or both null");
     }
 
-    if (params.refKind && params.refId) {
+    const insertValues = {
+      companyId: params.companyId,
+      userId: params.userId,
+      kind: params.kind,
+      title: params.title,
+      body: params.body ?? null,
+      refKind: params.refKind ?? null,
+      refId: params.refId ?? null,
+    };
+
+    // Bounded retry loop. The marked-read race (PR-3 council R1+R2 P2)
+    // resolves on the second insert because the read row no longer sits
+    // in the partial unique. Two attempts is sufficient — a third would
+    // signal a different bug (e.g. constant high-rate creates against
+    // the same key, which the caller should be deduping upstream).
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const [inserted] = await db
+        .insert(notifications)
+        .values(insertValues)
+        // Explicit `target` + `where` (NOT bare onConflictDoNothing) so
+        // that ONLY the partial unique `uniq_notifications_unread_dedup`
+        // is treated as a no-op; future unique constraints would still
+        // throw. PR-3 council R2 P3 fix.
+        .onConflictDoNothing({
+          target: [
+            notifications.companyId,
+            notifications.userId,
+            notifications.kind,
+            notifications.refKind,
+            notifications.refId,
+          ],
+          where: sql`${notifications.readAt} IS NULL AND ${notifications.refKind} IS NOT NULL AND ${notifications.refId} IS NOT NULL`,
+        })
+        .returning();
+      if (inserted) return inserted;
+
+      // Conflict path — only reachable when (refKind, refId) are both
+      // set per the partial unique's WHERE. Re-SELECT the existing
+      // unread row, scoped to (companyId, userId, kind, ref) — same
+      // tuple as the unique index so we can't cross-tenant leak.
+      if (!params.refKind || !params.refId) {
+        // Defensive: schema invariant violated — partial unique only
+        // fires when ref is set, so a conflict on a ref-less insert
+        // means the index shape diverged from the code.
+        throw new Error(
+          "notifications.create: ON CONFLICT fired without ref — schema invariant violated",
+        );
+      }
       const [existing] = await db
         .select()
         .from(notifications)
         .where(
           and(
-            eq(notifications.userId, params.userId),
             eq(notifications.companyId, params.companyId),
+            eq(notifications.userId, params.userId),
             eq(notifications.kind, params.kind),
             eq(notifications.refKind, params.refKind),
             eq(notifications.refId, params.refId),
@@ -63,21 +119,14 @@ export function notificationsService(db: Db) {
         )
         .limit(1);
       if (existing) return existing;
+      // Existing row vanished (marked-read between INSERT and SELECT).
+      // Loop back and retry the insert — the partial unique no longer
+      // carries the read row, so the second attempt should succeed.
     }
 
-    const [row] = await db
-      .insert(notifications)
-      .values({
-        companyId: params.companyId,
-        userId: params.userId,
-        kind: params.kind,
-        title: params.title,
-        body: params.body ?? null,
-        refKind: params.refKind ?? null,
-        refId: params.refId ?? null,
-      })
-      .returning();
-    return row;
+    throw new Error(
+      "notifications.create: dedup conflict persisted across 2 retries — high-rate concurrent creates against same dedup key, caller should batch upstream",
+    );
   }
 
   /**
