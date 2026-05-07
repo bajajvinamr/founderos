@@ -44,14 +44,21 @@ test.describe("landing", () => {
   // mounts cleanly under static-build, so the previous failure was likely
   // the upstream ECONNREFUSED harness bug rather than a real regression.
   test("[landing] hero + sign-up CTA render", async ({ page }) => {
-    const response = await page.goto("/");
+    // Hit /landing directly. The marketing surface is mounted at the
+    // /landing route in App.tsx; "/" only redirects there for unauthed
+    // users when deploymentMode === "authenticated" (Fly prod). CI runs
+    // under FOUNDEROS_DEPLOYMENT_MODE=local_trusted, where that redirect
+    // does NOT fire and "/" falls through to CompanyRootRedirect (board).
+    // Hitting /landing directly tests Landing rendering — the spec's
+    // actual intent — without coupling to mode-conditional root routing.
+    const response = await page.goto("/landing");
     expect(
       response,
-      "GET / returned nothing (network error?)",
+      "GET /landing returned nothing (network error?)",
     ).not.toBeNull();
     expect(
       response!.status(),
-      `GET / returned ${response!.status()} (expected 200)`,
+      `GET /landing returned ${response!.status()} (expected 200)`,
     ).toBeLessThan(400);
     await waitForAppReady(page);
 
