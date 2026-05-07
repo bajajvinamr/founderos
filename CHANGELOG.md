@@ -1,3 +1,8 @@
+## [0.7.0] - 2026-05-07 05:30:23 UTC
+
+### Added
+- feat(billing): audit row on billing-gate 402 (P1-6c, ADR-013) (#63) (240502f)
+
 ## [0.6.15] - 2026-05-07 05:25:17 UTC
 
 ### Fixed
