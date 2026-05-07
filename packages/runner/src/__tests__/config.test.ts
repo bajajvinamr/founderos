@@ -78,4 +78,93 @@ describe("loadConfig", () => {
       }),
     ).toThrow(/debug\|info\|warn\|error/);
   });
+
+  // ─── v0.1.1 — overrides (CLI flags) ────────────────────────────────
+  describe("overrides (CLI flag support)", () => {
+    it("uses overrides.token when set, ignoring env", () => {
+      const cfg = loadConfig(
+        {
+          FOUNDEROS_RUNNER_URL: "https://founderos.fly.dev",
+          FOUNDEROS_RUNNER_TOKEN: "fos_envenvenvenvenvenvenvenvenvenvenv",
+        },
+        { token: VALID_TOKEN },
+      );
+      expect(cfg.token).toBe(VALID_TOKEN);
+    });
+
+    it("uses overrides.serverUrl when set, ignoring env", () => {
+      const cfg = loadConfig(
+        {
+          FOUNDEROS_RUNNER_URL: "https://wrong.example",
+          FOUNDEROS_RUNNER_TOKEN: VALID_TOKEN,
+        },
+        { serverUrl: "https://founderos.fly.dev" },
+      );
+      expect(cfg.serverUrl).toBe("https://founderos.fly.dev");
+    });
+
+    it("treats empty-string override as explicit empty (fails token validation)", () => {
+      // `undefined` = use env. Any non-undefined string = use the
+      // override. Empty string is therefore explicitly empty, which
+      // fails the fos_ format regex. The CLI's parseFlags filters
+      // empty values out before they reach loadConfig (returning
+      // them in `unknown` instead), so this path is mostly relevant
+      // to programmatic callers.
+      expect(() =>
+        loadConfig(
+          {
+            FOUNDEROS_RUNNER_URL: "https://founderos.fly.dev",
+            FOUNDEROS_RUNNER_TOKEN: VALID_TOKEN,
+          },
+          { token: "" },
+        ),
+      ).toThrow(/fos_/);
+    });
+
+    it("falls back to env when override is undefined", () => {
+      const cfg = loadConfig(
+        {
+          FOUNDEROS_RUNNER_URL: "https://founderos.fly.dev",
+          FOUNDEROS_RUNNER_TOKEN: VALID_TOKEN,
+        },
+        { token: undefined },
+      );
+      expect(cfg.token).toBe(VALID_TOKEN);
+    });
+
+    it("works with overrides only (no env)", () => {
+      const cfg = loadConfig(
+        {},
+        {
+          serverUrl: "https://founderos.fly.dev",
+          token: VALID_TOKEN,
+        },
+      );
+      expect(cfg.serverUrl).toBe("https://founderos.fly.dev");
+      expect(cfg.token).toBe(VALID_TOKEN);
+    });
+
+    it("validates overridden token format", () => {
+      expect(() =>
+        loadConfig(
+          {
+            FOUNDEROS_RUNNER_URL: "https://founderos.fly.dev",
+          },
+          { token: "not-a-valid-token" },
+        ),
+      ).toThrow(/fos_/);
+    });
+
+    it("validates overridden timeout range", () => {
+      expect(() =>
+        loadConfig(
+          {
+            FOUNDEROS_RUNNER_URL: "https://founderos.fly.dev",
+            FOUNDEROS_RUNNER_TOKEN: VALID_TOKEN,
+          },
+          { defaultTimeoutSec: 9999 },
+        ),
+      ).toThrow(/1\.\.3600/);
+    });
+  });
 });
