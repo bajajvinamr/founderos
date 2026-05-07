@@ -28,6 +28,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lte, sql } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import {
+  activityLog,
   magicLinkTokens,
   type MagicLinkPurpose,
   type MagicLinkTargetRefKind,
@@ -131,21 +132,46 @@ export function magicLinkService(db: Db) {
     const tokenHash = hashMagicLinkToken(plaintext);
     const expiresAt = new Date(Date.now() + params.ttlMinutes * 60_000);
 
-    const [row] = await db
-      .insert(magicLinkTokens)
-      .values({
-        userId: params.userId,
+    // PR-6a (council 2026-05-07): wrap token insert + audit-log row in
+    // one transaction so either both commit or both roll back. An audit
+    // gap on a successful issue would mean a token exists in the wild
+    // with no record of who created it — exactly the silent failure
+    // mode this audit closes.
+    const row = await db.transaction(async (tx) => {
+      const [tokenRow] = await tx
+        .insert(magicLinkTokens)
+        .values({
+          userId: params.userId,
+          companyId: params.companyId,
+          tokenHash,
+          purpose: params.purpose,
+          targetRefKind: params.targetRefKind ?? null,
+          targetRefId: params.targetRefId ?? null,
+          expiresAt,
+        })
+        .returning({
+          id: magicLinkTokens.id,
+          expiresAt: magicLinkTokens.expiresAt,
+        });
+
+      await tx.insert(activityLog).values({
         companyId: params.companyId,
-        tokenHash,
-        purpose: params.purpose,
-        targetRefKind: params.targetRefKind ?? null,
-        targetRefId: params.targetRefId ?? null,
-        expiresAt,
-      })
-      .returning({
-        id: magicLinkTokens.id,
-        expiresAt: magicLinkTokens.expiresAt,
+        actorType: "user",
+        actorId: params.userId,
+        action: "magic_link.issued",
+        entityType: "magic_link",
+        entityId: tokenRow.id,
+        details: {
+          purpose: params.purpose,
+          targetRefKind: params.targetRefKind ?? null,
+          targetRefId: params.targetRefId ?? null,
+          ttlMinutes: params.ttlMinutes,
+          expiresAt: tokenRow.expiresAt.toISOString(),
+        },
       });
+
+      return tokenRow;
+    });
 
     return { token: plaintext, id: row.id, expiresAt: row.expiresAt };
   }
@@ -174,55 +200,77 @@ export function magicLinkService(db: Db) {
 
     const tokenHash = hashMagicLinkToken(plaintext);
 
-    // Read first to surface what we'd consume (for the timing-safe
-    // re-verify), then conditional update. The conditional is the
-    // atomic claim — read-then-update would be a TOCTOU window.
-    const [candidate] = await db
-      .select()
-      .from(magicLinkTokens)
-      .where(eq(magicLinkTokens.tokenHash, tokenHash))
-      .limit(1);
+    // PR-6a (council 2026-05-07): wrap candidate-read + atomic claim +
+    // audit-log row in one transaction. Successful consumes get an
+    // audit row; failures (bad format, unknown hash, expired,
+    // double-consume) do NOT — only state changes are audited so the
+    // table doesn't fill with attempt-noise.
+    return await db.transaction(async (tx) => {
+      // Read first to surface what we'd consume (for the timing-safe
+      // re-verify), then conditional update. The conditional is the
+      // atomic claim — read-then-update would be a TOCTOU window.
+      const [candidate] = await tx
+        .select()
+        .from(magicLinkTokens)
+        .where(eq(magicLinkTokens.tokenHash, tokenHash))
+        .limit(1);
 
-    if (!candidate) return null;
+      if (!candidate) return null;
 
-    // Defense-in-depth re-verify hash matches (DB lookup already filtered
-    // but we constant-time check the returned hash to guard against any
-    // hypothetical SQL-layer mistake or middleware reordering — same
-    // pattern as runner-auth.ts:80).
-    if (!safeHashEquals(candidate.tokenHash, tokenHash)) return null;
+      // Defense-in-depth re-verify hash matches (DB lookup already filtered
+      // but we constant-time check the returned hash to guard against any
+      // hypothetical SQL-layer mistake or middleware reordering — same
+      // pattern as runner-auth.ts:80).
+      if (!safeHashEquals(candidate.tokenHash, tokenHash)) return null;
 
-    // Atomic single-use claim. UPDATE returns the row only if it was
-    // unconsumed AND unexpired at the moment of the update.
-    const claimed = await db
-      .update(magicLinkTokens)
-      .set({ consumedAt: new Date(), consumedByIp: consumedByIp ?? null })
-      .where(
-        and(
-          eq(magicLinkTokens.tokenHash, tokenHash),
-          isNull(magicLinkTokens.consumedAt),
-          sql`${magicLinkTokens.expiresAt} > NOW()`,
-        ),
-      )
-      .returning({
-        id: magicLinkTokens.id,
-        userId: magicLinkTokens.userId,
-        companyId: magicLinkTokens.companyId,
-        purpose: magicLinkTokens.purpose,
-        targetRefKind: magicLinkTokens.targetRefKind,
-        targetRefId: magicLinkTokens.targetRefId,
+      // Atomic single-use claim. UPDATE returns the row only if it was
+      // unconsumed AND unexpired at the moment of the update.
+      const claimed = await tx
+        .update(magicLinkTokens)
+        .set({ consumedAt: new Date(), consumedByIp: consumedByIp ?? null })
+        .where(
+          and(
+            eq(magicLinkTokens.tokenHash, tokenHash),
+            isNull(magicLinkTokens.consumedAt),
+            sql`${magicLinkTokens.expiresAt} > NOW()`,
+          ),
+        )
+        .returning({
+          id: magicLinkTokens.id,
+          userId: magicLinkTokens.userId,
+          companyId: magicLinkTokens.companyId,
+          purpose: magicLinkTokens.purpose,
+          targetRefKind: magicLinkTokens.targetRefKind,
+          targetRefId: magicLinkTokens.targetRefId,
+        });
+
+      if (claimed.length === 0) return null;
+      const r = claimed[0];
+
+      await tx.insert(activityLog).values({
+        companyId: r.companyId,
+        actorType: "user",
+        actorId: r.userId,
+        action: "magic_link.consumed",
+        entityType: "magic_link",
+        entityId: r.id,
+        details: {
+          purpose: r.purpose,
+          targetRefKind: r.targetRefKind,
+          targetRefId: r.targetRefId,
+          consumedByIp: consumedByIp ?? null,
+        },
       });
 
-    if (claimed.length === 0) return null;
-    const r = claimed[0];
-
-    return {
-      id: r.id,
-      userId: r.userId,
-      companyId: r.companyId,
-      purpose: r.purpose as MagicLinkPurpose,
-      targetRefKind: r.targetRefKind as MagicLinkTargetRefKind | null,
-      targetRefId: r.targetRefId,
-    };
+      return {
+        id: r.id,
+        userId: r.userId,
+        companyId: r.companyId,
+        purpose: r.purpose as MagicLinkPurpose,
+        targetRefKind: r.targetRefKind as MagicLinkTargetRefKind | null,
+        targetRefId: r.targetRefId,
+      };
+    });
   }
 
   /**

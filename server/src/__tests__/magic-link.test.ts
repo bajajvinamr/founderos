@@ -20,11 +20,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
+  activityLog,
   authUsers,
   companies,
   createDb,
   magicLinkTokens,
 } from "@founderos/db";
+import { eq } from "drizzle-orm";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -60,6 +62,7 @@ describeEmbeddedPostgres("magic-link service (S6.7)", () => {
 
   beforeEach(async () => {
     await db.execute(sql`TRUNCATE TABLE "magic_link_tokens" CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE "activity_log" CASCADE`);
     await db.execute(sql`TRUNCATE TABLE "companies" CASCADE`);
     await db.execute(sql`TRUNCATE TABLE "user" CASCADE`);
 
@@ -396,6 +399,134 @@ describeEmbeddedPostgres("magic-link service (S6.7)", () => {
             (${userA}, ${companyA}::uuid, 'collision'::text, 'view_brief', NOW() + interval '1 hour')
         `),
       ).rejects.toThrow();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PR-6a (council 2026-05-07 P1-6) — audit log coverage for magic-link
+  // issuance + consumption. The token table itself records consumed_at /
+  // consumed_by_ip but the audit trail (who, when, against what target)
+  // lives in `activity_log`. Pre-fix: zero rows. The audit was supposed
+  // to be the source of truth for "who issued / consumed which token,"
+  // but neither code path wrote to it.
+  //
+  // Atomicity invariant: the token op + audit row must commit together.
+  // Both `issue()` and `consume()` are wrapped in `db.transaction`, so
+  // an audit-insert failure rolls back the underlying token op too.
+  // Negative case: failed consumes (bad format, expired, double-consume)
+  // do NOT write audit rows — only successful state changes are
+  // audited, otherwise the table fills with attempt-noise.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("activity_log audit trail (PR-6a)", () => {
+    it("issue() writes one activity_log row with action='magic_link.issued' and full target context", async () => {
+      const issued = await service.issue({
+        userId: userA,
+        companyId: companyA,
+        purpose: "approve_action",
+        targetRefKind: "approval",
+        targetRefId: "approval-123",
+        ttlMinutes: 30,
+      });
+
+      const rows = await db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.entityId, issued.id));
+
+      expect(rows).toHaveLength(1);
+      const r = rows[0];
+      expect(r.action).toBe("magic_link.issued");
+      expect(r.entityType).toBe("magic_link");
+      expect(r.entityId).toBe(issued.id);
+      expect(r.companyId).toBe(companyA);
+      expect(r.actorId).toBe(userA);
+      expect(r.actorType).toBe("user");
+      expect(r.details).toMatchObject({
+        purpose: "approve_action",
+        targetRefKind: "approval",
+        targetRefId: "approval-123",
+        ttlMinutes: 30,
+      });
+    });
+
+    it("consume() writes one activity_log row with action='magic_link.consumed' on success", async () => {
+      const issued = await service.issue({
+        userId: userA,
+        companyId: companyA,
+        purpose: "view_brief",
+        ttlMinutes: 60,
+      });
+      // After issue there is exactly one audit row (the issue event).
+      const consumed = await service.consume(issued.token, "198.51.100.7");
+      expect(consumed).not.toBeNull();
+
+      const rows = await db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.entityId, issued.id));
+
+      // Exactly two rows now: issued + consumed, in order.
+      expect(rows).toHaveLength(2);
+      const consumedRow = rows.find((r) => r.action === "magic_link.consumed");
+      expect(consumedRow).toBeDefined();
+      expect(consumedRow!.entityType).toBe("magic_link");
+      expect(consumedRow!.companyId).toBe(companyA);
+      expect(consumedRow!.actorId).toBe(userA);
+      expect(consumedRow!.actorType).toBe("user");
+      expect(consumedRow!.details).toMatchObject({
+        purpose: "view_brief",
+        consumedByIp: "198.51.100.7",
+      });
+    });
+
+    it("consume() does NOT write an audit row when the token is rejected (bad format / unknown / double / expired)", async () => {
+      // 1. Bad format → null, no audit row.
+      const r1 = await service.consume("not-a-valid-token");
+      expect(r1).toBeNull();
+
+      // 2. Unknown hash (well-formed but never issued) → null, no audit row.
+      const r2 = await service.consume(
+        "mlt_" + "A".repeat(48),
+      );
+      expect(r2).toBeNull();
+
+      // 3. Successful issue + double-consume — only the FIRST consume audits.
+      const issued = await service.issue({
+        userId: userA,
+        companyId: companyA,
+        purpose: "view_brief",
+        ttlMinutes: 60,
+      });
+      const first = await service.consume(issued.token);
+      expect(first).not.toBeNull();
+      const second = await service.consume(issued.token);
+      expect(second).toBeNull();
+
+      // After all of the above: only 2 audit rows total
+      // (issued + first-consume). The bad / unknown / double-consume
+      // attempts left no trace.
+      const allRows = await db.select().from(activityLog);
+      expect(allRows).toHaveLength(2);
+      expect(allRows.map((r) => r.action).sort()).toEqual([
+        "magic_link.consumed",
+        "magic_link.issued",
+      ]);
+    });
+
+    it("issue() failure (validation) does NOT write an audit row", async () => {
+      // Validation throws synchronously BEFORE the transaction opens, so
+      // no token row, no audit row.
+      await expect(
+        service.issue({
+          userId: userA,
+          companyId: companyA,
+          purpose: "approve_action", // missing target ref → throws
+          ttlMinutes: 60,
+        }),
+      ).rejects.toThrow(/target ref/);
+
+      const rows = await db.select().from(activityLog);
+      expect(rows).toHaveLength(0);
     });
   });
 });
