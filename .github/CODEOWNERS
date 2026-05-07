@@ -3,17 +3,17 @@
 # As the team grows, split into domain teams: @team-backend, @team-frontend, @team-infra, etc.
 
 # Default owner for all paths
-* @vbseries245
+* @bajajvinamr
 
 # Core areas with explicit ownership (currently same person)
-/server/ @vbseries245
-/ui/ @vbseries245
-/packages/db/ @vbseries245
-/docs/ @vbseries245
-/.github/ @vbseries245
+/server/ @bajajvinamr
+/ui/ @bajajvinamr
+/packages/db/ @bajajvinamr
+/docs/ @bajajvinamr
+/.github/ @bajajvinamr
 
 # Package files require owner review
-package.json @vbseries245
-pnpm-lock.yaml @vbseries245
-pnpm-workspace.yaml @vbseries245
-.npmrc @vbseries245
+package.json @bajajvinamr
+pnpm-lock.yaml @bajajvinamr
+pnpm-workspace.yaml @bajajvinamr
+.npmrc @bajajvinamr
