@@ -1,3 +1,8 @@
+## [0.9.0] - 2026-05-07 06:24:06 UTC
+
+### Added
+- feat(ui): human-readable verbs for cycle-6 audit actions (#68) (8c59d84)
+
 ## [0.8.3] - 2026-05-07 06:11:40 UTC
 
 ### Fixed
