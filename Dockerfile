@@ -69,8 +69,19 @@ ENV VITE_BUILD_TIME=${VITE_BUILD_TIME}
 
 RUN pnpm --filter @founderos/ui build
 RUN pnpm --filter @founderos/plugin-sdk build
+# `packages/db` MUST be built BEFORE the server (or any other consumer) since
+# Fly's release_command at fly.toml runs `node /app/packages/db/dist/migrate.js`.
+# Without this step, prior CI deploys silently relied on whatever `dist/` was
+# in the host working tree that got picked up by `COPY . .`. From a clean CI
+# checkout that dist directory is absent and the release_command fails with
+# `Cannot find module '/app/packages/db/dist/migrate.js'`. Building it inside
+# the image makes the deploy hermetic — the fly.toml contract is satisfied
+# regardless of the host's local build state. Verified 2026-05-07 against
+# deploy-prod.yml run that previously failed with the missing-module error.
+RUN pnpm --filter @founderos/db build
 RUN pnpm --filter @founderos/server build
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
+RUN test -f packages/db/dist/migrate.js || (echo "ERROR: packages/db build output missing — release_command will fail" && exit 1)
 
 FROM base AS production
 ARG USER_UID=1000
