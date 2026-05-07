@@ -52,6 +52,7 @@ kill_timeout = "5s"
   FOUNDEROS_DEPLOYMENT_MODE = "authenticated"
   FOUNDEROS_DEPLOYMENT_EXPOSURE = "public"
   FOUNDEROS_AUTH_PROVIDER = "supabase"
+  FOUNDEROS_BYO_RUNNER_ENABLED = "1"
 
 # Persistent volume for /founderos — holds instance config, secrets key,
 # workspace files, agent session state. Survives deploys + restarts.
