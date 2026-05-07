@@ -1498,10 +1498,17 @@ describe("realizeExecutionWorkspace", () => {
 });
 
 describe("ensureRuntimeServicesForRun", () => {
-  // retry: 2 — the triple-sequence (start, reuse, release, start-fresh) has a narrow
-  // cleanup timing window that occasionally trips under parallel-worker CPU pressure.
-  // The production code path is correct; it's the test's sequential-assert contract
-  // that's timing-sensitive. Retry catches the rare race without masking real bugs.
+  // retry: 2 + readiness timeoutSec: 30 — the triple-sequence (start, reuse,
+  // release, start-fresh) is timing-sensitive under parallel-worker CPU
+  // pressure. Root cause: the spawned `node -e` HTTP service occasionally
+  // takes > 10s to bind its ephemeral port when the host is under heavy I/O
+  // load from sibling test files. The production code path itself is
+  // correct; only the test's wall-clock budget for service-boot was tight.
+  // 30s gives 3x headroom; combined with retry: 2, the worst-case is 90s
+  // before declaring real failure. Documented at docs/CI-KNOWN-FLAKES.md §2.
+  // Removal criteria: if the spawn-overhead profile changes (e.g., the test
+  // is converted to a mock HTTP server per fix-option 4 in CI-KNOWN-FLAKES),
+  // the timeout can be tightened back to 10s.
   it("reuses shared runtime services across runs and starts a new service after release", { retry: 2 }, async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-runtime-workspace-"));
     const workspace = buildWorkspace(workspaceRoot);
@@ -1518,7 +1525,7 @@ describe("ensureRuntimeServicesForRun", () => {
             readiness: {
               type: "http",
               urlTemplate: "http://127.0.0.1:{{port}}",
-              timeoutSec: 10,
+              timeoutSec: 30,
               intervalMs: 100,
             },
             expose: {
