@@ -74,6 +74,54 @@ export const AGENT_ADAPTER_TYPES = [
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number] | (string & {});
 
+/**
+ * Onboarding adapter choices — the values the founder can pick in the
+ * "Plug in your brain" wizard step. Wider than the historical
+ * Claude-only triplet as of S7.0.2 (2026-05-07).
+ *
+ * This list is the SHARED CONTRACT between:
+ *   - ui/src/components/onboarding/onboarding-types.ts (re-exports as `ADAPTER_CHOICES`)
+ *   - server/src/routes/onboarding.ts (Zod `adapterChoiceSchema`)
+ *   - server/src/services/adapter-resolver.ts (`mapOnboardingChoiceToAdapter`)
+ *
+ * The CLI choices (everything except `anthropic_api` and `skip`) map 1:1
+ * to entries in `AGENT_ADAPTER_TYPES`. `anthropic_api` is a sentinel
+ * meaning "use the founder's API key directly" and currently still
+ * collapses to `claude_local` at provisioning time (no Anthropic-API
+ * adapter exists; see onboarding-bootstrap.ts comment block). `skip`
+ * defers configuration entirely.
+ *
+ * IMPORTANT: when adding a new CLI here, also:
+ *   1. Confirm it exists in `AGENT_ADAPTER_TYPES` above + the
+ *      `runner_jobs.adapter_type` CHECK constraint (migration 0105).
+ *   2. Extend `mapOnboardingChoiceToAdapter` in adapter-resolver.ts.
+ *   3. Add a card to the wizard UI step (S7.4 territory).
+ */
+export const ONBOARDING_ADAPTER_CHOICES = [
+  "claude_local",
+  "codex_local",
+  "gemini_local",
+  "opencode_local",
+  "pi_local",
+  "cursor",
+  "hermes_local",
+  "anthropic_api",
+  "skip",
+] as const;
+export type OnboardingAdapterChoice = (typeof ONBOARDING_ADAPTER_CHOICES)[number];
+
+/** Subset of OnboardingAdapterChoice that spawn a local CLI binary. */
+export const ONBOARDING_CLI_CHOICES = [
+  "claude_local",
+  "codex_local",
+  "gemini_local",
+  "opencode_local",
+  "pi_local",
+  "cursor",
+  "hermes_local",
+] as const;
+export type OnboardingCliChoice = (typeof ONBOARDING_CLI_CHOICES)[number];
+
 export const AGENT_ROLES = [
   "ceo",
   "cto",
