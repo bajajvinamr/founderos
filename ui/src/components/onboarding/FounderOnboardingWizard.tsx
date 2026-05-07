@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@/lib/router";
 import { api } from "@/api/client";
+import { formatBootstrapError } from "@/lib/onboarding-bootstrap-error";
 import { useDialog } from "@/context/DialogContext";
 import { useCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
@@ -228,9 +229,10 @@ export function FounderOnboardingWizard() {
           : `/${prefix}/dashboard`,
       );
     } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "Failed to bootstrap company",
-      );
+      // PR-8 / P1-E2 — preserve HTTP status semantics + requestId in the
+      // error string. See ui/src/lib/onboarding-bootstrap-error.ts for
+      // the status-aware headlines and the "Reference: <id>" footer.
+      setSubmitError(formatBootstrapError(err));
     } finally {
       setSubmitting(false);
     }
