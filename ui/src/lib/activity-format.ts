@@ -37,6 +37,10 @@ const ACTIVITY_ROW_VERBS: Record<string, string> = {
   "agent.paused": "put on leave",
   "agent.resumed": "brought back",
   "agent.terminated": "let go of",
+  // Cycle-6 (PR-6b, #60): regression-pinned audit row already wrote
+  // `action: "agent.deleted"`; verb mapping was missing so the timeline
+  // rendered raw text. Added 2026-05-07 alongside lifecycle-audit work.
+  "agent.deleted": "removed",
   "agent.key_created": "issued access key for",
   "agent.budget_updated": "updated comp for",
   "agent.runtime_session_reset": "reset session for",
@@ -57,6 +61,16 @@ const ACTIVITY_ROW_VERBS: Record<string, string> = {
   "company.updated": "updated company",
   "company.archived": "archived",
   "company.budget_updated": "updated budget for",
+  // Cycle-6 audit actions (2026-05-07) — DB-layer rows landed via
+  // PR-6 split. UI-layer verb mappings here so the founder-visible
+  // activity feed reads naturally:
+  //   - PR-6a (#59): magicLinkService.issue() / consume() write rows
+  //     scoped to the consuming user's company.
+  //   - PR-6c (#63): billingGate(...) writes a row scoped to the agent's
+  //     company on every 402 (including fail-CLOSED branch).
+  "magic_link.issued": "issued a magic link for",
+  "magic_link.consumed": "claimed a magic link for",
+  "billing.gate_blocked": "blocked a billing-gated request on",
 };
 
 const ISSUE_ACTIVITY_LABELS: Record<string, string> = {
