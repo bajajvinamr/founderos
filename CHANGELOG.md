@@ -1,3 +1,8 @@
+## [0.8.3] - 2026-05-07 06:11:40 UTC
+
+### Fixed
+- fix(e2e): navigate to /landing directly, not / (mode drift) (#70) (679f45a)
+
 ## [0.8.2] - 2026-05-07 05:49:58 UTC
 
 ## [0.8.2] - 2026-05-07 05:41:44 UTC
