@@ -110,7 +110,16 @@ jobs:
     name: test (+ coverage)
     needs: install
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 2026-05-07 — bumped 15→20 after PR #59 timed out at 15m01s.
+    # Recent baseline (PRs #56/57/58 merged 2026-05-07) is 10:22-10:47.
+    # The job runs vitest TWICE: once with --coverage (line ~136), then
+    # again as `Enforce test pass` (line ~189) to surface a non-zero exit
+    # since the first run masks failures via `|| echo` so the coverage
+    # artifact can upload. Two vitest runs × growing test suite = drift
+    # toward the wall. 20m gives ~2x buffer over current baseline; if the
+    # baseline crosses 15m organically, refactor to capture exit code from
+    # step 1 instead of re-running.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
