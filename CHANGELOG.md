@@ -1,3 +1,8 @@
+## [0.10.1] - 2026-05-07 09:31:54 UTC
+
+### Fixed
+- fix(test): bump workspace-runtime readiness timeout 10s→30s to eliminate flake (#83) (f88fb29)
+
 ## [0.10.0] - 2026-05-07 09:01:24 UTC
 
 ## [0.10.0] - 2026-05-07 08:40:51 UTC
