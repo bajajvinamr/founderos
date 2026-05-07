@@ -1,3 +1,8 @@
+## [0.6.13] - 2026-05-07 05:14:15 UTC
+
+### Fixed
+- fix(e2e): decouple onboarding-v2 spec from literal step count (P1-9b) (#61) (2827b4b)
+
 ## [0.6.12] - 2026-05-06 22:21:40 UTC
 
 ## [0.6.11] - 2026-05-06 22:05:46 UTC
