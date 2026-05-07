@@ -7,12 +7,19 @@ Legend: `[ ]` open · `[x]` verified by test or browser flow · `[~]` partial ·
 ## Buyer Journey
 
 - [ ] Founder onboarding browser flow tested end-to-end (signup → company → agents → first issue)
-- [ ] Company creation atomic — partial-state corruption impossible (transaction boundary verified under failure injection)
-- [ ] Onboarding error/retry surfaces a clear next action (not a silent half-state)
-- [ ] Agent creation tested (UI + service + audit log)
+- [x] **Company creation atomic — partial-state corruption impossible** — verified by `server/src/__tests__/onboarding-bootstrap-atomicity.test.ts`. Three explicit properties pinned: (1) happy path creates all expected rows across companies / memberships / secrets / goals / projects / agents; (2) **failure rollback** — when a downstream service throws mid-bootstrap, NO orphan rows are left in any of those tables (transaction boundary verified under failure injection); (3) the orchestrator at `server/src/services/onboarding-bootstrap.ts` wraps every persistent step in one `db.transaction`. The pre-2026-05-04 `routes/onboarding.ts:240-407` implementation called six service factories sequentially with no outer transaction — the new test pins that shape can't regress.
+- [x] **Onboarding error/retry surfaces a clear next action** — closed by PR #64 (commit `a613c55`, merged 2026-05-07). `ui/src/lib/onboarding-bootstrap-error.ts` produces status-aware headlines for 401/402/403/409/5xx (e.g., 401 → "Sign in again", 402 → "Subscription required", 409 → "Onboarding already in progress") plus `Reference: <requestId>` footer when `ApiError.requestId` is non-empty. Wired into `ui/src/components/onboarding/FounderOnboardingWizard.tsx`'s catch block. Tests at `ui/src/lib/onboarding-bootstrap-error.test.ts` (11 cases: 6 status branches + 2 footer cases + 3 non-Error paths). Buyer hits an error → sees explicit next action + a `Reference:` ID they can quote in support, not a silent half-state.
+- [x] **Agent creation tested (UI + service + audit log)** — full stack closed.
+  - **Audit log layer**: PR #72 (`agents-lifecycle-audit.test.ts` extended with `POST /companies/:companyId/agents` describe block — 3 cases: happy path, details payload, local-implicit fallback). RED-proof verified.
+  - **Service layer**: pre-existing coverage in `agents-service.test.ts` (CRUD operations, status transitions).
+  - **UI / E2E layer**: `tests/e2e/onboarding.spec.ts` exercises the FounderOnboardingWizard which provisions agent slots end-to-end during onboarding bootstrap.
 - [ ] Work assignment tested (founder → agent + agent → agent handoff)
-- [ ] Agent execution bounded (budget, pause, role permissions all enforce)
-- [ ] Founder review/approve/reject/request-changes browser flow tested
+- [x] **Agent execution bounded (budget, pause, role permissions all enforce)** — three legs each individually pinned, aggregate covered.
+  - **Budget**: `budget-blocks-run-start.test.ts` (see line 29).
+  - **Pause (agent-level)**: `paused-agent-blocks-heartbeat.test.ts` (see line 30).
+  - **Pause (company cascade)**: `paused-company-cascades-heartbeat-block.test.ts` from PR #71 (see line 31).
+  - **Role permissions**: `agents-self-patch-escalation.test.ts` (see lines 26-27) — 7 reject + 3 allow assertions covering the full denylist for self-PATCH escalation.
+- [~] **Founder review/approve/reject/request-changes — server side closed; browser flow uncovered.** Server-side audit emissions pinned by PR #74 (`approvals-decision-audit-pin.test.ts`) for `approval.approved` / `approval.rejected` / `approval.revision_requested`. Idempotency + cross-tenant guards pinned by `approval-routes-idempotency.test.ts`. Issue-side decisions (status changes by founder) covered by PR #75 (`issue-activity-events-routes.test.ts` extended). Browser-flow E2E (founder clicks Approve in the UI, sees the row update, sees the activity timeline reflect it) is a separate spec that does not exist today — queued for the Day 2 buyer-journey browser-flows stream.
 - [x] **Audit trail visible to founder** — full stack closed across PRs #59 / #60 / #63 / #68 / #71 / #72.
   - **DB layer**: `magic_link.issued` + `magic_link.consumed` (PR #59), `agent.paused/resumed/terminated/deleted` regression-pinned (PR #60), `billing.gate_blocked` (PR #63), `agent.created` regression-pinned (PR #72).
   - **API/service layer**: `server/src/services/activity.ts` `list()` filters only on `companyId / agentId / entityType / entityId` — no allowlist on `action`, so any new audit row reaches the UI without a code change.
@@ -21,7 +28,7 @@ Legend: `[ ]` open · `[x]` verified by test or browser flow · `[~]` partial ·
 
 ## Safety
 
-- [ ] Tenant isolation tested everywhere a `companyId` appears in a route or query
+- [~] **Tenant isolation — strong patterns pinned, "everywhere" claim is unbounded.** Pattern coverage exists in: `tenant-isolation.test.ts` (DB-layer multi-tenant query scoping), `tenant-invariants-migration.test.ts` (schema-level invariants), `authz-strict-isolation.test.ts:35-46` (route-level `assertCompanyAccess` short-circuit on cross-tenant agent JWT), `authz-helpers.test.ts:97-128` (parallel `actorCanAccessCompany` boolean helper), `e2e/tests/multi-company-deep.spec.ts` (E2E walk: 3+ companies × agents × goals × projects × issues, each company's list endpoints scoped). What's NOT pinned: a systematic regression test that grep's for every `companyId` use across `server/src/routes/*.ts` and asserts each handler enforces scope — that's a meta-test not currently in the codebase. The pattern is correct everywhere it's been audited; the `[~]` reflects that "everywhere" is unbounded by tooling.
 - [~] Agent cannot self-approve — issue-lifecycle path covered (existing `issue-execution-policy-self-approval.test.ts`); standalone `/approvals/:id/approve` already board-gated by `assertBoard(req)` so agents physically cannot reach it (verified 2026-05-07)
 - [x] **Agent cannot escalate to founder/admin role** — closed by PR #43 (commit `9e212f4`, merged 2026-05-07). Self-PATCH `role` → 403. Test: `agents-self-patch-escalation.test.ts`. ADR: `docs/decisions/0001-agent-self-patch-privileged-field-denylist.md`.
 - [x] **Agent cannot reset own budget / un-pause self / change own reportsTo / raise own permissionLevel** — same PR #43, same test file. 7 reject + 3 allow assertions covering the full denylist.
