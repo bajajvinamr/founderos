@@ -5,7 +5,7 @@
  * WS push, and BullMQ Slack daily summary cron are wired in follow-ups.
  */
 
-import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { authUsers } from "./auth.js";
 
@@ -83,5 +83,22 @@ export const notifications = pgTable(
     ),
     /** Reverse lookup: "did we already notify about approval=abc?" */
     refIdx: index("idx_notifications_ref").on(table.refKind, table.refId),
+    /**
+     * Dedup partial unique (PR-3, migration 0103). At most one unread
+     * notification per (company, user, kind, ref_kind, ref_id) tuple
+     * when both ref fields are set. The partial WHERE clause lives in
+     * the migration SQL — Drizzle's TS DSL doesn't carry the WHERE here,
+     * but the runtime constraint is enforced on the live DB. Service
+     * code in `server/src/services/notifications.ts:create()` uses
+     * INSERT ... ON CONFLICT DO NOTHING with explicit `where:` to
+     * collapse concurrent duplicates atomically (closes prior TOCTOU).
+     */
+    unreadDedupUq: uniqueIndex("uniq_notifications_unread_dedup").on(
+      table.companyId,
+      table.userId,
+      table.kind,
+      table.refKind,
+      table.refId,
+    ),
   }),
 );
