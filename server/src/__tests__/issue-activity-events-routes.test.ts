@@ -14,6 +14,11 @@ const mockIssueService = vi.hoisted(() => ({
   getRelationSummaries: vi.fn(),
   listWakeableBlockedDependents: vi.fn(),
   getWakeableParentAfterChildCompletion: vi.fn(),
+  // Lifecycle audit pin additions (issue.created/deleted) — POST/DELETE
+  // handlers don't share with the blocker/reviewer/approver tests.
+  create: vi.fn(),
+  remove: vi.fn(),
+  listAttachments: vi.fn(),
 }));
 
 const mockLogActivity = vi.hoisted(() => vi.fn(async () => undefined));
@@ -240,5 +245,141 @@ describe("issue activity event routes", () => {
         }),
       }),
     );
+  });
+
+  // -- core lifecycle audit pins ------------------------------------
+  //
+  // The blocker/reviewer/approver tests above cover the *secondary*
+  // audit emissions on PATCH /issues/:id (when the body includes the
+  // relevant relation arrays). These three tests pin the *primary*
+  // lifecycle audit calls — issue.created on POST, issue.updated on
+  // PATCH (status change), issue.deleted on DELETE — that exist in
+  // production at issues.ts:824 / 1082 / 1444. They were previously
+  // unpinned: a refactor that strips one of these `logActivity(...)`
+  // calls would silently break the founder's ability to see "I
+  // created PAP-580" / "I closed PAP-580" / "I deleted PAP-580" in
+  // the activity timeline.
+  //
+  // Same TDD-as-regression-guard pattern as PR-6b (agent lifecycle),
+  // PR-72 (agent.created), PR-74 (approval decisions).
+
+  describe("POST /companies/:companyId/issues", () => {
+    it("emits issue.created with title + identifier in details", async () => {
+      const created = {
+        id: "33333333-3333-4333-8333-333333333333",
+        companyId: "company-1",
+        identifier: "PAP-999",
+        title: "First task",
+        status: "todo",
+        assigneeAgentId: null,
+        assigneeUserId: null,
+        executionPolicy: null,
+        executionState: null,
+      };
+      mockIssueService.create.mockResolvedValue(created);
+
+      const res = await request(createApp())
+        .post("/api/companies/company-1/issues")
+        .send({ title: "First task" });
+
+      expect(res.status).toBe(201);
+      expect(mockIssueService.create).toHaveBeenCalledTimes(1);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          companyId: "company-1",
+          actorType: "user",
+          actorId: "local-board",
+          action: "issue.created",
+          entityType: "issue",
+          entityId: created.id,
+          details: expect.objectContaining({
+            title: "First task",
+            identifier: "PAP-999",
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("PATCH /issues/:id (status change)", () => {
+    it("emits issue.updated with the status delta in details._previous", async () => {
+      const issue = makeIssue();
+      mockIssueService.getById.mockResolvedValue(issue);
+      // Match the field-shape the production handler diffs over.
+      mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+        ...issue,
+        ...patch,
+        updatedAt: new Date(),
+      }));
+
+      const res = await request(createApp())
+        .patch(`/api/issues/${issue.id}`)
+        .send({ status: "in_progress" });
+
+      expect(res.status).toBe(200);
+      // Pin the primary audit call. The handler may emit other rows for
+      // related side-effects (e.g., reopen-on-comment), but for a plain
+      // status change there should be exactly one issue.updated audit.
+      const updatedCalls = mockLogActivity.mock.calls.filter(
+        (call) => (call[1] as { action?: string }).action === "issue.updated",
+      );
+      expect(updatedCalls).toHaveLength(1);
+      const callArg = updatedCalls[0]?.[1] as Record<string, unknown>;
+      expect(callArg).toMatchObject({
+        companyId: "company-1",
+        actorType: "user",
+        actorId: "local-board",
+        action: "issue.updated",
+        entityType: "issue",
+        entityId: issue.id,
+      });
+      const details = callArg.details as Record<string, unknown>;
+      expect(details).toMatchObject({
+        status: "in_progress",
+        identifier: "PAP-580",
+      });
+    });
+  });
+
+  describe("DELETE /issues/:id", () => {
+    it("emits issue.deleted with entity reference but no details payload required", async () => {
+      const issue = makeIssue();
+      mockIssueService.getById.mockResolvedValue(issue);
+      mockIssueService.listAttachments.mockResolvedValue([]);
+      mockIssueService.remove.mockResolvedValue(issue);
+
+      const res = await request(createApp())
+        .delete(`/api/issues/${issue.id}`);
+
+      expect(res.status).toBe(200);
+      expect(mockIssueService.remove).toHaveBeenCalledWith(issue.id);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          companyId: "company-1",
+          actorType: "user",
+          actorId: "local-board",
+          action: "issue.deleted",
+          entityType: "issue",
+          entityId: issue.id,
+        }),
+      );
+    });
+
+    it("does NOT emit when issue not found (404)", async () => {
+      mockIssueService.getById.mockResolvedValue(null);
+
+      const res = await request(createApp())
+        .delete("/api/issues/00000000-0000-4000-8000-000000000000");
+
+      expect(res.status).toBe(404);
+      expect(mockIssueService.remove).not.toHaveBeenCalled();
+      // No issue.deleted audit row — production code guards on getById.
+      const deletedCalls = mockLogActivity.mock.calls.filter(
+        (call) => (call[1] as { action?: string }).action === "issue.deleted",
+      );
+      expect(deletedCalls).toHaveLength(0);
+    });
   });
 });
