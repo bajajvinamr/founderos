@@ -490,6 +490,121 @@ describe("PR-6b — agent lifecycle audit regression guard", () => {
     });
   });
 
+  // -- permissions ---------------------------------------------------
+  //
+  // PATCH /agents/:id/permissions at agents.ts:1636 emits one
+  // `agent.permissions_updated` activity_log row at agents.ts:1676-1689.
+  // This is a SECURITY-RELEVANT audit — privilege changes (canCreateAgents,
+  // canAssignTasks) must always leave a tenant-scoped trail so a buyer
+  // forensic review can answer "who escalated this agent's permissions
+  // and when?". A refactor that reorders the access.setPrincipalPermission
+  // → logActivity sequence and accidentally moves logActivity into a
+  // conditional branch would silently break the audit and only a council
+  // pass would catch it.
+
+  describe("PATCH /agents/:id/permissions", () => {
+    it("writes activity_log row on success with action='agent.permissions_updated'", async () => {
+      mockAgentService.getById.mockResolvedValue(baseAgent);
+      mockAgentService.updatePermissions.mockResolvedValue({
+        ...baseAgent,
+        permissions: { canCreateAgents: true },
+      });
+      mockAgentService.getChainOfCommand.mockResolvedValue([]);
+      mockAccessService.getMembership.mockResolvedValue(null);
+      mockAccessService.listPrincipalGrants.mockResolvedValue([]);
+
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .patch(`/api/agents/${agentId}/permissions`)
+        .send({ canCreateAgents: true, canAssignTasks: false });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentService.updatePermissions).toHaveBeenCalledTimes(1);
+      expect(mockLogActivity).toHaveBeenCalledTimes(1);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          companyId,
+          actorType: "user",
+          actorId: "user-abc",
+          action: "agent.permissions_updated",
+          entityType: "agent",
+          entityId: agentId,
+        }),
+      );
+    });
+
+    it("audit details carry canCreateAgents + canAssignTasks (privilege-change context)", async () => {
+      // Buyer forensic surface: the audit details payload is what tells a
+      // reviewer WHICH permission flipped. Without this, the row would
+      // only say "permissions_updated" with no before/after — useless for
+      // incident response. Pinning the contract so the details payload
+      // can't silently shrink during a refactor.
+      mockAgentService.getById.mockResolvedValue(baseAgent);
+      mockAgentService.updatePermissions.mockResolvedValue({
+        ...baseAgent,
+        permissions: { canCreateAgents: true },
+      });
+      mockAgentService.getChainOfCommand.mockResolvedValue([]);
+      mockAccessService.getMembership.mockResolvedValue(null);
+      mockAccessService.listPrincipalGrants.mockResolvedValue([]);
+
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .patch(`/api/agents/${agentId}/permissions`)
+        .send({ canCreateAgents: true, canAssignTasks: false });
+
+      expect(res.status).toBe(200);
+      const callArg = mockLogActivity.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(callArg).toBeDefined();
+      const details = callArg.details as Record<string, unknown>;
+      // effectiveCanAssignTasks = (role==='ceo') || canCreateAgents || req.body.canAssignTasks.
+      // baseAgent.role='engineer'; canCreateAgents flipped to true → effective=true.
+      expect(details).toMatchObject({
+        canCreateAgents: true,
+        canAssignTasks: true,
+      });
+    });
+
+    it("falls back to actorId='board' when userId is absent (local_implicit)", async () => {
+      mockAgentService.getById.mockResolvedValue(baseAgent);
+      mockAgentService.updatePermissions.mockResolvedValue({
+        ...baseAgent,
+        permissions: { canCreateAgents: false },
+      });
+      mockAgentService.getChainOfCommand.mockResolvedValue([]);
+      mockAccessService.getMembership.mockResolvedValue(null);
+      mockAccessService.listPrincipalGrants.mockResolvedValue([]);
+
+      const app = createApp(boardActorNoUserId);
+      const res = await request(app)
+        .patch(`/api/agents/${agentId}/permissions`)
+        .send({ canCreateAgents: false, canAssignTasks: false });
+
+      expect(res.status).toBe(200);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          actorId: "board",
+          action: "agent.permissions_updated",
+        }),
+      );
+    });
+
+    it("does NOT write audit row when agent not found (404)", async () => {
+      mockAgentService.getById.mockResolvedValue(null);
+
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .patch(`/api/agents/${agentId}/permissions`)
+        .send({ canCreateAgents: true, canAssignTasks: true });
+
+      expect(res.status).toBe(404);
+      expect(mockAgentService.updatePermissions).not.toHaveBeenCalled();
+      expect(mockLogActivity).not.toHaveBeenCalled();
+    });
+  });
+
   // -- cross-handler invariants -------------------------------------
 
   describe("authz / actor-type guards", () => {
