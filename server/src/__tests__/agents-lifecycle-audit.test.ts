@@ -74,6 +74,8 @@ const mockAgentService = vi.hoisted(() => ({
   updatePermissions: vi.fn(),
   getChainOfCommand: vi.fn(),
   resolveByReference: vi.fn(),
+  createApiKey: vi.fn(),
+  listKeys: vi.fn(),
 }));
 
 const mockHeartbeatService = vi.hoisted(() => ({
@@ -601,6 +603,124 @@ describe("PR-6b — agent lifecycle audit regression guard", () => {
 
       expect(res.status).toBe(404);
       expect(mockAgentService.updatePermissions).not.toHaveBeenCalled();
+      expect(mockLogActivity).not.toHaveBeenCalled();
+    });
+  });
+
+  // -- API key creation ---------------------------------------------
+  //
+  // POST /agents/:id/keys at agents.ts:2155 emits one `agent.key_created`
+  // activity_log row at agents.ts:2162-2170. This is SECURITY-CRITICAL —
+  // API keys are credentials that let the agent authenticate as itself.
+  // A buyer forensic review answer to "who issued this agent's key and
+  // when?" must land on a structural audit row, not log-grep guesswork.
+  // Same audit class as agent.permissions_updated — pinning here so a
+  // refactor can't silently strip the credential-mutation trail.
+  //
+  // Note: the handler at line 2161 has an `if (agent)` guard around the
+  // logActivity call (defends against TOCTOU where agent is deleted
+  // between createApiKey and getById). Including a test for that guard
+  // pins the defensive contract: removing it is a different kind of
+  // regression than removing the audit itself.
+
+  describe("POST /agents/:id/keys", () => {
+    const baseKey = {
+      id: "key-1",
+      name: "default",
+      plaintext: "fos_xxxxxxxx",
+    };
+
+    it("writes activity_log row on success with action='agent.key_created'", async () => {
+      mockAgentService.createApiKey.mockResolvedValue(baseKey);
+      mockAgentService.getById.mockResolvedValue(baseAgent);
+
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .post(`/api/agents/${agentId}/keys`)
+        .send({ name: "default" });
+
+      expect(res.status).toBe(201);
+      expect(mockAgentService.createApiKey).toHaveBeenCalledWith(agentId, "default");
+      expect(mockLogActivity).toHaveBeenCalledTimes(1);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          companyId,
+          actorType: "user",
+          actorId: "user-abc",
+          action: "agent.key_created",
+          entityType: "agent",
+          entityId: agentId,
+        }),
+      );
+    });
+
+    it("audit details carry keyId + name (credential-mutation context)", async () => {
+      // The audit details payload is the only structural surface that
+      // tells a reviewer WHICH key was issued. Without keyId in the row,
+      // a forensic walk has no way to correlate the audit to the
+      // currently-active or revoked credential — useless for incident
+      // response. Pinning the contract.
+      mockAgentService.createApiKey.mockResolvedValue({
+        id: "key-forensic-target",
+        name: "scraper-bot",
+        plaintext: "fos_secret",
+      });
+      mockAgentService.getById.mockResolvedValue(baseAgent);
+
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .post(`/api/agents/${agentId}/keys`)
+        .send({ name: "scraper-bot" });
+
+      expect(res.status).toBe(201);
+      const callArg = mockLogActivity.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(callArg).toBeDefined();
+      const details = callArg.details as Record<string, unknown>;
+      expect(details).toMatchObject({
+        keyId: "key-forensic-target",
+        name: "scraper-bot",
+      });
+    });
+
+    it("falls back to actorId='board' when userId is absent (local_implicit)", async () => {
+      mockAgentService.createApiKey.mockResolvedValue(baseKey);
+      mockAgentService.getById.mockResolvedValue(baseAgent);
+
+      const app = createApp(boardActorNoUserId);
+      const res = await request(app)
+        .post(`/api/agents/${agentId}/keys`)
+        .send({ name: "default" });
+
+      expect(res.status).toBe(201);
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          actorId: "board",
+          action: "agent.key_created",
+        }),
+      );
+    });
+
+    it("does NOT write audit row when getById returns null (TOCTOU guard)", async () => {
+      // Defensive contract pin: handler at agents.ts:2161 wraps
+      // logActivity in `if (agent)` to defend against the agent being
+      // deleted between createApiKey and getById. Test pins the guard so
+      // a refactor that removes it (and ends up calling logActivity with
+      // a null agent → throw) gets caught. Note: createApiKey still
+      // happens in this case (key persisted to DB), so the response is
+      // 201 — the audit drop is the only forensic loss, which is the
+      // pinned regression.
+      mockAgentService.createApiKey.mockResolvedValue(baseKey);
+      mockAgentService.getById.mockResolvedValue(null);
+
+      const app = createApp(boardActorWithUserId);
+      const res = await request(app)
+        .post(`/api/agents/${agentId}/keys`)
+        .send({ name: "default" });
+
+      expect(res.status).toBe(201);
+      expect(mockAgentService.createApiKey).toHaveBeenCalledTimes(1);
       expect(mockLogActivity).not.toHaveBeenCalled();
     });
   });
