@@ -1,3 +1,8 @@
+## [0.8.1] - 2026-05-07 05:34:59 UTC
+
+### Fixed
+- fix(ui): preserve HTTP status + requestId on onboarding bootstrap error (P1-8) (#64) (a613c55)
+
 ## [0.7.0] - 2026-05-07 05:30:23 UTC
 
 ### Added
