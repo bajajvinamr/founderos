@@ -273,8 +273,8 @@ function executionFromAdapter(adapter: FounderOSAdapterType): "cli" | "api" {
  *   - `skip` defaults to `claude_local` to preserve pre-S7 behavior
  *     for founders who defer the decision; they can change it later
  *     in Settings → Providers.
- *   - `cursor` is intentionally left as `"cursor"` (no `_local`
- *     suffix) for now; S7.0.4 will rename it to `cursor_local`.
+ *   - `cursor_local` aligns with the rest of the `*_local` family
+ *     post-S7.0.4 rename (was `"cursor"` pre-2026-05-07).
  */
 export function mapOnboardingChoiceToAdapter(
   choice: OnboardingAdapterChoice,
@@ -292,8 +292,8 @@ export function mapOnboardingChoiceToAdapter(
       return "opencode_local";
     case "pi_local":
       return "pi_local";
-    case "cursor":
-      return "cursor";
+    case "cursor_local":
+      return "cursor_local";
     case "hermes_local":
       return "hermes_local";
   }

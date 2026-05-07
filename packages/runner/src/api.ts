@@ -40,7 +40,7 @@ export type RunnerAdapterType =
   | "gemini_local"
   | "opencode_local"
   | "pi_local"
-  | "cursor"
+  | "cursor_local"
   | "openclaw_gateway"
   | "hermes_local"
   | "byo_runner"

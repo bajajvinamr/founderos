@@ -67,7 +67,7 @@ export const AGENT_ADAPTER_TYPES = [
   "gemini_local",
   "opencode_local",
   "pi_local",
-  "cursor",
+  "cursor_local",
   "openclaw_gateway",
   "hermes_local",
   "byo_runner",
@@ -103,7 +103,7 @@ export const ONBOARDING_ADAPTER_CHOICES = [
   "gemini_local",
   "opencode_local",
   "pi_local",
-  "cursor",
+  "cursor_local",
   "hermes_local",
   "anthropic_api",
   "skip",
@@ -117,7 +117,7 @@ export const ONBOARDING_CLI_CHOICES = [
   "gemini_local",
   "opencode_local",
   "pi_local",
-  "cursor",
+  "cursor_local",
   "hermes_local",
 ] as const;
 export type OnboardingCliChoice = (typeof ONBOARDING_CLI_CHOICES)[number];

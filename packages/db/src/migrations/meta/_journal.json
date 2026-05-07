@@ -722,6 +722,13 @@
       "when": 1781200000000,
       "tag": "0105_runner_jobs_adapter_type",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1781300000000,
+      "tag": "0106_cursor_adapter_type_rename",
+      "breakpoints": true
     }
   ]
 }

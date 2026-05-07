@@ -421,7 +421,7 @@ describe("onboarding bootstrap — Zod adapterChoice schema accepts wider CLI se
     "gemini_local",
     "opencode_local",
     "pi_local",
-    "cursor",
+    "cursor_local",
     "hermes_local",
   ] as const;
 

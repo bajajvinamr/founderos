@@ -231,7 +231,7 @@ describe("mapOnboardingChoiceToAdapter (S7.0.2)", () => {
     ["gemini_local", "gemini_local"],
     ["opencode_local", "opencode_local"],
     ["pi_local", "pi_local"],
-    ["cursor", "cursor"],
+    ["cursor_local", "cursor_local"],
     ["hermes_local", "hermes_local"],
   ];
 

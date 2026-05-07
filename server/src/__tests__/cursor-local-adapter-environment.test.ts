@@ -46,7 +46,7 @@ describe("cursor environment diagnostics", () => {
 
     const result = await testEnvironment({
       companyId: "company-1",
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       config: {
         command: process.execPath,
         cwd,
@@ -73,7 +73,7 @@ describe("cursor environment diagnostics", () => {
 
     const result = await testEnvironment({
       companyId: "company-1",
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       config: {
         command: "agent",
         cwd,
@@ -104,7 +104,7 @@ describe("cursor environment diagnostics", () => {
 
     const result = await testEnvironment({
       companyId: "company-1",
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       config: {
         command: "agent",
         cwd,
@@ -147,7 +147,7 @@ describe("cursor environment diagnostics", () => {
 
       const result = await testEnvironment({
         companyId: "company-1",
-        adapterType: "cursor",
+        adapterType: "cursor_local",
         config: {
           command: process.execPath,
           cwd,
@@ -178,7 +178,7 @@ describe("cursor environment diagnostics", () => {
 
       const result = await testEnvironment({
         companyId: "company-1",
-        adapterType: "cursor",
+        adapterType: "cursor_local",
         config: {
           command: process.execPath,
           cwd,
