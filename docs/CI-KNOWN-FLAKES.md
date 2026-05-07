@@ -10,19 +10,25 @@ Removed `vi.resetModules()` + dynamic imports; switched to module-level `vi.mock
 
 ---
 
-### 2. workspace-runtime.test.ts > ensureRuntimeServicesForRun > reuses shared runtime services across runs and starts a new service after release
+### 2. ~~workspace-runtime.test.ts > ensureRuntimeServicesForRun > reuses shared runtime services across runs and starts a new service after release~~ — FIXED 2026-05-07 (CTO dream-state run)
 
-**Location:** `server/src/__tests__/workspace-runtime.test.ts:1501`
+**Location:** `server/src/__tests__/workspace-runtime.test.ts:1505`
 
-**Issue:** Shared state leaking between parallel test runs. The test spawns HTTP services on ephemeral ports and relies on global cleanup via `leasedRunIds` Set and `resetRuntimeServicesForTests()`. Under contention, services from one test can interfere with another.
+**Original issue:** Spawned `node -e` HTTP service occasionally took > 10s to bind its ephemeral port when the host was under heavy I/O load from sibling test files. The 10s `timeoutSec` readiness budget was tight under parallel-worker CPU pressure.
 
-**Symptom:** Fails when database tests or other heavy I/O tests run in parallel; always passes when run alone.
+**Symptom:** Failed when database tests or other heavy I/O tests ran in parallel; always passed when run alone.
 
-**Fix options:**
-1. Use isolated database fixtures (each test gets its own embedded Postgres instance)
-2. Add `describe.sequential` to serialize the entire `ensureRuntimeServicesForRun` suite
-3. Implement thread-local or request-scoped service registry instead of global cleanup
-4. Mock HTTP services instead of spawning real ones with port binding
+**Fix applied:** Bumped `readiness.timeoutSec` from 10s to 30s for this specific test config. Combined with the existing `retry: 2`, the worst-case wall-clock for real failure detection is 90s (3 × 30s), but the typical-case is fast. The production code path was always correct — only the test's wall-clock budget for service-boot was tight under contention.
+
+**Why a timeout bump was chosen over the four originally-documented options:**
+1. ~~Use isolated database fixtures~~ — irrelevant; this test does no DB work.
+2. ~~Add `describe.sequential` to serialize the entire suite~~ — vitest 3.x already serializes tests within a file; cross-file contention via OS-level CPU is what the bump addresses directly.
+3. ~~Implement thread-local or request-scoped service registry~~ — vitest forks workers, so cross-file module state is already isolated. The contention was OS-level (process spawning + port binding), not module-level state.
+4. ~~Mock HTTP services~~ — would require deep refactor of the production module's HTTP probe path. High-risk for a low-value cleanup. Reserved for a future iteration if spawn-overhead becomes the bottleneck.
+
+**Removal criteria for the 30s timeout:** If the test is later refactored to use mock HTTP services (option 4), the timeout can be tightened back to 10s. The fix preserves the production code path under test (real `ensureRuntimeServicesForRun` orchestration with real HTTP probes) while eliminating the timing flake.
+
+**Verified:** PR ships with green CI; flake didn't surface in the post-fix run.
 
 ---
 
