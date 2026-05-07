@@ -1,3 +1,8 @@
+## [0.6.15] - 2026-05-07 05:25:17 UTC
+
+### Fixed
+- fix(observability): audit log magic-link issuance + consumption (P1-6a) (#59) (bd5c9f2)
+
 ## [0.6.13] - 2026-05-07 05:14:15 UTC
 
 ### Fixed
