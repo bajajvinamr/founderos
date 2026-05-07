@@ -1,3 +1,10 @@
+## [0.10.4] - 2026-05-07 09:36:18 UTC
+
+## [0.10.3] - 2026-05-07 09:35:13 UTC
+
+### Fixed
+- fix(deploy): build packages/db inside Docker image so release_command works (#84) (223cd5a)
+
 ## [0.10.1] - 2026-05-07 09:31:54 UTC
 
 ### Fixed
