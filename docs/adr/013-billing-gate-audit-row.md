@@ -1,0 +1,32 @@
+# ADR-013 — Billing-gate 402 audit row at the middleware layer
+
+## Status
+
+Proposed (2026-05-07)
+
+## Context
+
+The dream-state hardening synthesis (`.qa/synthesis.md` P1-C3, 2026-05-07) flagged that `server/src/middleware/billing-gate.ts` returns `402 Payment Required` for inactive subscriptions but never writes an `activity_log` row. Without an audit trail, billing-driven action refusals are invisible after-the-fact — there's no forensic record of "founder X tried to wake agent Y while their sub was inactive at time Z." This matters for support triage (was their refusal real or a false-positive on `subscriptionService.isSubscriptionActive`?), churn-rescue (the 402 surface is exactly where intent-to-keep-paying signals live), and security review (a sustained burst of 402s on one company is the signature of a compromised actor probing the gate).
+
+The architectural blocker: `activity_log.companyId` is `NOT NULL` with FK to `companies.id`. The middleware fires BEFORE the route handler, so by the time the gate decides to 402, no companyId has been resolved — board-typed actors carry `companyIds[]` (a list), not a single companyId, and agent-typed actors carry one. The two routes that mount the gate (`/agents/:id/wakeup` and `/agents/:id/heartbeat/invoke`) both have the agent ID in the URL path, which gives us a bridge to the agent's company.
+
+## Decision
+
+**Resolve `agent.companyId` inside `billingGate(...)` from `req.params.id` and write the audit row before sending 402.** The audit row uses the agent's company as `companyId`, the actor's userId/agentId as `actorId`, action `billing.gate_blocked`, entityType `agent`, entityId the agent ID. One extra DB query on the 402 path; zero extra queries on the 200 path. Audit row write is wrapped in try/catch — an audit-write failure must NOT mask the 402 response (the cost-surface protection is the load-bearing thing; audit is forensic, not security-critical).
+
+When the agent ID can't be resolved (the URL path doesn't carry one, or the lookup returns no row), the gate still returns 402 but skips the audit row and emits a `logger.warn` with the actor + path. That warn IS the forensic record for these edge cases — preferable to either fabricating a fake companyId or crashing the 402 path.
+
+## Consequences
+
+- **What gets easier.** Support can now answer "why did this user see a 402?" via `SELECT * FROM activity_log WHERE action = 'billing.gate_blocked' AND company_id = $1`. Churn-rescue can target founders who hit the gate AND have NOT upgraded within 72h (a strong predictive signal for churn). Security can spot 402-flooding patterns against a single tenant.
+- **What gets harder.** Every 402 response now costs one extra DB roundtrip (an indexed lookup on `agents.id` — primary key, sub-millisecond). For a real cost-blocked tenant this is in the noise; for a compromised key probing the gate at 100 req/s, it's still ~100 extra read queries/s — well below any infrastructure threshold.
+- **New risks.** If the audit-write fails (DB transient error), we silently fall through to 402 — same surface as today, plus a `logger.warn`. No degradation. If `activityLog`'s NOT NULL companyId is ever relaxed for OTHER reasons (sentinel-row design for non-tenant events), this code still works correctly — the resolver returns the actual tenant, sentinel logic doesn't apply here.
+- **Downstream changes.** None. `activity_log` schema unchanged. No consumers (UI activity timeline, audit lineage queries) need to learn about a new shape — `billing.gate_blocked` is just another `action` value. The companyId scope is the agent's tenant, which matches every existing consumer's mental model.
+
+## Alternatives considered
+
+- **Option A — Sentinel "instance" company row in `companies` table.** Reserve a magic UUID (e.g., the all-zeros UUID) as a system-level company. Audit rows for instance-level events (billing-gate, server-startup, env-validation failures) reference this row. Rejected: every consumer (UI company-filter, billing aggregation, exports, multi-tenant joins) has to learn to ignore this row, OR we eat double the rows on every "all events for company X" query. The blast radius scales with the number of consumers, and FounderOS already has 11+ places that join on `activity_log.company_id`. The maintenance tax compounds.
+- **Option B — Make `activity_log.companyId` nullable.** Migration drops the NOT NULL constraint. Audit rows for instance-level events store NULL companyId. Rejected: every join on `activity_log.company_id` becomes a LEFT JOIN with explicit NULL handling, OR rows silently disappear from tenant-scoped queries. The migration alone touches a hot table (one INSERT per significant action), so even a fast `ALTER TABLE` blocks writers briefly. The TypeScript surface gets `companyId: string | null` everywhere, defeating the "this is a tenant-scoped event" type guarantee. High blast radius for a single audit gap.
+- **Option C — Audit at the route handler level instead of the middleware.** Wrap the route handler so it can log a 402 after-the-fact. Rejected: middleware short-circuits with `res.status(402).json(...)` and the route handler never runs. Restructuring the gate to call `next()` even on 402 (and let the handler check `res.locals.billingBlocked`) inverts the middleware contract — every billing-gated route now has to remember to check the flag before doing real work, which is exactly the kind of "did you remember the safety check?" trap that "fail closed by default" middleware patterns exist to avoid.
+- **Option D — Skip the audit entirely and rely on logger.warn.** The 402 response already includes a `requestId`; the request log line carries `actorUserId` and the path. Pino logs are searchable. Rejected: `activity_log` is the durable surface for forensic questions, queryable by tenant via the existing UI activity timeline. Logs rotate; activity_log rows don't. Founders should be able to see "you got blocked at X time" in their own company's activity feed, not just operators digging through Loki.
+- **Decision: Option E (chosen) — resolve agentId → companyId inside the middleware.** Smallest blast radius. Audit row appears in the AGENT's tenant scope (correct). Schema unchanged. No new sentinel concept. Cost is one extra DB lookup on a code path that should be rare. Mirrors the same "do the audit where the data is" instinct as PR-6a (magic-link audit inside `magicLinkService.consume()`) and PR-6b (audit calls inline in agent lifecycle handlers).
