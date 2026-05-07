@@ -1,6 +1,80 @@
 # CONTINUE.md — FounderOS next-step source of truth
 
-_Last updated: 2026-05-06 night (Day 7 of 7-day LRP; **Sprint 6 closed at 10/10 + Day 6 E2E gate landed + Day 7 PRD verification VERDICT: READY FOR CLIENT**) by Claude_
+_Last updated: 2026-05-07 (Dream-State LRP cycle 9 — 12 PRs landed, audit story comprehensive, scorecard truthful) by Claude_
+
+## ✅ 2026-05-07 — Dream-State LRP iteration 9 close-out
+
+**Status:** 12 PRs merged this iteration (#67 through #78), all green CI, zero merge conflicts. Audit-trail surface is comprehensive across 4 founder-facing entity types (agents, approvals, issues, billing). Scorecard reflects truthful state after honest `[~]` partial classifications.
+
+### Iteration ledger (ordered top-to-bottom on `main`)
+
+| PR | Type | What it shipped |
+|---|---|---|
+| #67 | chore | cycle-6 closeout: audit gaps + onboarding error + branch-protection draft |
+| #68 | feat(ui) | human-readable verbs for cycle-6 audit actions (5 new verbs in `formatActivityVerb`) |
+| #69 | chore | scorecard reconciliation — flip 4 stale `[ ]` to `[x]` |
+| #70 | fix(e2e) | navigate to `/landing` directly to decouple from mode-conditional root routing |
+| #71 | test(heartbeat) | pin company-pause cascade to active agents (`paused-company-cascades-heartbeat-block.test.ts`) |
+| #72 | test(agents) | pin `agent.created` audit row alongside lifecycle pins |
+| #73 | chore | cycle-7 reconciliation — flip 2 `[~]` partials to `[x]` |
+| #74 | test(approvals) | pin founder decision audit rows (`approved`/`rejected`/`revision_requested`) |
+| #75 | test(issues) | pin core issue lifecycle audit rows (`created`/`updated`/`deleted`) |
+| #76 | chore | cycle-8 reconciliation — 4 `[ ]` → `[x]`, 2 `[ ]` → `[~]` |
+| #77 | test(agents) | pin `agent.permissions_updated` audit row (security-relevant; closes agent.* lifecycle) |
+| #78 | chore | flip "Destructive actions gated" to `[~]` per-leg evidence (1/4 closed) |
+
+### What's now pinned vs. unpinned
+
+**Audit-trail surface — fully RED-proof pinned (14 emissions, 4 entity types):**
+- `agent.created`, `agent.paused`, `agent.resumed`, `agent.terminated`, `agent.deleted`, `agent.permissions_updated` (6 actions, agent lifecycle complete)
+- `approval.approved`, `approval.rejected`, `approval.revision_requested` (3 actions, founder decision surface complete)
+- `issue.created`, `issue.updated`, `issue.deleted` (3 actions, issue lifecycle complete)
+- `billing.gate_blocked`, `magic_link.issued`, `magic_link.consumed` (3 actions, prior iterations)
+
+**Audit-trail surface — unpinned (lower priority, NOT buyer-handover blocking):**
+- `agent.config_rolled_back`, `agent.runtime_session_reset`, `agent.skills_synced`, `agent.instructions_*`
+- `issue.attachment_added/removed`, `issue.document_*`, `issue.read_marked`, `issue.inbox_archived`
+
+### Next-stream candidates (in priority order)
+
+1. **Founder onboarding browser-flow E2E** (scorecard line 9, `[ ]`) — extend `e2e/tests/critical-flows.spec.ts` with signup → company → agents → first-issue end-to-end walk. Different shape than past 12 PRs (Playwright + test data + deployed origin). Best suited to a fresh context.
+2. **Founder review/approve browser-flow E2E** (scorecard line 16, `[~]`) — server-side audit pinned (PR #74); browser flow is the gap. Founder clicks Approve, sees row update, sees activity timeline reflect.
+3. **Work assignment E2E** (scorecard line 13, `[ ]`) — founder → agent + agent → agent handoff.
+4. **Destructive action gating completion** (scorecard line 40, `[~]`) — billing-change / deploy / migration legs need test pins. Billing-change is the most actionable (subscription-mutation audits aren't pinned yet).
+5. **Tenant isolation regression-meta-test** (scorecard line 20, `[~]`) — systematic test that grep's every `companyId` use across `server/src/routes/*.ts` and asserts each handler enforces scope.
+
+### Founder-action gates still outstanding
+
+These are NOT engineering tasks — they require Vinamr's hand on the keyboard:
+
+1. **Branch protection switches** — flip 5 toggles in GitHub UI (per `docs/ops/branch-protection.md` after PR #65).
+2. **Issue #66 production orphan** — DELETE the orphan `instance_admin` row in production DB.
+3. **PR-3 Notifications dedup partial unique index** — requires `/council` before implementation.
+4. **PR-10 14+ enum-shaped TEXT columns lack CHECK constraints** — requires `/council` before implementation.
+5. **`FOUNDEROS_BILLING_GATE_ENABLED=1` in prod** — flip the flag once Stripe webhook telemetry is clean.
+6. **Stripe live keys** — one-way-door flip per `docs/ops/design-partner-onboarding-kit.md`.
+
+### Pattern established this iteration
+
+**TDD-as-regression-guard with RED-proof verification.** Every audit pin follows the same shape:
+
+1. Find the `logActivity(...)` emission point in production code.
+2. Add a test that asserts `mockLogActivity.toHaveBeenCalledWith(...)` with the exact contract.
+3. Comment out the production `logActivity` call → verify the test fails (RED-proof).
+4. Revert the production code → verify the test passes (GREEN).
+5. Ship the test only.
+
+This produces tests that fail loudly when a refactor silently strips an audit row — the buyer-handover risk the directive flagged. Reusable for the unpinned audits in the lower-priority list above.
+
+### Honest signal — what's left in the dream-state directive
+
+- Buyer journey browser-flow E2E (4 specs, ~2-3 hours each in fresh context)
+- UX section: 7 unchecked items mostly browser-flow heavy
+- Day 6 integration burn-in (deferred per directive's park-and-continue)
+
+The audit story has hit a natural saturation point. Next stream of work benefits from a fresh context window — the iteration's RED-proof pattern is documented above for re-use.
+
+---
 
 ## ✅ 2026-05-06 night — Day 7 PRD VERIFICATION — VERDICT: READY FOR CLIENT
 
