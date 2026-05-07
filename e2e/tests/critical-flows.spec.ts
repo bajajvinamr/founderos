@@ -252,7 +252,7 @@ test.describe("api-public", () => {
 // 7 — Onboarding v2 feature flag renders 6-step wizard
 // ────────────────────────────────────────────────────────────────────────
 test.describe("onboarding", () => {
-  test("[onboarding-v2-flag] /onboarding renders the 6-step wizard (not legacy)", async ({
+  test("[onboarding-v2-flag] /onboarding renders the multi-step V2 wizard (not legacy)", async ({
     page,
     profile,
   }) => {
@@ -261,11 +261,12 @@ test.describe("onboarding", () => {
     await page.goto("/onboarding");
     await waitForAppReady(page);
 
-    // The V2 wizard is `FounderOnboardingWizard` with 6 distinct steps.
-    // Legacy `OnboardingWizard` shows a different layout. We detect V2 by
-    // looking for the step-counter pattern (e.g. "Step 1 of 6") OR a known
-    // V2-only heading. If neither shows up, we fail with a diagnostic that
-    // names which file to look at.
+    // V2 = `FounderOnboardingWizard` (renders "Step N of M" text — currently
+    // M = 8 after S1.9 added departments and S-TC1 added telemetry consent).
+    // Legacy = `OnboardingWizard` (4 steps, no "Step N of M" copy).
+    // We detect V2 by the step-counter pattern, NOT by literal step count —
+    // M has grown 6→7→8 over time and will keep growing. Coupling the spec
+    // to a specific count means every wizard scope-add silently breaks E2E.
     //
     // NOTE: The wizard opens via the DialogContext when the user clicks
     // "Start onboarding", not always on page load — so we click the button
@@ -284,16 +285,18 @@ test.describe("onboarding", () => {
         "check FOUNDEROS_ONBOARDING_V2 flag and ui/src/components/onboarding/FounderOnboardingWizard.tsx",
     ).toBeVisible({ timeout: 10_000 });
 
-    // Six-step signal. We accept any one of:
-    //   - text "of 6" / "1 of 6" / "Step 1 of 6"
-    //   - six step indicators in a tablist-like region
+    // V2 signal: the "Step {N} of {TOTAL_STEPS}" copy at
+    // FounderOnboardingWizard.tsx:277. Legacy wizard does not render this
+    // pattern. Decoupled from the literal value of TOTAL_STEPS so future
+    // scope-adds don't silently break this gate.
     const dialogText = await wizard.innerText();
-    const hasSixStepText = /of\s*6\b/i.test(dialogText);
-    const stepDots = await wizard.locator("[data-step], [role=tab], [aria-label*=step i]").count();
+    const hasStepCounter = /Step\s+\d+\s+of\s+\d+/i.test(dialogText);
     expect(
-      hasSixStepText || stepDots >= 6,
-      "Onboarding wizard is not the 6-step V2 flow (no 'of 6' text, <6 step markers). " +
-        "Either the flag is off or the legacy wizard is rendering — see ui/src/App.tsx FOUNDEROS_ONBOARDING_V2.",
+      hasStepCounter,
+      "Onboarding wizard is not the V2 flow (no 'Step N of M' counter). " +
+        "Either FOUNDEROS_ONBOARDING_V2 is off and the legacy wizard is rendering, " +
+        "or FounderOnboardingWizard.tsx step-counter copy was removed — " +
+        "see ui/src/App.tsx and ui/src/components/onboarding/FounderOnboardingWizard.tsx:277.",
     ).toBe(true);
   });
 });
