@@ -16,7 +16,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { ApiError, RunnerApiClient, makeEventId, type CompletionBody, type RunnerEvent } from "./api.js";
-import type { RunnerConfig } from "./config.js";
+import { isDispatcherV2Enabled, type RunnerConfig } from "./config.js";
 import { RUNNER_VERSION } from "./version.js";
 import { runClaude } from "./spawn.js";
 
@@ -58,6 +58,24 @@ export async function runRunnerLoop(opts: RunnerLoopOptions): Promise<{ jobsProc
   const { config, maxJobs } = opts;
   const logger = opts.logger ?? consoleLogger(config.logLevel);
   const api = opts.apiClient ?? new RunnerApiClient(config);
+
+  // PHASE-S7 dispatcher gate. Absence = legacy runClaude (safe default).
+  // When truthy, downstream tickets (S7.A.1..S7.D.6) will replace this
+  // branch with a real multi-adapter dispatch. Until then we warn and
+  // fall through to runClaude so the flag is wireable end-to-end without
+  // needing the v2 module to exist yet.
+  // TODO(S7.A.5): replace with dispatch() once handlers land.
+  const v2 = isDispatcherV2Enabled();
+  if (v2) {
+    console.info("[dispatcher] v2 (multi-adapter)");
+    if (!opts.spawnFn) {
+      console.warn(
+        "[dispatcher] v2 path requested but not yet implemented; falling back to v1",
+      );
+    }
+  } else {
+    console.info("[dispatcher] v1 (legacy runClaude)");
+  }
   const spawnImpl = opts.spawnFn ?? runClaude;
 
   let jobsProcessed = 0;
