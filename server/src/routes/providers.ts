@@ -79,11 +79,15 @@ function buildErrorResponse(
   const reason = result.reason ?? "unknown";
 
   if (reason === "invalid_key" || reason === "permission_denied") {
+    // S7.A.6 council 2026-05-08 P3: do NOT echo the distinguishing reason
+    // ("invalid_key" vs "permission_denied") to the client. Both block the
+    // founder identically; surfacing the difference triages stolen keys for
+    // an attacker (real-but-no-perm vs fake). The detailed reason still
+    // lands in `logger.info` (with sha256 keyRef) for support correlation.
     return {
       status: 401,
       body: {
         error: "invalid_key",
-        reason,
         requestId,
       },
     };

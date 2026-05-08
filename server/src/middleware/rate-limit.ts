@@ -1,6 +1,7 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request, Response, NextFunction } from "express";
 import { logger } from "./logger.js";
+import { getRequestId } from "../lib/request-context.js";
 
 /**
  * Supabase auth webhook limiter: 60 req/min per IP
@@ -230,6 +231,16 @@ export const providerValidateKeyLimiter = rateLimit({
     return ipKeyGenerator(req.ip || "unknown");
   },
   handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    // S7.A.6 council 2026-05-08 P3: include requestId in the body so the
+    // abuse-path response carries the same correlation id as every other
+    // error path. Without this, support cannot grep `fly logs | grep <id>`
+    // for an exhausted-limit complaint. getRequestId() returns the value
+    // set by requestIdMiddleware (mounted before this handler can fire).
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: "Too many validation attempts. Please try again in a few minutes.",
+      requestId: getRequestId(),
+    });
     logger.warn(
       {
         ip: _req.ip,
@@ -237,10 +248,6 @@ export const providerValidateKeyLimiter = rateLimit({
       },
       `Provider validate-key rate limit exceeded: ${options.message}`,
     );
-    res.status(429).json({
-      error: "rate_limit_exceeded",
-      message: "Too many validation attempts. Please try again in a few minutes.",
-    });
   },
 });
 

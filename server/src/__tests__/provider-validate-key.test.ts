@@ -232,7 +232,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     expect(res.body).toEqual({ valid: true });
   });
 
-  it("returns 401 invalid_key with requestId for Anthropic 401", async () => {
+  it("returns 401 invalid_key with requestId for Anthropic 401 (no distinguishing reason)", async () => {
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 401 }));
     const app = buildApp();
     const res = await request(app)
@@ -241,9 +241,49 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
       .send({ provider: "anthropic", apiKey: "sk-ant-invalid" });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("invalid_key");
-    expect(res.body.reason).toBe("invalid_key");
+    // S7.A.6 council 2026-05-08 P3: 401 body MUST NOT include `reason` —
+    // distinguishing "invalid_key" from "permission_denied" triages stolen
+    // keys for an attacker. Both upstream signals collapse to a single
+    // public 401 invalid_key.
+    expect(res.body.reason).toBeUndefined();
     expect(res.body.requestId).toEqual(expect.any(String));
     expect(res.body.requestId.length).toBeGreaterThan(0);
+  });
+
+  it("returns 401 invalid_key (no reason) for Anthropic 403 permission_denied — must NOT distinguish from 401", async () => {
+    // S7.A.6 council 2026-05-08 P3: prove the collapse — same public 401
+    // invalid_key shape regardless of whether upstream returned 401 or 403.
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 403 }));
+    const app = buildApp();
+    const res = await request(app)
+      .post("/providers/validate-key")
+      .set("X-Forwarded-For", freshIp())
+      .send({ provider: "anthropic", apiKey: "sk-ant-no-perm" });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("invalid_key");
+    expect(res.body.reason).toBeUndefined();
+    expect(res.body.requestId).toEqual(expect.any(String));
+  });
+
+  it("returns 429 provider_rate_limit when Anthropic upstream 429s (was falling to 500 before P2 fix)", async () => {
+    // S7.A.6 council 2026-05-08 P2: pre-fix, Anthropic returned reason
+    // "http_error_429" which fell through to the 500 validation_failed
+    // branch instead of the 429 provider_rate_limit branch.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(null, {
+        status: 429,
+        headers: { "retry-after": "17" },
+      }),
+    );
+    const app = buildApp();
+    const res = await request(app)
+      .post("/providers/validate-key")
+      .set("X-Forwarded-For", freshIp())
+      .send({ provider: "anthropic", apiKey: "sk-ant-throttle" });
+    expect(res.status).toBe(429);
+    expect(res.body.error).toBe("provider_rate_limit");
+    expect(res.body.retryAfter).toBe(17);
+    expect(res.body.requestId).toEqual(expect.any(String));
   });
 
   it("returns 401 invalid_key with requestId for OpenAI 401", async () => {
@@ -408,6 +448,10 @@ describe("POST /api/providers/validate-key — endpoint rate limit (10/5min/IP)"
       .send({ provider: "anthropic", apiKey: "sk-ant-11" });
     expect(blocked.status).toBe(429);
     expect(blocked.body.error).toBe("rate_limit_exceeded");
+    // S7.A.6 council 2026-05-08 P3: rate-limit-exceeded body MUST include
+    // requestId so support can correlate user-reported 429s with fly logs.
+    expect(blocked.body.requestId).toEqual(expect.any(String));
+    expect(blocked.body.requestId.length).toBeGreaterThan(0);
   });
 
   it("does NOT bleed between distinct IPs", async () => {

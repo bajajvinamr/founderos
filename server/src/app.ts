@@ -159,6 +159,14 @@ export async function createApp(
 ) {
   const app = express();
 
+  // S7.A.6 council 2026-05-08 P1: trust ONE proxy hop (Fly.io edge). Without
+  // this, req.ip resolves to the Fly edge IP and every IP-keyed rate limiter
+  // (BYO key validate, provider validate-key, onboarding bootstrap) collapses
+  // into a single global bucket — trivially exhaustible by any one attacker
+  // and unfair to legitimate users behind the same edge POP. The test app
+  // sets this explicitly; production was missing it.
+  app.set("trust proxy", 1);
+
   // Mount request-id BEFORE httpLogger so pino-http picks up `req.id`
   // from the AsyncLocalStorage context. Mount BEFORE express.json so
   // body-parse errors are logged with the correct correlation ID.
