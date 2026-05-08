@@ -160,10 +160,13 @@ export function providerRoutes(_db: Db) {
    *      (only fires if FOUNDEROS_NONCE_SECRET is missing in production —
    *      env-validation should catch this at boot, but defense in depth.)
    */
-  router.get("/providers/issue-nonce", issueNonceLimiter, (_req, res) => {
+  router.get("/providers/issue-nonce", issueNonceLimiter, (req, res) => {
     const requestId = getRequestId();
     try {
-      const { nonce, expiresAt } = issueNonce();
+      // S7.A.6 council 2026-05-08 post-fix R1 P1: bind the nonce to req.ip
+      // so a rotating-proxy attacker's nonce only validates from the same
+      // IP that issued it.
+      const { nonce, expiresAt } = issueNonce(req.ip);
       res.status(200).json({ nonce, expiresAt });
       return;
     } catch (err) {
@@ -210,8 +213,10 @@ export function providerRoutes(_db: Db) {
       // nonce BEFORE making any upstream call. A failed nonce check
       // returns 400 invalid_payload — same shape as a Zod failure — to
       // avoid distinguishing "wrong nonce" from "wrong body shape" for
-      // an attacker probing the abuse model.
-      const nonceCheck = consumeNonce(nonce);
+      // an attacker probing the abuse model. Post-fix R1 P1: req.ip is
+      // bound into the HMAC; an IP mismatch between issue and consume
+      // surfaces as "bad_signature" — no oracle for the IP.
+      const nonceCheck = consumeNonce(nonce, req.ip);
       if (!nonceCheck.ok) {
         logger.info(
           { provider, keyRef, outcome: "nonce_rejected", reason: nonceCheck.reason },

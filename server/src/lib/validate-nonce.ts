@@ -39,11 +39,24 @@
  *     TTL nonces — outstanding nonces just become invalid on reload).
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const NONCE_TTL_SECONDS = 60;
 const RANDOM_BYTES = 16;
 const CONSUMED_SET_CAP = 1024;
+
+/**
+ * Hash the caller's IP so we can sign a stable opaque token over it
+ * without leaking the raw IP into the wire format. sha256, hex, first
+ * 16 chars — collision space is 2^64 which is plenty for IP-binding.
+ * Empty / unknown IP gets a deterministic sentinel so the binding
+ * still works on `req.ip = "unknown"` paths (treated as "any unknown
+ * is the same caller", which is conservative).
+ */
+function ipHash(ip: string | null | undefined): string {
+  const normalized = (ip ?? "unknown").trim() || "unknown";
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+}
 
 const PROD = process.env.NODE_ENV === "production";
 
@@ -93,17 +106,6 @@ function getNonceSecret(): Buffer {
  */
 const consumed = new Map<string, number>();
 
-function evictIfNeeded(): void {
-  if (consumed.size <= CONSUMED_SET_CAP) return;
-  const overflow = consumed.size - CONSUMED_SET_CAP;
-  let evicted = 0;
-  for (const key of consumed.keys()) {
-    if (evicted >= overflow) break;
-    consumed.delete(key);
-    evicted += 1;
-  }
-}
-
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -129,32 +131,62 @@ export interface IssuedNonce {
 }
 
 /**
- * Issue a fresh single-use nonce. Caller is responsible for IP rate-limiting
- * (the issue endpoint mounts `issueNonceLimiter` from rate-limit.ts).
+ * Issue a fresh single-use nonce, bound to the caller's IP.
+ *
+ * S7.A.6 council 2026-05-08 post-fix R1 P1: the IP is signed into the HMAC
+ * payload — verified against `req.ip` at consume time. An attacker rotating
+ * residential proxies must now successfully validate against the SAME IP
+ * that issued the nonce, which means the nonce is single-use AND
+ * single-IP. Together with the per-IP rate limits on both endpoints, this
+ * actually closes the rotation bypass (was previously: 1 issue per IP + 1
+ * validate per IP = 1 validation per rotation; now: rotation invalidates
+ * the nonce so the validate fails).
+ *
+ * Caller is responsible for IP rate-limiting (the issue endpoint mounts
+ * `issueNonceLimiter` from rate-limit.ts).
  */
-export function issueNonce(): IssuedNonce {
+export function issueNonce(callerIp: string | null | undefined): IssuedNonce {
   const secret = getNonceSecret();
   const expiresAt = nowSeconds() + NONCE_TTL_SECONDS;
   const random = randomBytes(RANDOM_BYTES).toString("hex");
-  const payload = `${expiresAt}.${random}`;
-  const hmac = sign(payload, secret);
+  const ipBinding = ipHash(callerIp);
+  // Wire payload is unchanged for backwards-compat — the IP-binding is
+  // INSIDE the HMAC payload, not on the wire. Server has both halves at
+  // consume time; any IP mismatch surfaces as `bad_signature`.
+  const signingPayload = `${expiresAt}.${random}.${ipBinding}`;
+  const wirePayload = `${expiresAt}.${random}`;
+  const hmac = sign(signingPayload, secret);
   return {
-    nonce: `${payload}.${hmac}`,
+    nonce: `${wirePayload}.${hmac}`,
     expiresAt,
   };
 }
 
 export type ConsumeResult =
   | { ok: true }
-  | { ok: false; reason: "malformed" | "expired" | "bad_signature" | "already_consumed" };
+  | {
+      ok: false;
+      reason:
+        | "malformed"
+        | "expired"
+        | "bad_signature"
+        | "already_consumed"
+        | "cap_exhausted";
+    };
 
 /**
  * Verify and consume a nonce. Returns ok:true exactly once per valid
  * nonce, even under concurrent calls (insertion to the consumed Map is
  * atomic in a single Node event-loop turn — no need for an explicit lock
  * within one process).
+ *
+ * The caller's IP MUST match the IP that issued the nonce — IP mismatch
+ * surfaces as `bad_signature` (no oracle for IP guessing).
  */
-export function consumeNonce(raw: unknown): ConsumeResult {
+export function consumeNonce(
+  raw: unknown,
+  callerIp: string | null | undefined,
+): ConsumeResult {
   if (typeof raw !== "string" || raw.length === 0) {
     return { ok: false, reason: "malformed" };
   }
@@ -173,9 +205,15 @@ export function consumeNonce(raw: unknown): ConsumeResult {
   }
 
   // Verify signature BEFORE checking expiry (prevents an oracle that lets
-  // an attacker probe expiry without holding a valid HMAC).
+  // an attacker probe expiry without holding a valid HMAC). The signing
+  // payload includes the caller's ip-hash, so an IP mismatch between
+  // issuance and consumption fails this check — no separate "wrong_ip"
+  // reason surfaces.
   const secret = getNonceSecret();
-  const expected = sign(`${expiresAtStr}.${random}`, secret);
+  const expected = sign(
+    `${expiresAtStr}.${random}.${ipHash(callerIp)}`,
+    secret,
+  );
   if (!safeEqualHex(hmac, expected)) {
     return { ok: false, reason: "bad_signature" };
   }
@@ -185,14 +223,39 @@ export function consumeNonce(raw: unknown): ConsumeResult {
     return { ok: false, reason: "expired" };
   }
 
-  // Single-use check + insertion. The hmac is the dedup key (already
-  // unique per random, so we don't need to hash again).
+  // Single-use check.
   if (consumed.has(hmac)) {
     return { ok: false, reason: "already_consumed" };
   }
+
+  // Cap enforcement: sweep expired entries first, then refuse if still
+  // at cap. S7.A.6 council 2026-05-08 post-fix R1 P2: the prior FIFO
+  // eviction could remove an unexpired consumed nonce when the cap was
+  // hit, opening a replay window. New behavior: only expired entries are
+  // ever evicted; if all 1024 entries are unexpired, we refuse the new
+  // consume (cap_exhausted) instead of replacing one. The caller-tier
+  // rate limits prevent legitimate users from hitting this; an attacker
+  // hitting it is being throttled by intent.
+  if (consumed.size >= CONSUMED_SET_CAP) {
+    sweepExpired();
+    if (consumed.size >= CONSUMED_SET_CAP) {
+      return { ok: false, reason: "cap_exhausted" };
+    }
+  }
+
   consumed.set(hmac, expiresAt);
-  evictIfNeeded();
   return { ok: true };
+}
+
+/**
+ * Sweep expired entries from the consumed Set. O(N) but called only on
+ * cap-overflow, so amortized cost is bounded by issuance rate.
+ */
+function sweepExpired(): void {
+  const now = nowSeconds();
+  for (const [key, exp] of consumed) {
+    if (exp <= now) consumed.delete(key);
+  }
 }
 
 /**

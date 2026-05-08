@@ -36,12 +36,29 @@ import {
 } from "../lib/validate-nonce.js";
 
 /**
- * Issue a fresh single-use nonce for an endpoint test. Each call MUST be
- * used at most once — `consumeNonce` enforces this in the route handler,
- * so test loops that hit the route N times must call this N times.
+ * Issue a nonce bound to a specific IP. Use this when a test issues a
+ * nonce, then sends from a *different* (or earlier-captured) IP — the
+ * `freshNonce()` helper below auto-binds to the most-recent freshIp()
+ * which works for the dominant inline pattern but breaks when two IPs
+ * are captured up-front (e.g. the ipA/ipB cross-bleed test).
+ */
+function nonceFor(ip: string): string {
+  return issueNonce(ip).nonce;
+}
+
+/**
+ * Convenience: issue a nonce bound to the most-recent `freshIp()` value.
+ * Works for the dominant test pattern:
+ *
+ *     .set("X-Forwarded-For", freshIp())   // updates lastFreshIp
+ *     .send({ ..., nonce: freshNonce() }); // binds to lastFreshIp
+ *
+ * Supertest evaluates `.set(value)` before `.send(body)`, so the IP is
+ * captured before the nonce is issued. For tests that capture multiple
+ * IPs up-front before sending, use `nonceFor(ip)` explicitly.
  */
 function freshNonce(): string {
-  return issueNonce().nonce;
+  return issueNonce(lastFreshIp).nonce;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,12 +76,18 @@ function buildApp() {
 }
 
 // Generate a unique IP per test so the IP-based rate limiter (which has
-// module-scoped state) doesn't poison sibling tests.
+// module-scoped state) doesn't poison sibling tests. We also remember the
+// most-recent `freshIp()` call so the nonce-issuance helper can default to
+// it (supertest's `.set()` evaluates BEFORE `.send()` in the chain, so
+// `freshIp()` always runs before `freshNonce()` for inline-call patterns).
 let nextIp = 0;
+let lastFreshIp = "198.51.100.0";
 function freshIp(): string {
   nextIp += 1;
   // 198.51.100.0/24 is the TEST-NET-2 range — guaranteed non-routable.
-  return `198.51.100.${nextIp % 250}`;
+  const ip = `198.51.100.${nextIp % 250}`;
+  lastFreshIp = ip;
+  return ip;
 }
 
 // ---------------------------------------------------------------------------
@@ -485,17 +508,20 @@ describe("POST /api/providers/validate-key — endpoint rate limit (10/5min/IP)"
     const app = buildApp();
     const ipA = freshIp();
     const ipB = freshIp();
+    // Two IPs captured up-front means lastFreshIp now == ipB. Use the
+    // explicit `nonceFor(ip)` helper so each request gets a nonce bound
+    // to the SAME ip it sends from.
     for (let i = 0; i < 10; i += 1) {
       await request(app)
         .post("/providers/validate-key")
         .set("X-Forwarded-For", ipA)
-        .send({ provider: "anthropic", apiKey: `sk-ant-A-${i}`, nonce: freshNonce() });
+        .send({ provider: "anthropic", apiKey: `sk-ant-A-${i}`, nonce: nonceFor(ipA) });
     }
     // ipA is now exhausted; ipB should still be allowed.
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", ipB)
-      .send({ provider: "anthropic", apiKey: "sk-ant-B", nonce: freshNonce() });
+      .send({ provider: "anthropic", apiKey: "sk-ant-B", nonce: nonceFor(ipB) });
     expect(res.status).toBe(200);
   });
 });
@@ -558,7 +584,10 @@ describe("GET /api/providers/issue-nonce + single-use semantics", () => {
     const fetchSpy = vi.spyOn(global, "fetch");
     fetchSpy.mockResolvedValue(new Response(null, { status: 200 }));
     const app = buildApp();
-    const goodNonce = freshNonce();
+    // Issue + send from the SAME IP so the test isolates HMAC tampering
+    // from IP mismatch (both surface as bad_signature; pin one variable).
+    const ip = freshIp();
+    const goodNonce = nonceFor(ip);
     const parts = goodNonce.split(".");
     // Flip one hex char in the HMAC.
     const tamperedHmac =
@@ -566,7 +595,7 @@ describe("GET /api/providers/issue-nonce + single-use semantics", () => {
     const tampered = `${parts[0]}.${parts[1]}.${tamperedHmac}`;
     const res = await request(app)
       .post("/providers/validate-key")
-      .set("X-Forwarded-For", freshIp())
+      .set("X-Forwarded-For", ip)
       .send({ provider: "anthropic", apiKey: "sk-ant-x", nonce: tampered });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_payload");
@@ -579,15 +608,18 @@ describe("GET /api/providers/issue-nonce + single-use semantics", () => {
       .spyOn(global, "fetch")
       .mockResolvedValue(new Response(null, { status: 200 }));
     const app = buildApp();
-    const nonce = freshNonce();
-    const send = (ip: string) =>
+    // Both calls MUST come from the same IP — IP binding now means a
+    // different-IP second call would fail for IP-mismatch, not single-use.
+    const ip = freshIp();
+    const nonce = nonceFor(ip);
+    const send = () =>
       request(app)
         .post("/providers/validate-key")
         .set("X-Forwarded-For", ip)
         .send({ provider: "anthropic", apiKey: "sk-ant-x", nonce });
-    const first = await send(freshIp());
+    const first = await send();
     expect(first.status).toBe(200);
-    const second = await send(freshIp());
+    const second = await send();
     expect(second.status).toBe(400);
     expect(second.body.error).toBe("invalid_payload");
     expect(second.body.reason).toBe("invalid_nonce");
@@ -607,5 +639,57 @@ describe("GET /api/providers/issue-nonce + single-use semantics", () => {
     expect(blocked.status).toBe(429);
     expect(blocked.body.error).toBe("rate_limit_exceeded");
     expect(blocked.body.requestId).toEqual(expect.any(String));
+  });
+
+  it("validate-key REJECTS a nonce issued for a DIFFERENT IP (post-fix R1 P1: IP-binding)", async () => {
+    // S7.A.6 council 2026-05-08 post-fix R1 P1: this is the regression
+    // lock against the IP-rotation bypass. Nonce issued for ipA must NOT
+    // validate from ipB. Surfaces as bad_signature (no oracle for the IP).
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const app = buildApp();
+    const ipA = freshIp();
+    const ipB = freshIp();
+    const nonceA = nonceFor(ipA);
+    const res = await request(app)
+      .post("/providers/validate-key")
+      .set("X-Forwarded-For", ipB)
+      .send({ provider: "anthropic", apiKey: "sk-ant-x", nonce: nonceA });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_payload");
+    expect(res.body.reason).toBe("invalid_nonce");
+    // Critical: upstream fetch must not have been called.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Nonce cap-exhaustion (post-fix R1 P2: only-expired eviction)
+// ---------------------------------------------------------------------------
+
+describe("validate-nonce cap-exhaustion", () => {
+  beforeEach(() => {
+    __resetConsumedNoncesForTests();
+  });
+
+  it("returns cap_exhausted when 1024 unexpired consumed nonces fill the Set", async () => {
+    // S7.A.6 council 2026-05-08 post-fix R1 P2: prove that FIFO eviction
+    // never drops an unexpired consumed nonce. We fill the cap by issuing
+    // and consuming 1024 nonces from a stable test IP, then assert the
+    // 1025th consume fails with cap_exhausted (NOT silent admit).
+    const { consumeNonce } = await import("../lib/validate-nonce.js");
+    const ip = "203.0.113.1";
+    for (let i = 0; i < 1024; i += 1) {
+      const fresh = nonceFor(ip);
+      const r = consumeNonce(fresh, ip);
+      expect(r.ok, `consume ${i + 1}`).toBe(true);
+    }
+    const overflow = consumeNonce(nonceFor(ip), ip);
+    expect(overflow.ok).toBe(false);
+    if (!overflow.ok) {
+      expect(overflow.reason).toBe("cap_exhausted");
+    }
   });
 });
