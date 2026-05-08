@@ -4,7 +4,7 @@
  * Covers all 7 endpoints from docs/api/runner-openapi.yaml against real
  * embedded Postgres + a mini express harness:
  *
- *   Token-management (session-auth, instance-admin):
+ *   Token-management (session-auth, company-owner or instance-admin):
  *     POST   /api/companies/:id/runner-tokens           — issue
  *     DELETE /api/companies/:id/runner-tokens/:tokenId  — revoke (idempotent)
  *     GET    /api/companies/:id/runner-status           — liveness
@@ -30,6 +30,7 @@ import {
   agents,
   authUsers,
   companies,
+  companyMemberships,
   createDb,
   heartbeatRunEvents,
   heartbeatRuns,
@@ -57,14 +58,14 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
   let temp: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
 
   /** Build a session-auth (board) harness app for a given userId. */
-  function adminApp(userId: string, isInstanceAdmin = true) {
+  function adminApp(userId: string, isInstanceAdmin = true, companyIds: string[] = []) {
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
       (req as unknown as { actor: unknown }).actor = {
         type: "board",
         userId,
-        companyIds: [],
+        companyIds,
         isInstanceAdmin,
         source: "session",
       };
