@@ -77,7 +77,8 @@ export function loadConfig(
   }
 
   const token = (overrides.token ?? env.FOUNDEROS_RUNNER_TOKEN ?? "").trim();
-  if (!TOKEN_FORMAT.test(token)) {
+  // Length check is redundant with TOKEN_FORMAT but satisfies js/polynomial-redos.
+  if (token.length !== 36 || !TOKEN_FORMAT.test(token)) {
     throw new RunnerConfigError(
       "FOUNDEROS_RUNNER_TOKEN is required and must match fos_<32 alphanumeric>. Issue one from the FounderOS dashboard.",
     );
