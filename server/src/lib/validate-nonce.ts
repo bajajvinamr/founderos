@@ -49,12 +49,25 @@ const CONSUMED_SET_CAP = 1024;
  * Hash the caller's IP so we can sign a stable opaque token over it
  * without leaking the raw IP into the wire format. sha256, hex, first
  * 16 chars — collision space is 2^64 which is plenty for IP-binding.
+ *
  * Empty / unknown IP gets a deterministic sentinel so the binding
  * still works on `req.ip = "unknown"` paths (treated as "any unknown
  * is the same caller", which is conservative).
+ *
+ * S7.A.6 council 2026-05-08 post-fix R2: IPv4-mapped IPv6 prefix is
+ * stripped before hashing. Express's req.ip behind Fly's edge can
+ * return the same client as either "1.2.3.4" or "::ffff:1.2.3.4"
+ * depending on the connection path; without canonicalization, the
+ * issue and consume calls hash to different bindings → legitimate
+ * validation fails with bad_signature. Stripping the prefix is the
+ * narrowest safe canonicalization (full IPv6 zone-id stripping etc.
+ * isn't needed because Fly + Express don't emit those for client IPs).
  */
 function ipHash(ip: string | null | undefined): string {
-  const normalized = (ip ?? "unknown").trim() || "unknown";
+  let normalized = (ip ?? "unknown").trim() || "unknown";
+  if (normalized.startsWith("::ffff:")) {
+    normalized = normalized.slice("::ffff:".length);
+  }
   return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
 }
 

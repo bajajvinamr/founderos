@@ -674,6 +674,18 @@ describe("validate-nonce cap-exhaustion", () => {
     __resetConsumedNoncesForTests();
   });
 
+  it("treats `::ffff:1.2.3.4` and `1.2.3.4` as the same caller (post-fix R2 IPv4-mapped IPv6)", async () => {
+    // S7.A.6 council 2026-05-08 post-fix R2: Fly's edge sometimes returns
+    // req.ip as IPv4-mapped IPv6 (`::ffff:1.2.3.4`) and sometimes as plain
+    // IPv4 (`1.2.3.4`) for the same client. Without normalization, the
+    // issue+consume paths bind to different ipHashes and legitimate users
+    // hit bad_signature. The fix strips the `::ffff:` prefix before hashing.
+    const { issueNonce, consumeNonce } = await import("../lib/validate-nonce.js");
+    const issued = issueNonce("::ffff:203.0.113.42");
+    const result = consumeNonce(issued.nonce, "203.0.113.42");
+    expect(result.ok).toBe(true);
+  });
+
   it("returns cap_exhausted when 1024 unexpired consumed nonces fill the Set", async () => {
     // S7.A.6 council 2026-05-08 post-fix R1 P2: prove that FIFO eviction
     // never drops an unexpired consumed nonce. We fill the cap by issuing
