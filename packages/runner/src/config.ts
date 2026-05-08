@@ -115,8 +115,14 @@ export function loadConfig(
     );
   }
 
-  // Trim trailing slash so route concatenation is predictable.
-  const normalizedUrl = serverUrl.replace(/\/+$/, "");
+  // Trim trailing slashes so route concatenation is predictable.
+  // Hand-rolled to avoid CodeQL js/polynomial-redos on regex-over-untrusted-input —
+  // serverUrl came from env / CLI flag, both of which CodeQL flags as library input.
+  let trimEnd = serverUrl.length;
+  while (trimEnd > 0 && serverUrl.charCodeAt(trimEnd - 1) === 47 /* '/' */) {
+    trimEnd -= 1;
+  }
+  const normalizedUrl = trimEnd === serverUrl.length ? serverUrl : serverUrl.slice(0, trimEnd);
 
   return {
     serverUrl: normalizedUrl,
