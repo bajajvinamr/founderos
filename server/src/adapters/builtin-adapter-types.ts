@@ -11,6 +11,9 @@ export const BUILTIN_ADAPTER_TYPES = new Set([
   "codex_local",
   "cursor",
   "gemini_local",
+  // openai_api: direct OpenAI API path. Mirror of the addition in
+  // packages/shared/src/constants.ts AGENT_ADAPTER_TYPES per PHASE-S7 TRD §3.
+  "openai_api",
   "openclaw_gateway",
   "opencode_local",
   "pi_local",

@@ -62,6 +62,7 @@ import { permissionCoachRoutes } from "./routes/permission-coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { byoKeyRoutes } from "./routes/byo-key.js";
+import { providerRoutes } from "./routes/providers.js";
 import { digestRoutes } from "./routes/digest.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
@@ -157,6 +158,14 @@ export async function createApp(
   },
 ) {
   const app = express();
+
+  // S7.A.6 council 2026-05-08 P1: trust ONE proxy hop (Fly.io edge). Without
+  // this, req.ip resolves to the Fly edge IP and every IP-keyed rate limiter
+  // (BYO key validate, provider validate-key, onboarding bootstrap) collapses
+  // into a single global bucket — trivially exhaustible by any one attacker
+  // and unfair to legitimate users behind the same edge POP. The test app
+  // sets this explicitly; production was missing it.
+  app.set("trust proxy", 1);
 
   // Mount request-id BEFORE httpLogger so pino-http picks up `req.id`
   // from the AsyncLocalStorage context. Mount BEFORE express.json so
@@ -444,6 +453,9 @@ export async function createApp(
   );
   api.use(adapterRoutes());
   api.use(byoKeyRoutes(db));
+  // S7.A.6 — unauthenticated /api/providers/validate-key for onboarding-wizard
+  // live validation. Rate-limited to 10 / 5min / IP.
+  api.use(providerRoutes(db));
   // Token-management surface — issuance, revoke, status. Gated by the same
   // flag as the runner-job surface so a half-flipped deploy can't expose
   // token issuance without the runner endpoints existing.

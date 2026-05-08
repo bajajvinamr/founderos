@@ -167,6 +167,26 @@ const CHECKS: EnvCheck[] = [
       "ship to design partners (S6 polish or sooner). Generate with `openssl rand -hex 48`. Council " +
       "2026-05-06 finding #4 (CAN-SPAM/GDPR BLOCK) — see decisions.md.",
   },
+  // --- provider-key validator nonce (S7.A.6, council 2026-05-08 P1) ---
+  {
+    name: "FOUNDEROS_NONCE_SECRET",
+    keys: ["FOUNDEROS_NONCE_SECRET"],
+    enables:
+      "HMAC signing key for the unauthenticated POST /api/providers/validate-key " +
+      "single-use nonce primitive. The nonce closes the IP-rotation bypass on the " +
+      "key-checker abuse model — without this secret, GET /api/providers/issue-nonce " +
+      "throws and the validator endpoint can't be reached.",
+    severity: "REQUIRED_IN_PROD",
+    hint:
+      "Must be at least 32 bytes / 64 hex chars. Generate with `openssl rand -hex 48`. " +
+      "Set via `fly secrets set FOUNDEROS_NONCE_SECRET=...` on the founderos app. " +
+      "WARN-severity is not enough here because the validator is the onboarding gate — " +
+      "founders trying to plug in their first API key would hit a 500 with no ability " +
+      "to retry. Boot-time hard-fail is the right shape: the validate-nonce.ts module " +
+      "throws lazily on first call, so a missing secret would surface only when the " +
+      "first founder hits onboarding rather than at deploy. See server/src/lib/" +
+      "validate-nonce.ts:86-104 for the runtime guard this duplicates at boot.",
+  },
 ];
 
 interface ValidationResult {
