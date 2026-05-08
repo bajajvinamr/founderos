@@ -118,6 +118,20 @@ const CHECKS: EnvCheck[] = [
       "registered, /api/runner/* returns 404, and onboarding shows the legacy claude_local picker. " +
       "Default-off until E2E green per the Sprint 0 rollout plan.",
   },
+  // --- dispatcher v2 (PHASE-S7, 2026-05-08) ---
+  {
+    name: "FOUNDEROS_DISPATCHER_V2",
+    keys: ["FOUNDEROS_DISPATCHER_V2"],
+    enables:
+      "Multi-provider dispatcher in @founderos/runner (Gemini, Codex, Cursor, OpenCode, OpenAI-API)",
+    severity: "INFO",
+    hint:
+      "Optional. Truthy values ('1' | 'true' | 'yes', case-insensitive) opt the runner into the PHASE-S7 " +
+      "multi-adapter dispatcher. Absence is the safe default — runner uses the legacy `runClaude` path. " +
+      "Flip per docs/runbooks/dispatcher-v2-rollout.md (24h soak, then `fly secrets unset` rolls back). " +
+      "Server-side env-validation entry exists so operators discover the flag at boot; the runtime read " +
+      "happens in `packages/runner/src/config.ts:isDispatcherV2Enabled` on the founder's machine.",
+  },
   // --- observability ---
   {
     name: "SENTRY_DSN",
