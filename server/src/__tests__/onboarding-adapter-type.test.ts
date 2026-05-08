@@ -95,22 +95,26 @@ vi.mock("../services/index.js", () => ({
 // Test app factory
 // ---------------------------------------------------------------------------
 
-async function createApp() {
+function boardActor(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "board",
+    userId: "local-user",
+    companyIds: [],
+    source: "local_implicit",
+    isInstanceAdmin: false,
+    ...overrides,
+  };
+}
+
+async function createApp(actorOverrides: Record<string, unknown> = {}) {
   const [{ onboardingRoutes }, { errorHandler }] = await Promise.all([
     import("../routes/onboarding.js"),
     import("../middleware/index.js"),
   ]);
   const app = express();
   app.use(express.json());
-  // Instance-admin board actor — bypasses the forbidden check in bootstrap.
   app.use((req, _res, next) => {
-    (req as any).actor = {
-      type: "board",
-      userId: "local-user",
-      companyIds: [],
-      source: "local_implicit",
-      isInstanceAdmin: false,
-    };
+    (req as any).actor = boardActor(actorOverrides);
     next();
   });
   // The bootstrap orchestrator now wraps its work in db.transaction.
@@ -199,6 +203,23 @@ describe("onboarding bootstrap — adapterType is always claude_local", () => {
     for (const [, payload] of calls) {
       expect(payload).toMatchObject({ adapterType: "claude_local" });
     }
+  });
+
+  it("allows a normal signed-in SaaS user to create their first company without instance-admin role", async () => {
+    const app = await createApp({ source: "session", isInstanceAdmin: false });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("claude_local"));
+
+    expect(res.status).toBe(201);
+    expect(mockAccessService.ensureMembership).toHaveBeenCalledWith(
+      "company-uuid-1",
+      "user",
+      "local-user",
+      "owner",
+      "active",
+    );
   });
 
   it("creates agents with adapterType=claude_local when adapterChoice=anthropic_api", async () => {

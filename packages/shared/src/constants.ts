@@ -39,6 +39,10 @@ export const AGENT_ADAPTER_TYPES = [
   "http",
   "claude_local",
   "codex_local",
+  // openai_api: direct OpenAI API path (no Codex CLI shell). Sits between
+  // codex_local and gemini_local per PHASE-S7 TRD §3 — keeps the family
+  // grouping (anthropic, openai-codex, openai-direct, google) contiguous.
+  "openai_api",
   "gemini_local",
   "opencode_local",
   "pi_local",
