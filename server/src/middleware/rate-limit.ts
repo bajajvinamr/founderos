@@ -206,6 +206,45 @@ export const onboardingBootstrapLimiter = rateLimit({
 });
 
 /**
+ * Provider validate-key limiter: 10 requests / 5 minutes / IP (S7.A.6).
+ *
+ * The `/api/providers/validate-key` endpoint is unauthenticated — it's
+ * called from the onboarding wizard before any account exists. This
+ * limiter is the guard against drive-by enumeration of our endpoint as
+ * a free Anthropic / OpenAI / Google key-checker.
+ *
+ * Keys on IP because there is no authenticated user during onboarding.
+ * 10 attempts per 5 minutes maps to ~2 attempts/min — enough for a real
+ * founder iterating on a typo, far below an enumeration script.
+ *
+ * Returns 429 with `error: "rate_limit_exceeded"` so the UI can
+ * distinguish "we throttled you" from "the upstream provider 429'd"
+ * (which surfaces as `provider_rate_limit` from the route handler).
+ */
+export const providerValidateKeyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10, // 10 attempts per IP per 5 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request, _res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    logger.warn(
+      {
+        ip: _req.ip,
+        path: _req.path,
+      },
+      `Provider validate-key rate limit exceeded: ${options.message}`,
+    );
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: "Too many validation attempts. Please try again in a few minutes.",
+    });
+  },
+});
+
+/**
  * BYO key validation limiter: 30/hr per authenticated user
  * Prevents spam of key validation attempts
  */

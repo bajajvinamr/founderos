@@ -62,6 +62,7 @@ import { permissionCoachRoutes } from "./routes/permission-coach.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { byoKeyRoutes } from "./routes/byo-key.js";
+import { providerRoutes } from "./routes/providers.js";
 import { digestRoutes } from "./routes/digest.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { runnerJobRoutes, runnerTokenManagementRoutes } from "./routes/runner.js";
@@ -444,6 +445,9 @@ export async function createApp(
   );
   api.use(adapterRoutes());
   api.use(byoKeyRoutes(db));
+  // S7.A.6 — unauthenticated /api/providers/validate-key for onboarding-wizard
+  // live validation. Rate-limited to 10 / 5min / IP.
+  api.use(providerRoutes(db));
   // Token-management surface — issuance, revoke, status. Gated by the same
   // flag as the runner-job surface so a half-flipped deploy can't expose
   // token issuance without the runner endpoints existing.
