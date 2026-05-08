@@ -161,7 +161,7 @@ export function AuthPage() {
             <FounderOSLogo size={22} />
           </div>
 
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="font-display text-2xl tracking-tight">
             {mode === "sign_in" ? "Welcome back" : "Start your company"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">

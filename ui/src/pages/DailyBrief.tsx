@@ -88,11 +88,11 @@ export function DailyBrief() {
             Daily brief
           </p>
           {current ? (
-            <h1 className="mt-1 text-xl font-semibold sm:text-2xl">
+            <h1 className="font-display mt-1 text-xl sm:text-2xl tracking-tight">
               {current.forDate}
             </h1>
           ) : (
-            <h1 className="mt-1 text-xl font-semibold sm:text-2xl">
+            <h1 className="font-display mt-1 text-xl sm:text-2xl tracking-tight">
               No brief yet
             </h1>
           )}
