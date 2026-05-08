@@ -20,10 +20,10 @@ import type { PluginJobStatus, PluginJobRunStatus, PluginJobRunTrigger } from "@
  * The `schedule` column stores the cron expression or interval string
  * used by the job scheduler to decide when to fire the job.
  *
- * Status values:
+ * Status values (mirrors PLUGIN_JOB_STATUSES + CHECK constraint in 0104):
  * - `active` — job is enabled and will run on schedule
  * - `paused` — job is temporarily disabled by the operator
- * - `error` — job has been disabled due to repeated failures
+ * - `failed` — job has been disabled due to repeated failures
  *
  * @see PLUGIN_SPEC.md §21.3 — `plugin_jobs`
  */
@@ -62,9 +62,10 @@ export const pluginJobs = pgTable(
  * Rows are never modified after `status` reaches a terminal value
  * (`succeeded` | `failed` | `cancelled`).
  *
- * Trigger values:
- * - `scheduled` — fired automatically by the cron/interval scheduler
+ * Trigger values (mirrors PLUGIN_JOB_RUN_TRIGGERS + CHECK constraint in 0104):
+ * - `schedule` — fired automatically by the cron/interval scheduler
  * - `manual` — triggered by an operator via the admin UI or API
+ * - `retry` — automatic retry of a previously-failed run
  *
  * @see PLUGIN_SPEC.md §21.3 — `plugin_job_runs`
  */
