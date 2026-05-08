@@ -61,10 +61,15 @@ describe("AGENT_ADAPTER_TYPES registry (PHASE-S7 §3)", () => {
     expect(isKnownAdapterType("")).toBe(false);
   });
 
-  it("orders openai_api between codex_local and gemini_local (TRD §3)", () => {
+  it("orders openai_api after codex_local and before gemini_local (TRD §3 family contiguity)", () => {
     // Family grouping is load-bearing: anthropic (claude_local), openai-codex
     // (codex_local), openai-direct (openai_api), google (gemini_local).
-    // Tools that snapshot the array ordering depend on this contiguity.
+    // Tools that snapshot the array ordering depend on the FAMILY block
+    // being contiguous and ordered — but NOT on strict adjacency. This
+    // tolerates a future insertion inside the family (e.g. adding
+    // codex_local_v2 between codex_local and openai_api). Per S7.A.6
+    // council 2026-05-08 P4: assert relative ordering, not strict +1
+    // adjacency, so we don't false-fail on benign reorderings.
     const codexIdx = AGENT_ADAPTER_TYPES.indexOf("codex_local");
     const openaiIdx = AGENT_ADAPTER_TYPES.indexOf("openai_api");
     const geminiIdx = AGENT_ADAPTER_TYPES.indexOf("gemini_local");
@@ -72,7 +77,8 @@ describe("AGENT_ADAPTER_TYPES registry (PHASE-S7 §3)", () => {
     expect(codexIdx).toBeGreaterThanOrEqual(0);
     expect(openaiIdx).toBeGreaterThanOrEqual(0);
     expect(geminiIdx).toBeGreaterThanOrEqual(0);
-    expect(openaiIdx).toBe(codexIdx + 1);
-    expect(geminiIdx).toBe(openaiIdx + 1);
+    // Family ordering: codex < openai < gemini.
+    expect(openaiIdx).toBeGreaterThan(codexIdx);
+    expect(geminiIdx).toBeGreaterThan(openaiIdx);
   });
 });
