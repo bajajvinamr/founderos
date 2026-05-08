@@ -11,7 +11,19 @@
  *   FOUNDEROS_RUNNER_LOG_LEVEL   — debug | info | warn | error (default: info)
  */
 
-const TOKEN_FORMAT = /^fos_[A-Za-z0-9]{32}$/;
+// Hand-rolled to avoid CodeQL js/polynomial-redos on regex-over-untrusted-input.
+function isValidRunnerToken(token: string): boolean {
+  if (token.length !== 36) return false;
+  if (!token.startsWith("fos_")) return false;
+  for (let i = 4; i < 36; i++) {
+    const c = token.charCodeAt(i);
+    const isDigit = c >= 48 && c <= 57;
+    const isUpper = c >= 65 && c <= 90;
+    const isLower = c >= 97 && c <= 122;
+    if (!isDigit && !isUpper && !isLower) return false;
+  }
+  return true;
+}
 
 export interface RunnerConfig {
   serverUrl: string;
@@ -77,8 +89,7 @@ export function loadConfig(
   }
 
   const token = (overrides.token ?? env.FOUNDEROS_RUNNER_TOKEN ?? "").trim();
-  // Length check is redundant with TOKEN_FORMAT but satisfies js/polynomial-redos.
-  if (token.length !== 36 || !TOKEN_FORMAT.test(token)) {
+  if (!isValidRunnerToken(token)) {
     throw new RunnerConfigError(
       "FOUNDEROS_RUNNER_TOKEN is required and must match fos_<32 alphanumeric>. Issue one from the FounderOS dashboard.",
     );
