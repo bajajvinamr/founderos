@@ -46,95 +46,112 @@
   color-scheme: light;
   --radius: 0.5rem;
 
-  /* FounderOS brand — light mode
-     Warm off-white surfaces, deep slate ink, teal primary */
+  /* FounderOS brand — light mode (Pulse Builders register, light surfaces)
+     Warm off-white surfaces, deep slate ink, signal-orange primary
+     (#ff5b29 ≈ oklch(0.66 0.21 35)) — replaces prior teal accent to
+     match landing.tsx visual identity while keeping the auth-app
+     light-mode stamina (founders stare at the Inbox for hours). */
   --background: oklch(0.985 0.004 95);
   --foreground: oklch(0.21 0.015 260);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.015 260);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.015 260);
-  --primary: oklch(0.5 0.07 193);
+  --primary: oklch(0.66 0.21 35);
   --primary-foreground: oklch(0.985 0.004 95);
   --secondary: oklch(0.955 0.008 240);
   --secondary-foreground: oklch(0.21 0.015 260);
   --muted: oklch(0.96 0.005 240);
   --muted-foreground: oklch(0.5 0.015 260);
-  --accent: oklch(0.94 0.04 190);
-  --accent-foreground: oklch(0.35 0.07 193);
+  --accent: oklch(0.96 0.05 35);
+  --accent-foreground: oklch(0.45 0.18 35);
   --destructive: oklch(0.6 0.24 27);
   --destructive-foreground: oklch(0.985 0.004 95);
   --border: oklch(0.91 0.008 240);
   --input: oklch(0.93 0.006 240);
-  --ring: oklch(0.6 0.085 193);
-  --chart-1: oklch(0.55 0.095 193);
-  --chart-2: oklch(0.7 0.11 178);
-  --chart-3: oklch(0.68 0.13 55);
-  --chart-4: oklch(0.72 0.14 35);
-  --chart-5: oklch(0.6 0.15 300);
+  --ring: oklch(0.66 0.21 35);
+  --chart-1: oklch(0.66 0.21 35);
+  --chart-2: oklch(0.72 0.14 55);
+  --chart-3: oklch(0.55 0.095 193);
+  --chart-4: oklch(0.6 0.15 300);
+  --chart-5: oklch(0.7 0.11 178);
   --sidebar: oklch(0.97 0.005 240);
   --sidebar-foreground: oklch(0.21 0.015 260);
-  --sidebar-primary: oklch(0.5 0.07 193);
+  --sidebar-primary: oklch(0.66 0.21 35);
   --sidebar-primary-foreground: oklch(0.985 0.004 95);
-  --sidebar-accent: oklch(0.94 0.02 190);
-  --sidebar-accent-foreground: oklch(0.35 0.07 193);
+  --sidebar-accent: oklch(0.96 0.04 35);
+  --sidebar-accent-foreground: oklch(0.45 0.18 35);
   --sidebar-border: oklch(0.91 0.008 240);
-  --sidebar-ring: oklch(0.6 0.085 193);
+  --sidebar-ring: oklch(0.66 0.21 35);
 
   /* FounderOS brand-only tokens (not in Tailwind theme map) */
-  --brand: oklch(0.5 0.07 193);
-  --brand-soft: oklch(0.94 0.04 190);
-  --brand-ring: oklch(0.85 0.065 190);
+  --brand: oklch(0.66 0.21 35);
+  --brand-soft: oklch(0.96 0.05 35);
+  --brand-ring: oklch(0.85 0.12 35);
   --brand-ink: oklch(0.21 0.015 260);
+
+  /* Typography — Pulse Builders register (matches landing.tsx).
+     Inter for UI body, Fraunces for editorial display headlines (sharp,
+     -0.035em letter-spacing, line-height 0.94, WONK 0), JetBrains Mono
+     for data rows / IDs / timestamps. Fonts are pre-loaded in
+     ui/index.html via Google Fonts CSS2 — no runtime fetch.
+
+     Mode-independent (typography never differs between light/dark) so
+     these live ONLY in :root and the .dark block deliberately doesn't
+     redeclare them. Pre-2026-05-08 these were inadvertently scoped to
+     .dark only — light mode silently fell through to browser default
+     sans-serif (which on Mac is SF Pro, close-enough to Inter to mask
+     the bug). Hoisting to :root is the structural fix. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces", "Times New Roman", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .dark {
-  /* FounderOS brand — dark mode
-     Deep slate, bright teal primary, high-contrast foreground */
-  --background: oklch(0.165 0.015 260);
-  --foreground: oklch(0.97 0.008 95);
-  --card: oklch(0.215 0.015 260);
-  --card-foreground: oklch(0.97 0.008 95);
-  --popover: oklch(0.215 0.015 260);
-  --popover-foreground: oklch(0.97 0.008 95);
-  --primary: oklch(0.76 0.105 188);
-  --primary-foreground: oklch(0.18 0.02 260);
-  --secondary: oklch(0.28 0.018 260);
-  --secondary-foreground: oklch(0.97 0.008 95);
-  --muted: oklch(0.26 0.016 260);
-  --muted-foreground: oklch(0.68 0.012 240);
-  --accent: oklch(0.32 0.04 193);
-  --accent-foreground: oklch(0.85 0.08 188);
+  /* FounderOS brand — dark mode (Pulse Builders register, full match)
+     Near-black editorial void backgrounds (#0a0a0c → #17181b elevation
+     tiers), bone off-white foreground, signal-orange primary. Mirrors
+     landing.tsx Pulse tokens 1:1. */
+  --background: oklch(0.13 0.005 260);
+  --foreground: oklch(0.93 0.012 88);
+  --card: oklch(0.16 0.005 260);
+  --card-foreground: oklch(0.93 0.012 88);
+  --popover: oklch(0.16 0.005 260);
+  --popover-foreground: oklch(0.93 0.012 88);
+  --primary: oklch(0.7 0.21 35);
+  --primary-foreground: oklch(0.13 0.005 260);
+  --secondary: oklch(0.22 0.005 260);
+  --secondary-foreground: oklch(0.93 0.012 88);
+  --muted: oklch(0.2 0.005 260);
+  --muted-foreground: oklch(0.62 0.008 88);
+  --accent: oklch(0.28 0.06 35);
+  --accent-foreground: oklch(0.85 0.16 35);
   --destructive: oklch(0.62 0.235 27);
   --destructive-foreground: oklch(0.97 0.008 95);
-  --border: oklch(0.28 0.018 260);
-  --input: oklch(0.26 0.016 260);
-  --ring: oklch(0.55 0.085 193);
-  --chart-1: oklch(0.76 0.105 188);
-  --chart-2: oklch(0.7 0.12 162);
-  --chart-3: oklch(0.75 0.14 55);
-  --chart-4: oklch(0.72 0.16 35);
-  --chart-5: oklch(0.66 0.17 300);
-  --sidebar: oklch(0.195 0.018 260);
-  --sidebar-foreground: oklch(0.97 0.008 95);
-  --sidebar-primary: oklch(0.76 0.105 188);
-  --sidebar-primary-foreground: oklch(0.18 0.02 260);
-  --sidebar-accent: oklch(0.28 0.03 193);
-  --sidebar-accent-foreground: oklch(0.85 0.08 188);
-  --sidebar-border: oklch(0.28 0.018 260);
-  --sidebar-ring: oklch(0.55 0.085 193);
+  --border: oklch(0.24 0.005 260);
+  --input: oklch(0.22 0.005 260);
+  --ring: oklch(0.7 0.21 35);
+  --chart-1: oklch(0.7 0.21 35);
+  --chart-2: oklch(0.72 0.16 55);
+  --chart-3: oklch(0.6 0.105 188);
+  --chart-4: oklch(0.66 0.17 300);
+  --chart-5: oklch(0.7 0.12 162);
+  --sidebar: oklch(0.15 0.005 260);
+  --sidebar-foreground: oklch(0.93 0.012 88);
+  --sidebar-primary: oklch(0.7 0.21 35);
+  --sidebar-primary-foreground: oklch(0.13 0.005 260);
+  --sidebar-accent: oklch(0.24 0.05 35);
+  --sidebar-accent-foreground: oklch(0.85 0.16 35);
+  --sidebar-border: oklch(0.24 0.005 260);
+  --sidebar-ring: oklch(0.7 0.21 35);
 
-  /* FounderOS brand-only tokens */
-  --brand: oklch(0.76 0.105 188);
-  --brand-soft: oklch(0.32 0.04 193);
-  --brand-ring: oklch(0.45 0.07 193);
-  --brand-ink: oklch(0.97 0.008 95);
+  /* FounderOS brand-only tokens (dark mode) */
+  --brand: oklch(0.7 0.21 35);
+  --brand-soft: oklch(0.28 0.06 35);
+  --brand-ring: oklch(0.55 0.18 35);
+  --brand-ink: oklch(0.93 0.012 88);
 
-  /* Typography — Inter for UI, Instrument Serif for editorial display.
-     --font-display is used for onboarding headlines + hero titles to
-     give the product a distinctly non-shadcn / non-stock look. */
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Instrument Serif", Charter, "Iowan Old Style", "Apple Garamond", Georgia, serif;
+  /* Typography is mode-independent — declared only in :root above. */
 }
 
 @layer base {
@@ -151,25 +168,44 @@
     height: 100%;
     overflow: hidden;
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "cv11";
+    font-feature-settings: "ss01", "ss02", "cv11";
   }
   h1,
   h2,
   h3 {
     text-wrap: balance;
   }
-  /* Opt-in display serif — applied on onboarding/hero H1s + any
-     `.font-display` escape hatch. Keeps body sans crisp and neutral. */
+  /* Pulse Builders display register — Fraunces, sharp, editorial.
+     Applied on onboarding/hero H1s + any `.font-display` escape hatch.
+     Variation settings match landing.tsx: WONK off (clean), opsz 144
+     for display optical size, SOFT 0 for sharp terminals. */
   .font-display {
     font-family: var(--font-display);
     font-weight: 400;
-    letter-spacing: -0.01em;
+    font-variation-settings: "SOFT" 0, "opsz" 144, "WONK" 0;
+    letter-spacing: -0.035em;
+    line-height: 0.94;
   }
   .font-display-italic {
     font-family: var(--font-display);
     font-style: italic;
     font-weight: 400;
-    letter-spacing: -0.01em;
+    font-variation-settings: "SOFT" 50, "opsz" 144;
+    letter-spacing: -0.03em;
+  }
+  /* Editorial caps — section labels, kicker text. Mirrors Pulse landing. */
+  .caps {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .caps-wide {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+  /* Selection in signal-orange — Pulse register. */
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
   /* Prevent double-tap-to-zoom on interactive elements for mobile */
   a,
