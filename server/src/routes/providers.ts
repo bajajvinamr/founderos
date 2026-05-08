@@ -26,7 +26,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { Db } from "@founderos/db";
-import { providerValidateKeyLimiter } from "../middleware/rate-limit.js";
+import {
+  issueNonceLimiter,
+  providerValidateKeyLimiter,
+} from "../middleware/rate-limit.js";
 import { logger } from "../middleware/logger.js";
 import { getRequestId } from "../lib/request-context.js";
 import {
@@ -34,6 +37,7 @@ import {
   validateProviderKey,
   type ValidateProviderKeyResult,
 } from "../lib/provider-key-validator.js";
+import { consumeNonce, issueNonce } from "../lib/validate-nonce.js";
 
 // ---------------------------------------------------------------------------
 // Request schema
@@ -44,6 +48,12 @@ const validateKeySchema = z.object({
   // Per TRD §5: reject body sizes > 500 chars to defend against form-paste
   // accidents (someone pasting a JSON config with a key field).
   apiKey: z.string().min(1).max(500),
+  // S7.A.6 council 2026-05-08 P1 (IP-rotation defense): single-use nonce
+  // issued by GET /api/providers/issue-nonce. Required — closes the bypass
+  // where a residential-proxy attacker rotates IPs to defeat the per-IP
+  // rate limit. The nonce wire format is `<expiresAt>.<random>.<hmac>`
+  // (~110 chars) so the 500-char cap on apiKey doesn't conflict.
+  nonce: z.string().min(1).max(200),
 });
 
 // ---------------------------------------------------------------------------
@@ -135,6 +145,41 @@ function buildErrorResponse(
 export function providerRoutes(_db: Db) {
   const router = Router();
 
+  /**
+   * GET /api/providers/issue-nonce
+   *
+   * Unauthenticated. Issues a single-use 60-second HMAC-signed nonce that
+   * the validate-key endpoint requires. IP-rate-limited at 5/min — together
+   * with validate-key's 10/5min, this caps total validations per IP at 5/min,
+   * defeating IP-rotation attacks against the unauth validator.
+   *
+   * Body: empty.
+   * 200: { nonce: string, expiresAt: number }   // expiresAt = epoch seconds
+   * 429: { error: "rate_limit_exceeded", message, requestId }
+   * 500: { error: "issue_failed", reason, requestId }
+   *      (only fires if FOUNDEROS_NONCE_SECRET is missing in production —
+   *      env-validation should catch this at boot, but defense in depth.)
+   */
+  router.get("/providers/issue-nonce", issueNonceLimiter, (_req, res) => {
+    const requestId = getRequestId();
+    try {
+      const { nonce, expiresAt } = issueNonce();
+      res.status(200).json({ nonce, expiresAt });
+      return;
+    } catch (err) {
+      logger.error(
+        { err },
+        "issue-nonce threw — returning 500. Likely missing FOUNDEROS_NONCE_SECRET in production.",
+      );
+      res.status(500).json({
+        error: "issue_failed",
+        reason: "configuration_error",
+        requestId,
+      });
+      return;
+    }
+  });
+
   router.post(
     "/providers/validate-key",
     providerValidateKeyLimiter,
@@ -158,8 +203,27 @@ export function providerRoutes(_db: Db) {
         return;
       }
 
-      const { provider, apiKey } = parsed.data;
+      const { provider, apiKey, nonce } = parsed.data;
       const keyRef = keyReferenceHash(apiKey);
+
+      // S7.A.6 council 2026-05-08 P1: verify + consume the single-use
+      // nonce BEFORE making any upstream call. A failed nonce check
+      // returns 400 invalid_payload — same shape as a Zod failure — to
+      // avoid distinguishing "wrong nonce" from "wrong body shape" for
+      // an attacker probing the abuse model.
+      const nonceCheck = consumeNonce(nonce);
+      if (!nonceCheck.ok) {
+        logger.info(
+          { provider, keyRef, outcome: "nonce_rejected", reason: nonceCheck.reason },
+          "provider-key validation rejected — bad nonce",
+        );
+        res.status(400).json({
+          error: "invalid_payload",
+          reason: "invalid_nonce",
+          requestId,
+        });
+        return;
+      }
 
       try {
         const result = await validateProviderKey(provider, apiKey);

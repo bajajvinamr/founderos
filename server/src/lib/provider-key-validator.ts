@@ -121,16 +121,19 @@ export async function validateOpenAIKey(
 }
 
 /**
- * Validate a Google (Gemini API) key by GET-ing /v1beta/models?key=... .
- * Per Google's Generative Language API contract, a 200 means the key
- * authenticates against the listed models; 400 / 403 / 401 all signal
- * an invalid key (Google returns 400 with `INVALID_ARGUMENT` for bad keys
- * and 403 for revoked / quota-exhausted keys).
+ * Validate a Google (Gemini API) key by GET-ing /v1beta/models with the
+ * key in the `x-goog-api-key` header. Per Google's Generative Language API
+ * contract, a 200 means the key authenticates against the listed models;
+ * 400 / 403 / 401 all signal an invalid key (Google returns 400 with
+ * `INVALID_ARGUMENT` for bad keys and 403 for revoked / quota-exhausted keys).
  *
- * The key is passed in the querystring per Google's official docs; this
- * is the documented surface and is NOT logged anywhere on our side. Note
- * that Google itself may log the key in its access logs — this is the
- * same surface the official `google-generative-ai` SDK uses.
+ * S7.A.6 council 2026-05-08 P2 (URL-leak footgun): the previous version
+ * passed the key in `?key=<raw>` querystring. The validator's catch path
+ * suppressed errors so the URL never reached pino — but any future HTTP
+ * instrumentation (OpenTelemetry, Sentry HTTP breadcrumbs, Datadog APM)
+ * would automatically capture outbound URLs in spans, leaking the key in
+ * cleartext from a single observability commit. Google's documented
+ * alternative is the `x-goog-api-key` header — same auth surface, no URL.
  */
 export async function validateGoogleKey(
   apiKey: string,
@@ -142,10 +145,11 @@ export async function validateGoogleKey(
   const timeoutId = setTimeout(() => controller.abort(), VALIDATION_TIMEOUT_MS);
 
   try {
-    const url = new URL(`${GOOGLE_GENAI_BASE}/v1beta/models`);
-    url.searchParams.set("key", trimmed);
-    const response = await fetch(url.toString(), {
+    const response = await fetch(`${GOOGLE_GENAI_BASE}/v1beta/models`, {
       method: "GET",
+      headers: {
+        "x-goog-api-key": trimmed,
+      },
       signal: controller.signal,
     });
     clearTimeout(timeoutId);

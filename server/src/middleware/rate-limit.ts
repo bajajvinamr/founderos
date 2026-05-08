@@ -252,6 +252,44 @@ export const providerValidateKeyLimiter = rateLimit({
 });
 
 /**
+ * Issue-nonce limiter: 5 requests / 1 minute / IP (S7.A.6 council 2026-05-08).
+ *
+ * The nonce-issuance endpoint exists to defeat IP-rotation against the
+ * validate-key endpoint. Per-IP rate-limiting on this endpoint is the
+ * floor of the combined ceiling — an attacker rotating IPs still has to
+ * pay this cost per nonce. 5/min is enough headroom for a real founder
+ * making 2-3 validation attempts during onboarding (the wizard issues
+ * a fresh nonce on each "Validate" click).
+ *
+ * Returns 429 with `error: "rate_limit_exceeded"` matching the
+ * validate-key limiter's contract — UI distinguishes this from upstream
+ * provider 429s (which surface as `provider_rate_limit`).
+ */
+export const issueNonceLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5, // 5 nonces per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request, _res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: "Too many nonce requests. Please try again in a minute.",
+      requestId: getRequestId(),
+    });
+    logger.warn(
+      {
+        ip: _req.ip,
+        path: _req.path,
+      },
+      `Issue-nonce rate limit exceeded: ${options.message}`,
+    );
+  },
+});
+
+/**
  * BYO key validation limiter: 30/hr per authenticated user
  * Prevents spam of key validation attempts
  */

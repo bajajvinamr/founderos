@@ -30,6 +30,19 @@ import {
   keyReferenceHash,
   validateProviderKey,
 } from "../lib/provider-key-validator.js";
+import {
+  __resetConsumedNoncesForTests,
+  issueNonce,
+} from "../lib/validate-nonce.js";
+
+/**
+ * Issue a fresh single-use nonce for an endpoint test. Each call MUST be
+ * used at most once — `consumeNonce` enforces this in the route handler,
+ * so test loops that hit the route N times must call this N times.
+ */
+function freshNonce(): string {
+  return issueNonce().nonce;
+}
 
 // ---------------------------------------------------------------------------
 // Test app
@@ -141,16 +154,28 @@ describe("validateProviderKey — unit", () => {
   });
 
   describe("google", () => {
-    it("returns valid:true on 200 and passes key in querystring", async () => {
+    it("returns valid:true on 200 and passes key in x-goog-api-key header (NOT querystring — P2 fix)", async () => {
+      // S7.A.6 council 2026-05-08 P2 (URL-leak footgun): the key MUST be
+      // in the x-goog-api-key header, not the URL querystring. This test
+      // is the regression lock against any future revert that puts the
+      // key back in the URL.
       fetchSpy.mockResolvedValueOnce(new Response(null, { status: 200 }));
       const result = await validateProviderKey("google", "google-valid-key");
       expect(result.valid).toBe(true);
-      const [url] = fetchSpy.mock.calls[0];
+      const [url, init] = fetchSpy.mock.calls[0];
       const u = new URL(String(url));
       expect(u.origin + u.pathname).toBe(
         "https://generativelanguage.googleapis.com/v1beta/models",
       );
-      expect(u.searchParams.get("key")).toBe("google-valid-key");
+      // Querystring must NOT contain the key.
+      expect(u.searchParams.get("key")).toBeNull();
+      expect(u.search).toBe("");
+      // Header must carry the raw key.
+      const headers = (init as RequestInit | undefined)?.headers as
+        | Record<string, string>
+        | undefined;
+      expect(headers).toBeDefined();
+      expect(headers!["x-goog-api-key"]).toBe("google-valid-key");
     });
 
     it("returns invalid_key on 400 (Google's bad-key signal)", async () => {
@@ -193,6 +218,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
 
   beforeEach(() => {
     fetchSpy = vi.spyOn(global, "fetch");
+    __resetConsumedNoncesForTests();
   });
 
   afterEach(() => {
@@ -205,7 +231,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey: "sk-ant-valid-12345" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-valid-12345", nonce: freshNonce() });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ valid: true });
   });
@@ -216,7 +242,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "openai", apiKey: "sk-openai-valid" });
+      .send({ provider: "openai", apiKey: "sk-openai-valid", nonce: freshNonce() });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ valid: true });
   });
@@ -227,7 +253,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "google", apiKey: "google-valid-key" });
+      .send({ provider: "google", apiKey: "google-valid-key", nonce: freshNonce() });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ valid: true });
   });
@@ -238,7 +264,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey: "sk-ant-invalid" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-invalid", nonce: freshNonce() });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("invalid_key");
     // S7.A.6 council 2026-05-08 P3: 401 body MUST NOT include `reason` —
@@ -258,7 +284,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey: "sk-ant-no-perm" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-no-perm", nonce: freshNonce() });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("invalid_key");
     expect(res.body.reason).toBeUndefined();
@@ -279,7 +305,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey: "sk-ant-throttle" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-throttle", nonce: freshNonce() });
     expect(res.status).toBe(429);
     expect(res.body.error).toBe("provider_rate_limit");
     expect(res.body.retryAfter).toBe(17);
@@ -292,7 +318,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "openai", apiKey: "sk-openai-bad" });
+      .send({ provider: "openai", apiKey: "sk-openai-bad", nonce: freshNonce() });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("invalid_key");
     expect(res.body.requestId).toEqual(expect.any(String));
@@ -304,7 +330,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "google", apiKey: "google-bad" });
+      .send({ provider: "google", apiKey: "google-bad", nonce: freshNonce() });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("invalid_key");
     expect(res.body.requestId).toEqual(expect.any(String));
@@ -321,7 +347,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "openai", apiKey: "sk-openai-throttle" });
+      .send({ provider: "openai", apiKey: "sk-openai-throttle", nonce: freshNonce() });
     expect(res.status).toBe(429);
     expect(res.body.error).toBe("provider_rate_limit");
     expect(res.body.retryAfter).toBe(42);
@@ -336,7 +362,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey: "sk-ant-slow" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-slow", nonce: freshNonce() });
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("validation_failed");
     expect(res.body.reason).toBe("timeout");
@@ -349,7 +375,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "openai", apiKey: "sk-openai-net" });
+      .send({ provider: "openai", apiKey: "sk-openai-net", nonce: freshNonce() });
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("validation_failed");
     expect(res.body.reason).toBe("network_error");
@@ -373,7 +399,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "cohere", apiKey: "x" });
+      .send({ provider: "cohere", apiKey: "x", nonce: freshNonce() });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_payload");
     expect(res.body.requestId).toEqual(expect.any(String));
@@ -385,7 +411,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey: huge });
+      .send({ provider: "anthropic", apiKey: huge, nonce: freshNonce() });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_payload");
   });
@@ -397,7 +423,7 @@ describe("POST /api/providers/validate-key — endpoint contract", () => {
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", freshIp())
-      .send({ provider: "anthropic", apiKey });
+      .send({ provider: "anthropic", apiKey, nonce: freshNonce() });
     const serialised = JSON.stringify(res.body);
     expect(serialised).not.toContain(apiKey);
     expect(serialised).not.toContain("leak-canary");
@@ -415,6 +441,7 @@ describe("POST /api/providers/validate-key — endpoint rate limit (10/5min/IP)"
     fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(null, { status: 200 }),
     );
+    __resetConsumedNoncesForTests();
   });
 
   afterEach(() => {
@@ -428,7 +455,7 @@ describe("POST /api/providers/validate-key — endpoint rate limit (10/5min/IP)"
       const res = await request(app)
         .post("/providers/validate-key")
         .set("X-Forwarded-For", ip)
-        .send({ provider: "anthropic", apiKey: `sk-ant-${i}` });
+        .send({ provider: "anthropic", apiKey: `sk-ant-${i}`, nonce: freshNonce() });
       expect(res.status, `req ${i + 1}`).toBe(200);
     }
   });
@@ -440,12 +467,12 @@ describe("POST /api/providers/validate-key — endpoint rate limit (10/5min/IP)"
       await request(app)
         .post("/providers/validate-key")
         .set("X-Forwarded-For", ip)
-        .send({ provider: "anthropic", apiKey: `sk-ant-${i}` });
+        .send({ provider: "anthropic", apiKey: `sk-ant-${i}`, nonce: freshNonce() });
     }
     const blocked = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", ip)
-      .send({ provider: "anthropic", apiKey: "sk-ant-11" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-11", nonce: freshNonce() });
     expect(blocked.status).toBe(429);
     expect(blocked.body.error).toBe("rate_limit_exceeded");
     // S7.A.6 council 2026-05-08 P3: rate-limit-exceeded body MUST include
@@ -462,13 +489,123 @@ describe("POST /api/providers/validate-key — endpoint rate limit (10/5min/IP)"
       await request(app)
         .post("/providers/validate-key")
         .set("X-Forwarded-For", ipA)
-        .send({ provider: "anthropic", apiKey: `sk-ant-A-${i}` });
+        .send({ provider: "anthropic", apiKey: `sk-ant-A-${i}`, nonce: freshNonce() });
     }
     // ipA is now exhausted; ipB should still be allowed.
     const res = await request(app)
       .post("/providers/validate-key")
       .set("X-Forwarded-For", ipB)
-      .send({ provider: "anthropic", apiKey: "sk-ant-B" });
+      .send({ provider: "anthropic", apiKey: "sk-ant-B", nonce: freshNonce() });
     expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Nonce primitive (S7.A.6 council 2026-05-08 P1: IP-rotation defense)
+// ---------------------------------------------------------------------------
+
+describe("GET /api/providers/issue-nonce + single-use semantics", () => {
+  beforeEach(() => {
+    __resetConsumedNoncesForTests();
+  });
+
+  it("issues a wire-format nonce with expiresAt ~60s ahead", async () => {
+    const app = buildApp();
+    const before = Math.floor(Date.now() / 1000);
+    const res = await request(app)
+      .get("/providers/issue-nonce")
+      .set("X-Forwarded-For", freshIp());
+    expect(res.status).toBe(200);
+    expect(typeof res.body.nonce).toBe("string");
+    const parts = res.body.nonce.split(".");
+    expect(parts).toHaveLength(3);
+    const [exp, random, hmac] = parts;
+    expect(Number(exp)).toBeGreaterThanOrEqual(before + 50);
+    expect(Number(exp)).toBeLessThanOrEqual(before + 70);
+    expect(random).toMatch(/^[0-9a-f]{32}$/);
+    expect(hmac).toMatch(/^[0-9a-f]{64}$/);
+    expect(res.body.expiresAt).toBe(Number(exp));
+  });
+
+  it("validate-key REJECTS a request with no nonce field (400 invalid_payload)", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/providers/validate-key")
+      .set("X-Forwarded-For", freshIp())
+      .send({ provider: "anthropic", apiKey: "sk-ant-no-nonce" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_payload");
+  });
+
+  it("validate-key REJECTS a malformed nonce (400 invalid_payload, reason: invalid_nonce)", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy.mockResolvedValue(new Response(null, { status: 200 }));
+    const app = buildApp();
+    const res = await request(app)
+      .post("/providers/validate-key")
+      .set("X-Forwarded-For", freshIp())
+      .send({ provider: "anthropic", apiKey: "sk-ant-x", nonce: "not-a-valid-nonce" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_payload");
+    expect(res.body.reason).toBe("invalid_nonce");
+    // Critical: the upstream fetch MUST NOT have been called — nonce
+    // verification fires before any provider request.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("validate-key REJECTS a tampered-HMAC nonce", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy.mockResolvedValue(new Response(null, { status: 200 }));
+    const app = buildApp();
+    const goodNonce = freshNonce();
+    const parts = goodNonce.split(".");
+    // Flip one hex char in the HMAC.
+    const tamperedHmac =
+      parts[2].slice(0, -1) + (parts[2].slice(-1) === "0" ? "1" : "0");
+    const tampered = `${parts[0]}.${parts[1]}.${tamperedHmac}`;
+    const res = await request(app)
+      .post("/providers/validate-key")
+      .set("X-Forwarded-For", freshIp())
+      .send({ provider: "anthropic", apiKey: "sk-ant-x", nonce: tampered });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_payload");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("validate-key consumes a nonce single-use (second call with same nonce fails 400)", async () => {
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const app = buildApp();
+    const nonce = freshNonce();
+    const send = (ip: string) =>
+      request(app)
+        .post("/providers/validate-key")
+        .set("X-Forwarded-For", ip)
+        .send({ provider: "anthropic", apiKey: "sk-ant-x", nonce });
+    const first = await send(freshIp());
+    expect(first.status).toBe(200);
+    const second = await send(freshIp());
+    expect(second.status).toBe(400);
+    expect(second.body.error).toBe("invalid_payload");
+    expect(second.body.reason).toBe("invalid_nonce");
+    fetchSpy.mockRestore();
+  });
+
+  it("issue-nonce is rate-limited at 5/min/IP (6th call returns 429 with requestId)", async () => {
+    const app = buildApp();
+    const ip = freshIp();
+    for (let i = 0; i < 5; i += 1) {
+      const r = await request(app).get("/providers/issue-nonce").set("X-Forwarded-For", ip);
+      expect(r.status, `nonce req ${i + 1}`).toBe(200);
+    }
+    const blocked = await request(app)
+      .get("/providers/issue-nonce")
+      .set("X-Forwarded-For", ip);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toBe("rate_limit_exceeded");
+    expect(blocked.body.requestId).toEqual(expect.any(String));
   });
 });
