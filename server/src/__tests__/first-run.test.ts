@@ -126,7 +126,7 @@ describeEmbeddedPostgres("S3.10 — first-run magic activation gate", () => {
 
   afterAll(async () => {
     await temp?.cleanup();
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     // CASCADE wipes all child rows via FK.
