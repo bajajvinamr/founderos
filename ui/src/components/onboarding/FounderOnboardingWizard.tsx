@@ -158,7 +158,11 @@ export function FounderOnboardingWizard() {
     if (current === 4) {
       // claude_local + skip don't require a validated key; only anthropic_api does.
       if (draft.adapterChoice === "claude_local" || draft.adapterChoice === "skip") return true;
-      return validation.status === "valid";
+      // Live debounced validation surfaces "valid" on a healthy key, or
+      // "skipped" when the user opts past a transport/rate-limit
+      // failure. Both unblock Next; bootstrap will re-validate at
+      // submit-time as belt-and-suspenders.
+      return validation.status === "valid" || validation.status === "skipped";
     }
     if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
