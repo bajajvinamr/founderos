@@ -253,10 +253,17 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   });
 
   router.post("/", validate(createCompanySchema), async (req, res) => {
+    // SaaS path: any signed-in board user can create a company. The creator is
+    // immediately granted owner membership below, which populates companyIds on
+    // their next session and unlocks every per-company endpoint
+    // (integrations, agents, etc).
+    //
+    // The previous instance-admin gate was a Paperclip-self-hosted assumption
+    // (one operator, one instance) that is structurally wrong for multi-tenant
+    // SaaS — a fresh signup has companyIds=[] and assertCompanyAccess forbids
+    // everything until they have at least one company. Same fix shape as #89
+    // (onboarding-bootstrap).
     assertBoard(req);
-    if (!(req.actor.source === "local_implicit" || req.actor.isInstanceAdmin)) {
-      throw forbidden("Instance admin required");
-    }
     const company = await svc.create(req.body);
     await access.ensureMembership(company.id, "user", req.actor.userId ?? "local-board", "owner", "active");
     await logActivity(db, {

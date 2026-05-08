@@ -23,15 +23,13 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
-import { authUsers, instanceUserRoles, type Db } from "@founderos/db";
-import { forbidden, unprocessable } from "../errors.js";
+import type { Db } from "@founderos/db";
+import { unprocessable } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { onboardingBootstrapLimiter } from "../middleware/rate-limit.js";
 import { requireCompanyAccess } from "../middleware/require-company-access.js";
 import { assertBoard } from "./authz.js";
 import { logger } from "../middleware/logger.js";
-import { runPostSignupBootstrap } from "../auth/post-signup-hook.js";
 import {
   instanceSettingsService,
   issueService,
@@ -251,63 +249,10 @@ export function onboardingRoutes(db: Db) {
     validate(bootstrapSchema),
     async (req, res) => {
       assertBoard(req);
-      let instanceAdmin =
-        req.actor.source === "local_implicit" || req.actor.isInstanceAdmin;
-      if (!instanceAdmin) {
-        // Self-heal: the auth-middleware inline bootstrap may have skipped
-        // (missing email on session, race against signup, transient DB
-        // failure). If the caller has a valid board session AND no human
-        // admin exists yet, run the same first-user-wins promotion now and
-        // re-check. This keeps the onboarding wizard from dead-ending the
-        // first user when Path A (Supabase webhook) and Path B (middleware)
-        // both miss.
-        const userId = req.actor.userId;
-        if (userId) {
-          let email = "";
-          try {
-            const userRow = await db
-              .select({ email: authUsers.email })
-              .from(authUsers)
-              .where(eq(authUsers.id, userId))
-              .then((rows) => rows[0] ?? null);
-            email = userRow?.email ?? "";
-          } catch (err) {
-            logger.warn({ err, userId }, "onboarding self-heal: email lookup failed");
-          }
-
-          try {
-            await runPostSignupBootstrap(db, { userId, email });
-          } catch (err) {
-            logger.warn({ err, userId }, "onboarding self-heal: runPostSignupBootstrap threw");
-          }
-
-          const refreshed = await db
-            .select({ id: instanceUserRoles.id })
-            .from(instanceUserRoles)
-            .where(
-              and(
-                eq(instanceUserRoles.userId, userId),
-                eq(instanceUserRoles.role, "instance_admin"),
-              ),
-            )
-            .then((rows) => rows[0] ?? null);
-          if (refreshed) {
-            req.actor = { ...req.actor, isInstanceAdmin: true };
-            instanceAdmin = true;
-            logger.info({ userId }, "onboarding self-heal: promoted caller to instance_admin");
-          }
-        }
-
-        if (!instanceAdmin) {
-          throw forbidden("Instance admin required for onboarding bootstrap", {
-            code: "INSTANCE_ADMIN_REQUIRED",
-            hint:
-              "No instance admin exists yet and auto-promotion did not run. " +
-              "Operator: confirm SUPABASE_WEBHOOK_SECRET is set on the server, " +
-              "or seed the first admin via `pnpm founderos auth bootstrap-ceo`.",
-          });
-        }
-      }
+      // SaaS path: any authenticated board user may complete onboarding.
+      // The bootstrap transaction creates a new company and owner membership
+      // for this user, so requiring global instance-admin here dead-ends every
+      // normal customer signup once the hosted instance already has an admin.
 
       const input = req.body as z.infer<typeof bootstrapSchema>;
 

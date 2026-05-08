@@ -1,6 +1,7 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request, Response, NextFunction } from "express";
 import { logger } from "./logger.js";
+import { getRequestId } from "../lib/request-context.js";
 
 /**
  * Supabase auth webhook limiter: 60 req/min per IP
@@ -202,6 +203,89 @@ export const onboardingBootstrapLimiter = rateLimit({
       error: "Too many onboarding attempts",
       message: "Please try again later.",
     });
+  },
+});
+
+/**
+ * Provider validate-key limiter: 10 requests / 5 minutes / IP (S7.A.6).
+ *
+ * The `/api/providers/validate-key` endpoint is unauthenticated — it's
+ * called from the onboarding wizard before any account exists. This
+ * limiter is the guard against drive-by enumeration of our endpoint as
+ * a free Anthropic / OpenAI / Google key-checker.
+ *
+ * Keys on IP because there is no authenticated user during onboarding.
+ * 10 attempts per 5 minutes maps to ~2 attempts/min — enough for a real
+ * founder iterating on a typo, far below an enumeration script.
+ *
+ * Returns 429 with `error: "rate_limit_exceeded"` so the UI can
+ * distinguish "we throttled you" from "the upstream provider 429'd"
+ * (which surfaces as `provider_rate_limit` from the route handler).
+ */
+export const providerValidateKeyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10, // 10 attempts per IP per 5 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request, _res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    // S7.A.6 council 2026-05-08 P3: include requestId in the body so the
+    // abuse-path response carries the same correlation id as every other
+    // error path. Without this, support cannot grep `fly logs | grep <id>`
+    // for an exhausted-limit complaint. getRequestId() returns the value
+    // set by requestIdMiddleware (mounted before this handler can fire).
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: "Too many validation attempts. Please try again in a few minutes.",
+      requestId: getRequestId(),
+    });
+    logger.warn(
+      {
+        ip: _req.ip,
+        path: _req.path,
+      },
+      `Provider validate-key rate limit exceeded: ${options.message}`,
+    );
+  },
+});
+
+/**
+ * Issue-nonce limiter: 5 requests / 1 minute / IP (S7.A.6 council 2026-05-08).
+ *
+ * The nonce-issuance endpoint exists to defeat IP-rotation against the
+ * validate-key endpoint. Per-IP rate-limiting on this endpoint is the
+ * floor of the combined ceiling — an attacker rotating IPs still has to
+ * pay this cost per nonce. 5/min is enough headroom for a real founder
+ * making 2-3 validation attempts during onboarding (the wizard issues
+ * a fresh nonce on each "Validate" click).
+ *
+ * Returns 429 with `error: "rate_limit_exceeded"` matching the
+ * validate-key limiter's contract — UI distinguishes this from upstream
+ * provider 429s (which surface as `provider_rate_limit`).
+ */
+export const issueNonceLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5, // 5 nonces per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request, _res: Response) => {
+    return ipKeyGenerator(req.ip || "unknown");
+  },
+  handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: "Too many nonce requests. Please try again in a minute.",
+      requestId: getRequestId(),
+    });
+    logger.warn(
+      {
+        ip: _req.ip,
+        path: _req.path,
+      },
+      `Issue-nonce rate limit exceeded: ${options.message}`,
+    );
   },
 });
 
