@@ -20,18 +20,19 @@
  *     The dispatcher (S7.1.b.3) will consume this via the registry in
  *     `./index.ts`.
  *
- * Note: `run()` is NOT yet wired to spawn the child — that lives in
- * `spawn.ts` (`runClaude`) and will be folded in by S7.1.b.3 when the
- * dispatcher replaces `runClaude`. For now `run()` is a placeholder that
- * compiles against the interface but throws if invoked. This is
- * intentional: the council BLOCK was on the *interface*, not on the
- * subprocess lifecycle code in `spawn.ts:101-199`. Folding spawn into
- * `run()` is a separate diff so the lifecycle plumbing review doesn't
- * conflate with the interface review.
+ * S7.1.c.1 — `run()` is now wired end-to-end. The lifecycle previously
+ * living in `spawn.ts:runClaude` (process spawn, stdout/stderr line
+ * buffering, SIGTERM→SIGKILL timeout escalation, instructions tempfile
+ * cleanup, final-result snapshot) is ported into the AsyncGenerator
+ * implementation below. `runClaude` itself is preserved unchanged so the
+ * legacy V1 path in `main.ts` (when `FOUNDEROS_DISPATCHER_V2` is unset)
+ * keeps working bit-for-bit. The flag flip from V1 → V2 default is a
+ * separate ticket.
  */
 
-import type { ChildProcess } from "node:child_process";
+import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 import { writeFile, mkdtemp, rm } from "node:fs/promises";
+import { performance } from "node:perf_hooks";
 import path from "node:path";
 import os from "node:os";
 
@@ -280,19 +281,305 @@ export const claudeLocalAdapter: SubprocessAdapter = {
   },
 
   /**
-   * S7.1.b.3 will fold the lifecycle from `spawn.ts:runClaude` into this
-   * method. The interface is what ships in this PR; the implementation is
-   * deliberately stubbed so the council review focuses on the contract,
-   * not on the lifecycle plumbing rewrite. Calling it before S7.1.b.3
-   * lands throws — the legacy code path in `main.ts` continues to use
-   * `runClaude` directly until the dispatcher replaces it.
+   * Run claude end-to-end as an `AsyncGenerator<RunnerEvent, RunResult, void>`.
+   *
+   * Lifecycle ported from `spawn.ts:runClaude` (S7.1.c.1):
+   *   1. Materialize the base64 instructions blob to a tempfile (when set).
+   *   2. Build argv via {@link buildClaudeArgs} and spawn the binary.
+   *   3. Pipe the prompt via {@link claudeLocalAdapter.promptTransport}.
+   *   4. Line-buffer stdout, parse each line via {@link parseStreamJsonLine},
+   *      and `yield` every produced {@link RunnerEvent} immediately. Snapshot
+   *      the latest `run_complete` payload so cost + sessionId land on the
+   *      terminal {@link RunResult}.
+   *   5. Line-buffer stderr → emit `stderr_line` events (raw — claude's
+   *      stderr is human-readable diagnostics, not stream-json).
+   *   6. Honor `signal.aborted` AND the soft/hard timeout escalation
+   *      (SIGTERM at `timeoutSec`, SIGKILL at 1.5x). Both routes resolve
+   *      to a non-throwing terminal status — the dispatcher consumes the
+   *      generator's return value, not exception state.
+   *
+   * Status mapping — preserved bit-for-bit from `runViaLegacy` so the V1
+   * vs V2 paths produce the same `CompletionBody`:
+   *   - exit 0, no abort, no timeout      → "completed"
+   *   - signal.aborted (user cancel)      → "cancelled" (carries SIGTERM/SIGKILL)
+   *   - timeout fired (T or 1.5T)         → "failed" with errorMessage="runner timed out"
+   *   - non-zero exit                     → "failed" via `interpretFailure`
+   *
+   * Cleanup (instructions tempfile, line-buffer drain) runs in a `finally`
+   * so a thrown error during `yield` (consumer threw, generator aborted)
+   * still tears down the child + tempfile — matches `spawn.ts:188`.
    */
-  // eslint-disable-next-line require-yield
-  async *run(_ctx: RunContext, _signal: AbortSignal): AsyncGenerator<RunnerEvent, RunResult, void> {
-    throw new Error(
-      "claudeLocalAdapter.run() is not yet wired — see S7.1.b.3 (dispatcher). " +
-        "Until then the legacy `runClaude` in spawn.ts handles execution.",
-    );
+  async *run(ctx: RunContext, signal: AbortSignal): AsyncGenerator<RunnerEvent, RunResult, void> {
+    const cfg = ctx.adapterConfig;
+    const binary =
+      typeof cfg["binary"] === "string" && cfg["binary"].length > 0
+        ? (cfg["binary"] as string)
+        : claudeLocalAdapter.defaultBinary;
+    const instructionsBase64 =
+      typeof cfg["instructionsFileContent"] === "string"
+        ? (cfg["instructionsFileContent"] as string)
+        : null;
+
+    let cleanup: (() => Promise<void>) | null = null;
+    let instructionsPath: string | null = null;
+    if (instructionsBase64) {
+      const m = await materializeInstructions(instructionsBase64);
+      instructionsPath = m.path;
+      cleanup = m.cleanup;
+    }
+
+    // Build argv via the adapter's own buildArgs seam — same shape as the
+    // legacy path's `buildClaudeArgs` call but routed through the contract
+    // method so unit tests can pin per-provider argv via the public API.
+    const argv = claudeLocalAdapter.buildArgs({
+      prompt: ctx.prompt,
+      sessionId: ctx.sessionId ?? null,
+      authMode: ctx.authMode,
+      workdir: ctx.workdir,
+      adapterConfig: ctx.adapterConfig,
+      instructionsFilePath: instructionsPath,
+    });
+
+    const startedAt = performance.now();
+    const child: ChildProcess = nodeSpawn(binary, argv, {
+      cwd: ctx.workdir,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: ctx.env,
+    });
+
+    let timedOut = false;
+    let cancelled = false;
+    let finalResult: ClaudeFinalResult | null = null;
+
+    // Soft + hard timeout, parity with `spawn.ts:113-119`. Hard kill after
+    // 1.5x if SIGTERM didn't land. The dispatcher's AbortController only
+    // fires on user cancel today (S7.1.c notes); the adapter owns its own
+    // timeout escalation to keep behavior identical to `runClaude`.
+    const termTimer: NodeJS.Timeout = setTimeout(() => {
+      timedOut = true;
+      if (!child.killed) child.kill("SIGTERM");
+    }, ctx.timeoutSec * 1000);
+    const killTimer: NodeJS.Timeout = setTimeout(() => {
+      if (!child.killed) child.kill("SIGKILL");
+    }, ctx.timeoutSec * 1000 * 1.5);
+
+    // Cancellation: forward the dispatcher's AbortSignal as a SIGTERM →
+    // SIGKILL escalation. Same pattern as the timeout, but the cancelled
+    // flag steers the terminal status to "cancelled" rather than "failed".
+    const onAbort = () => {
+      cancelled = true;
+      if (!child.killed) child.kill("SIGTERM");
+      // Hard kill if SIGTERM is ignored. 200ms grace matches the existing
+      // SIGTERM-then-SIGKILL pattern in `spawn.ts` (timer-driven there;
+      // signal-driven here).
+      setTimeout(() => {
+        if (!child.killed) child.kill("SIGKILL");
+      }, 200).unref();
+    };
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    // Outbound event queue + producer/consumer signalling. Stdout/stderr
+    // listeners push parsed events; the generator body awaits a "ready"
+    // promise, drains the queue, yields each event, and re-arms. This
+    // preserves the streaming semantics from `runClaude` (events flushed as
+    // they arrive, not buffered until exit) while staying inside the
+    // AsyncGenerator contract.
+    const eventQueue: RunnerEvent[] = [];
+    type ExitInfo = { code: number; signal: NodeJS.Signals | null };
+    // Holder so TS doesn't narrow the field to `never` based on its
+    // initializer — closure callbacks below mutate `exitState.value`.
+    const exitState: { value: ExitInfo | null } = { value: null };
+    let resolveReady: (() => void) | null = null;
+    let readyPromise = new Promise<void>((r) => {
+      resolveReady = r;
+    });
+    const ping = () => {
+      if (resolveReady) {
+        const r = resolveReady;
+        resolveReady = null;
+        r();
+      }
+    };
+
+    // stdin: write the prompt then close. Errors propagate to interpretFailure
+    // via the exit handler — promptTransport rejecting before the child has
+    // even produced output is rare (the OS rejects the write only on a
+    // closed pipe, which means spawn already failed).
+    void claudeLocalAdapter
+      .promptTransport(child, ctx.prompt)
+      .catch(() => {
+        /* surface via exit code; stderr_line events will carry the cause. */
+      });
+
+    // Line-buffer stdout. claude emits one JSON object per line in
+    // stream-json mode; partial lines accumulate until the next \n.
+    let stdoutBuf = "";
+    child.stdout?.setEncoding("utf-8");
+    child.stdout?.on("data", (chunk: string) => {
+      stdoutBuf += chunk;
+      let nl: number;
+      while ((nl = stdoutBuf.indexOf("\n")) >= 0) {
+        const line = stdoutBuf.slice(0, nl);
+        stdoutBuf = stdoutBuf.slice(nl + 1);
+        const evt = parseStreamJsonLine(line);
+        if (!evt) continue;
+        if (evt.kind === "run_complete") {
+          const snap = extractClaudeFinalResult(evt.payload);
+          if (snap) finalResult = snap;
+        }
+        eventQueue.push(evt);
+        ping();
+      }
+    });
+
+    // stderr: surface as raw stderr_line events. Don't try to parse —
+    // claude's stderr is human-readable diagnostics, not stream-json.
+    let stderrBuf = "";
+    child.stderr?.setEncoding("utf-8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderrBuf += chunk;
+      let nl: number;
+      while ((nl = stderrBuf.indexOf("\n")) >= 0) {
+        const line = stderrBuf.slice(0, nl);
+        stderrBuf = stderrBuf.slice(nl + 1);
+        if (!line.trim()) continue;
+        eventQueue.push({
+          eventId: makeEventId(),
+          kind: "stderr_line",
+          ts: new Date().toISOString(),
+          payload: line,
+        });
+        ping();
+      }
+    });
+
+    child.once("exit", (code, sig) => {
+      exitState.value = { code: code ?? -1, signal: sig };
+      ping();
+    });
+    child.once("error", () => {
+      exitState.value = { code: -1, signal: null };
+      ping();
+    });
+
+    try {
+      // Drain loop: wait → flush queue → yield each → re-arm. Exit when the
+      // child has signalled exit AND the queue is empty (so no late events
+      // are dropped between the exit fire and the consumer-side yield).
+      while (true) {
+        if (eventQueue.length === 0) {
+          if (exitState.value) break;
+          await readyPromise;
+          // Re-arm before draining so any push between drain and re-arm
+          // wakes the next iteration.
+          readyPromise = new Promise<void>((r) => {
+            resolveReady = r;
+          });
+        }
+        // Drain everything currently queued before re-checking exit.
+        while (eventQueue.length > 0) {
+          const evt = eventQueue.shift()!;
+          yield evt;
+        }
+      }
+
+      // Drain trailing partial line(s) — matches `spawn.ts:173-184`.
+      if (stdoutBuf.trim()) {
+        const evt = parseStreamJsonLine(stdoutBuf);
+        if (evt) {
+          if (evt.kind === "run_complete") {
+            const snap = extractClaudeFinalResult(evt.payload);
+            if (snap) finalResult = snap;
+          }
+          yield evt;
+        }
+      }
+      if (stderrBuf.trim()) {
+        yield {
+          eventId: makeEventId(),
+          kind: "stderr_line",
+          ts: new Date().toISOString(),
+          payload: stderrBuf,
+        };
+      }
+
+      const elapsedSec = (performance.now() - startedAt) / 1000;
+      const exitCode = exitState.value?.code ?? -1;
+      const sigName = exitState.value?.signal ?? null;
+
+      // Status assembly — preserved verbatim from `runViaLegacy`'s mapping
+      // (main.ts:336-354). Cancellation has highest priority so a user-
+      // cancel mid-timeout still surfaces as "cancelled" rather than
+      // "failed/timeout".
+      if (cancelled) {
+        return {
+          status: "cancelled",
+          elapsedSec,
+          exitCode,
+          signal: sigName,
+          costUsd: finalResult?.costUsd ?? null,
+          sessionId: finalResult?.sessionId ?? null,
+          errorMessage: null,
+        };
+      }
+      if (timedOut) {
+        return {
+          status: "failed",
+          elapsedSec,
+          exitCode,
+          signal: sigName,
+          costUsd: finalResult?.costUsd ?? null,
+          sessionId: finalResult?.sessionId ?? null,
+          errorMessage: "runner timed out",
+        };
+      }
+      if (exitCode === 0) {
+        return {
+          status: "completed",
+          elapsedSec,
+          exitCode,
+          signal: sigName,
+          costUsd: finalResult?.costUsd ?? null,
+          sessionId: finalResult?.sessionId ?? null,
+          errorMessage: null,
+        };
+      }
+      const interpreted = claudeLocalAdapter.interpretFailure({
+        exitCode,
+        signal: sigName,
+      });
+      return {
+        status: "failed",
+        elapsedSec,
+        exitCode,
+        signal: sigName,
+        costUsd: finalResult?.costUsd ?? null,
+        sessionId: finalResult?.sessionId ?? null,
+        errorMessage: interpreted.humanMessage,
+      };
+    } finally {
+      clearTimeout(termTimer);
+      clearTimeout(killTimer);
+      signal.removeEventListener("abort", onAbort);
+      // Best-effort: if the generator is closed early (consumer threw or
+      // called .return), make sure the child doesn't outlive us.
+      if (!exitState.value && !child.killed) {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* already exited; ignore */
+        }
+      }
+      if (cleanup) {
+        await cleanup().catch(() => {
+          /* tempfile cleanup is best-effort */
+        });
+      }
+    }
   },
 
   /**
