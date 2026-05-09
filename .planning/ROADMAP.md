@@ -13,10 +13,11 @@ _Single source of truth for which sprint is next. Each session updates `Status` 
 | **S5** | Finance + scenario modeling | not_started | 1w | S2 (parallel-able with S4) | – | – |
 | **S6** | Ops + approval engine + polish | not_started | 1w | S5 | – | – |
 | **S7** | Multi-CLI Runner (BYO-AI expansion) | planned | 2-3w | S2 (parallel-able with S3+) | 2026-05-07 | – |
+| **S8** | Post-Audit P0 — non-tech-founder readiness | planned | 1-2w | S6 (UI polish ties in here) | 2026-05-10 | – |
 
 **Status values**: `not_started` → `planned` → `in_progress` → `done` → `blocked` (with note)
 
-**Critical path**: S1 → S2 → S3 → S4 → S6. S5 can begin in parallel with S4 once S2 lands (Finance reads Stripe + PostHog data, doesn't depend on Content/CRM).
+**Critical path**: S1 → S2 → S3 → S4 → S6 → S8. S5 can begin in parallel with S4 once S2 lands (Finance reads Stripe + PostHog data, doesn't depend on Content/CRM). S8 is the readiness gate before any non-tech-founder design partner.
 
 ---
 
@@ -183,6 +184,86 @@ _Single source of truth for which sprint is next. Each session updates `Status` 
 > A design partner with EITHER Claude Code OR Gemini CLI installed can complete onboarding, run their first agent task end-to-end, and see results in the UI. Phase ships when both flows pass e2e and onboarding UI no longer claims "Claude only" support.
 
 **Detailed plan**: `.planning/PHASES/PHASE-S7-multi-cli-runner.md` (to be created by `/gsd-plan-phase 7`)
+
+---
+
+### Sprint 8 — Post-Audit P0: non-tech-founder readiness
+
+_Added 2026-05-10 from `.planning/PRODUCT-AUDIT-2026-05-10.md`. Source verdict: "Not usable for a non-tech founder today without a developer present at the agent execution step."_
+
+**Goal**: Close the gap between the marketing promise (zero-code, 5-min setup) and the product reality (CLI install + always-on laptop runner). A non-technical buyer must be able to complete onboarding, see agents running, and recover from failure without engineering help.
+
+#### P0.1 — Self-contained agent execution _(architectural; one-way door)_
+
+**Problem**: Agents never run on Fly. Founder must install `@founderos/runner` on their laptop and keep it alive. No "agents offline" banner. The marketing promise and the product reality are misaligned by a full infrastructure tier.
+
+**Decision required (council before merge)**: choose one of:
+1. **Build server-side agent execution** — runner runs on Fly, founder ships only API keys. Multi-month rebuild. Highest trust for the buyer.
+2. **Honest BYO-runner pivot** — rewrite landing copy + onboarding to frame the laptop runner as a feature ("your data, your machine"). Same code, different positioning. Same-week scope.
+3. **Hybrid** — server-side for hosted plan, BYO for self-hosted plan. Pricing tier change.
+
+**Council requirement**: This is the largest one-way door in the audit. `/council` verdict required before any code changes.
+
+#### P0.2 — Notification bell + WebSocket push _(~2 days)_
+
+**Problem**: S6.6 shipped the DB schema for notifications. The bell, badge, and WebSocket push were deferred to v1.1. Approval-gated work silently stalls — the founder waits with no signal anything happened.
+
+**Scope**:
+- Wire `Bell` component in `ui/src/components/topbar/` (or wherever the topbar lives)
+- WS subscription on `/api/notifications/stream` (server already has the schema; needs the SSE/WS endpoint)
+- Unread count badge bound to `notifications.read_at IS NULL` query
+- Click-through to the relevant approval / inbox item
+
+**Council**: not required — additive UI on top of shipped schema.
+
+#### P0.3 — Company Memory UI _(~2 days)_
+
+**Problem**: S6.4 shipped `company_memory` schema + service. The UI to give agents context never landed. Every agent run starts from nothing — undermining the "AI executive team with company context" pitch.
+
+**Scope**:
+- `Settings → Company Memory` page (CRUD on `company_memory.{category, content}`)
+- Category-constrained input (CHECK constraint already at DB; mirror the enum in UI)
+- Per-agent visibility into what context they have access to (read-only summary on Agent Detail page)
+
+**Council**: not required — additive UI on top of shipped schema.
+
+#### P0.4 — Adapter chooser plain-English layer _(~1 day)_
+
+**Problem**: Onboarding wizard asks a non-tech founder to choose between `claude_local`, `BYO Runner`, `Anthropic API`, `Gemini CLI` with no explanation. Picking wrong silently produces agents that never run.
+
+**Scope**:
+- Replace technical labels with outcome-framed cards: "I have Claude Code on my laptop" / "I want FounderOS to run my agents (coming soon)" / "I have an Anthropic API key" / etc.
+- Inline link to a 2-minute setup guide per option
+- Validate the chosen adapter actually works (call `/api/providers/validate-key` or runner ping) BEFORE letting the founder finish onboarding — no silent picks
+
+**Council**: not required — copy + UX, no auth/data changes.
+
+#### P0.5 — ErrorBoundary verification + extension _(~half day)_
+
+**Problem**: Audit flagged "no `componentDidCatch` anywhere in `ui/src/main.tsx` or `App.tsx`." Conflicts with task #40 / PR #108 which marked an ErrorBoundary fix shipped. Either the audit was reading stale state, OR PR #108's coverage is incomplete.
+
+**Scope**:
+- Verify PR #108's ErrorBoundary actually catches at the route + component-tree boundaries the audit found gapped
+- Extend if needed (route-level boundary in `App.tsx`, fallback UI with "report this" + reload button)
+- Add a deliberate-throw test to confirm coverage
+
+**Council**: not required.
+
+#### P0.6 — Promised company export wired _(~1 day)_
+
+**Problem**: `Landing.tsx:1089` says "one-click exports your whole company as a JSON file." The button doesn't exist in the app.
+
+**Scope**:
+- `Settings → Export` page or top-level button
+- Server endpoint: `GET /api/export/company` returns ZIP of: company_memory, goals, projects, integrations config (secrets redacted), agent runs (last 90d). Async job for >50MB exports.
+- Re-import from the same JSON shape (stretch — defer if scope creeps)
+
+**Council**: not required (additive read-only export). If re-import is included, council on data shape.
+
+**Success criteria**:
+> A non-technical design partner can: complete onboarding without choosing a technical adapter; see agents running with a clear online/offline state; receive notifications when an agent needs approval; give agents company context; survive a render error without a white screen; export their company state on demand. Phase ships when those 6 paths pass a non-technical user smoke test.
+
+**Detailed plan**: `.planning/PHASES/PHASE-S8-non-tech-readiness.md` (to be created by `/gsd-plan-phase 8` after P0.1's architectural decision lands)
 
 ---
 
