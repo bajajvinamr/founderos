@@ -210,4 +210,50 @@ describe("ProviderChooser", () => {
     expect(subscriptionBadges).toHaveLength(1);
     expect(apiKeyBadges).toHaveLength(1);
   });
+
+  // Audit P0.4 — every tile (live AND coming-soon) must surface a
+  // plain-English "what this requires" line so the founder knows what
+  // they're signing up for before they pick.
+  it("every tile renders a non-empty requirement sub-text", () => {
+    render();
+    for (const option of PROVIDER_OPTIONS) {
+      const requirement = container.querySelector(
+        `[data-testid="provider-requirement-${option.id}"]`,
+      );
+      expect(requirement).toBeTruthy();
+      expect(requirement?.textContent ?? "").toBe(option.requirement);
+      expect(option.requirement.length).toBeGreaterThan(0);
+    }
+  });
+
+  // Audit P0.4 — the registry itself must enforce that every option
+  // declares a `requirement` string. Catches future tiles added without
+  // this honesty signal.
+  it("every registry entry declares a requirement string", () => {
+    for (const option of PROVIDER_OPTIONS) {
+      expect(typeof option.requirement).toBe("string");
+      expect(option.requirement.trim().length).toBeGreaterThan(0);
+      // Sanity: must look like a sentence (ends with a period).
+      expect(option.requirement.trim().endsWith(".")).toBe(true);
+    }
+  });
+
+  // Audit P0.4 — clicking a coming-soon tile MUST NOT change the
+  // selected adapter state. ProviderChooser is the upstream gate; this
+  // codifies the "submit-button cannot route to a not-wired adapter"
+  // guarantee at the chooser level.
+  it("coming-soon tiles never invoke onSelect (selection gate)", () => {
+    const handleSelect = vi.fn();
+    render({ onSelect: handleSelect });
+    const comingSoonOptions = PROVIDER_OPTIONS.filter(
+      (o) => o.status === "coming-soon",
+    );
+    for (const option of comingSoonOptions) {
+      const tile = container.querySelector(
+        `[data-testid="provider-tile-${option.id}"]`,
+      ) as HTMLButtonElement;
+      act(() => tile.click());
+    }
+    expect(handleSelect).not.toHaveBeenCalled();
+  });
 });

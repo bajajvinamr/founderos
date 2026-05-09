@@ -86,6 +86,12 @@ export function ProviderTile({ option, selected, onSelect, icon: Icon }: Props) 
           <p className="text-xs text-muted-foreground mt-1 leading-snug">
             {option.description}
           </p>
+          <p
+            className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic"
+            data-testid={`provider-requirement-${option.id}`}
+          >
+            {option.requirement}
+          </p>
         </div>
       </div>
     </button>
