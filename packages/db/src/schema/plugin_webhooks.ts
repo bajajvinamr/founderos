@@ -23,10 +23,9 @@ import type { PluginWebhookDeliveryStatus } from "@founderos/shared";
  * remote system (e.g. a GitHub delivery GUID) that can be used to detect
  * and reject duplicate deliveries.
  *
- * Status values:
+ * Status values (mirrors PLUGIN_WEBHOOK_DELIVERY_STATUSES + CHECK constraint in 0104):
  * - `pending` — received but not yet dispatched to the worker
- * - `processing` — currently being handled by the plugin worker
- * - `succeeded` — worker processed the payload successfully
+ * - `success` — worker processed the payload successfully
  * - `failed` — worker returned an error or timed out
  *
  * @see PLUGIN_SPEC.md §21.3 — `plugin_webhook_deliveries`
