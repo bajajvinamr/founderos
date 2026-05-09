@@ -84,18 +84,34 @@ export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number] | (string & 
  *   - server/src/routes/onboarding.ts (Zod `adapterChoiceSchema`)
  *   - server/src/services/adapter-resolver.ts (`mapOnboardingChoiceToAdapter`)
  *
- * The CLI choices (everything except `anthropic_api` and `skip`) map 1:1
- * to entries in `AGENT_ADAPTER_TYPES`. `anthropic_api` is a sentinel
- * meaning "use the founder's API key directly" and currently still
- * collapses to `claude_local` at provisioning time (no Anthropic-API
- * adapter exists; see onboarding-bootstrap.ts comment block). `skip`
- * defers configuration entirely.
+ * The CLI choices (everything except `anthropic_api`, `openai_api`,
+ * `google_api`, and `skip`) map 1:1 to entries in `AGENT_ADAPTER_TYPES`.
+ * The `*_api` sentinels mean "use the founder's API key directly".
+ * `anthropic_api` currently still collapses to `claude_local` at
+ * provisioning time (no Anthropic-API adapter exists; see
+ * onboarding-bootstrap.ts comment block). `openai_api` maps to the
+ * already-registered `openai_api` adapter. `google_api` is the 6-tile
+ * MVP shell — accepted at wire and validated by Zod, but no agent
+ * runtime handler exists yet (S7 Phase 4 territory). `skip` defers
+ * configuration entirely.
+ *
+ * 6-tile MVP scope (S7.0.2 — final-sprint roadmap line 61):
+ *   claude_local, anthropic_api, gemini_local, codex_local, openai_api,
+ *   google_api  (plus `skip` always-available).
+ *
+ * Legacy values retained but OUT of MVP wizard surface:
+ *   opencode_local, pi_local, cursor_local, hermes_local — schema
+ *   accepts them so a future UI revision (or power-user flag) can pass
+ *   them without an API change. Cursor specifically is out of MVP per
+ *   roadmap; the value is kept to avoid breaking pre-S7 onboarding
+ *   payloads in flight during the cutover.
  *
  * IMPORTANT: when adding a new CLI here, also:
  *   1. Confirm it exists in `AGENT_ADAPTER_TYPES` above + the
- *      `runner_jobs.adapter_type` CHECK constraint (migration 0105).
+ *      `runner_jobs.adapter_type` CHECK constraint (migrations 0105 + 0106).
  *   2. Extend `mapOnboardingChoiceToAdapter` in adapter-resolver.ts.
  *   3. Add a card to the wizard UI step (S7.4 territory).
+ *   4. Update `ONBOARDING_ADAPTER_AUTH_MODES` below.
  */
 export const ONBOARDING_ADAPTER_CHOICES = [
   "claude_local",
@@ -106,6 +122,8 @@ export const ONBOARDING_ADAPTER_CHOICES = [
   "cursor_local",
   "hermes_local",
   "anthropic_api",
+  "openai_api",
+  "google_api",
   "skip",
 ] as const;
 export type OnboardingAdapterChoice = (typeof ONBOARDING_ADAPTER_CHOICES)[number];
@@ -121,6 +139,54 @@ export const ONBOARDING_CLI_CHOICES = [
   "hermes_local",
 ] as const;
 export type OnboardingCliChoice = (typeof ONBOARDING_CLI_CHOICES)[number];
+
+/** Subset of OnboardingAdapterChoice that authenticate with a hosted-API key. */
+export const ONBOARDING_API_CHOICES = [
+  "anthropic_api",
+  "openai_api",
+  "google_api",
+] as const;
+export type OnboardingApiChoice = (typeof ONBOARDING_API_CHOICES)[number];
+
+/**
+ * `auth_mode` discriminator (S7.0.2 — final-sprint roadmap line 61).
+ *
+ * Each onboarding adapter choice declares how the founder's auth is
+ * acquired:
+ *   - `cli`  — the founder's local CLI is already authed (Claude Pro
+ *              session, `codex login`, `gemini auth`, etc). The runner
+ *              spawns the binary and inherits that auth. No key field
+ *              required at onboarding time.
+ *   - `api`  — the founder pastes a hosted-API key. The bootstrap route
+ *              validates it (currently only Anthropic; OpenAI/Google
+ *              validators land with their respective S7.B tiles) and
+ *              stores it as a company secret.
+ *   - `none` — `skip`. Founder defers the decision to Settings.
+ *
+ * This is the single source of truth for "does the wizard show the API
+ * key field?" — UI reads from this map, server's bootstrap route
+ * branches the key-required gate on it (only `auth_mode === 'api'`
+ * triggers key validation). Keeps the `claude_local + skip` invariant
+ * intact (CLAUDE.md: "Only `anthropic_api` requires + validates a
+ * key" — generalized post-S7.0.2 to "only `auth_mode === 'api'`
+ * choices require a key").
+ */
+export const ONBOARDING_ADAPTER_AUTH_MODES = {
+  claude_local: "cli",
+  codex_local: "cli",
+  gemini_local: "cli",
+  opencode_local: "cli",
+  pi_local: "cli",
+  cursor_local: "cli",
+  hermes_local: "cli",
+  anthropic_api: "api",
+  openai_api: "api",
+  google_api: "api",
+  skip: "none",
+} as const satisfies Record<OnboardingAdapterChoice, "cli" | "api" | "none">;
+
+export type OnboardingAdapterAuthMode =
+  (typeof ONBOARDING_ADAPTER_AUTH_MODES)[OnboardingAdapterChoice];
 
 export const AGENT_ROLES = [
   "ceo",
