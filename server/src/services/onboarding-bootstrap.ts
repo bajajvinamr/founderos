@@ -22,7 +22,11 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { integrations, workspaceDepartments } from "@founderos/db";
-import type { AgentRole, OnboardingAdapterChoice } from "@founderos/shared";
+import type {
+  AgentAdapterType,
+  AgentRole,
+  OnboardingAdapterChoice,
+} from "@founderos/shared";
 import {
   accessService,
   agentService,
@@ -286,25 +290,56 @@ export async function bootstrapCompanyOnboarding(
 
     // 5. Provision four agents with charters.
     const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
-    // BYO-107 (ADR-011) — flag-aware adapter selection.
+    // S8 P0.1 Phase 1D — hosted-aware tri-branch adapter resolution.
     //
-    // Pre-flag: hardcoded "claude_local" for ALL choices. The 2026-04 P1 fix
-    //   intentionally collapsed "anthropic_api" → "claude_local" because no
-    //   "claude_api" adapter is registered (would produce broken agents). On
-    //   Fly this still doesn't actually execute (no claude CLI in container),
-    //   but at least the row shape is valid and local-dev installs work.
+    // Three precedence levels, evaluated top-down:
     //
-    // Post-flag (FOUNDEROS_BYO_RUNNER_ENABLED=1): map ALL choices to
-    //   "byo_runner". The cloud enqueues runner_jobs rows and the founder's
-    //   local @founderos/runner picks them up — closing the 7-month-old
-    //   "agents can't actually run on hosted Fly" gap.
+    //   1. FOUNDEROS_HOSTED_AGENTS_ENABLED=1 + adapterChoice='anthropic_api'
+    //      → 'claude_local' (server-side hardened path, Phase 1C handler
+    //      reads the key from instance_api_keys and dispatches via the
+    //      Anthropic SDK in-process — no CLI, no laptop runner). This is
+    //      the production hosted path: the founder pastes a key, the
+    //      cloud executes their agents, no install required.
     //
-    //   `anthropic_api` keeps storing the user's key as a company secret
-    //   above; the runner can read it later if a flow needs direct API calls,
-    //   but the agent execution itself is via the local claude CLI under the
-    //   founder's authed session (which they pay for via Pro).
+    //   2. FOUNDEROS_BYO_RUNNER_ENABLED=1 (and hosted is OFF)
+    //      → 'byo_runner' (legacy laptop runner; ADR-011, S7 sprint). The
+    //      cloud enqueues `runner_jobs` rows; the founder's local
+    //      `@founderos/runner` picks them up and shells out to the local
+    //      `claude` CLI. Closes the original "agents can't run on Fly" gap
+    //      for founders who already pay for Claude Pro.
+    //
+    //   3. Otherwise (both flags OFF — dev / local default)
+    //      → mapOnboardingChoiceToAdapter(adapterChoice). Live providers
+    //      land at their *_local adapter; google_api throws a clear
+    //      "not yet implemented" error; skip + claude_local + anthropic_api
+    //      collapse to 'claude_local' for dev convenience. This branch
+    //      preserves PR #148 behaviour for local dev installs where the
+    //      operator runs the CLI on the same box as the server.
+    //
+    // The `anthropic_api` choice always stores the user's key as a company
+    // secret upstream (step 2). Whether the agent runtime *uses* that
+    // secret depends on which branch fires:
+    //   - Hosted: server-side handler reads from instance_api_keys (the
+    //     onboarding route also writes there — see routes/onboarding.ts).
+    //   - BYO: the runner reads from the company secret if a flow needs
+    //     direct API calls; agent execution itself uses the local CLI's
+    //     authed session.
+    //   - Dev/local: the claude_local adapter reads ANTHROPIC_API_KEY from
+    //     env (hydrated from instance_api_keys at boot).
     const { isByoRunnerEnabled } = await import("../lib/byo-runner-flag.js");
-    const adapterType = isByoRunnerEnabled() ? "byo_runner" : "claude_local";
+    const { mapOnboardingChoiceToAdapter } = await import(
+      "./adapter-resolver.js"
+    );
+    const HOSTED_ENABLED =
+      process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
+    let adapterType: AgentAdapterType;
+    if (HOSTED_ENABLED && input.adapterChoice === "anthropic_api") {
+      adapterType = "claude_local";
+    } else if (isByoRunnerEnabled()) {
+      adapterType = "byo_runner";
+    } else {
+      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
+    }
     const agentIdsBySlot: Record<AgentSlot, string> = {
       cos: "",
       growth: "",
