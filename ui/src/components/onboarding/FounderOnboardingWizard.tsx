@@ -18,6 +18,7 @@ import { Step5Departments } from "./steps/Step5Departments.js";
 import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
 import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
 import { Step7Telemetry } from "./steps/Step7Telemetry.js";
+import { ProviderChooser, type ProviderOption } from "./ProviderChooser.js";
 import {
   buildAutoCharters,
   buildFirstDecisions,
@@ -41,6 +42,34 @@ import {
 // END so the founder is asked AFTER seeing the product story. Default OFF.
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 const TOTAL_STEPS = 8;
+
+/**
+ * S7.C.1 — Bridge between the chooser's six-tile registry and the
+ * legacy three-value `AdapterChoice` enum. The chooser surfaces
+ * Claude Code (subscription) and Anthropic API (api_key) as live
+ * tiles; both resolve to the existing adapter slots. Coming-soon
+ * tiles never call this path — they're disabled at the tile level.
+ */
+function mapProviderToAdapter(
+  option: ProviderOption,
+): OnboardingDraft["adapterChoice"] | null {
+  if (option.status !== "live") return null;
+  if (option.id === "claude_code") return "claude_local";
+  if (option.id === "anthropic_api") return "anthropic_api";
+  return null;
+}
+
+function mapAdapterToProviderId(
+  choice: OnboardingDraft["adapterChoice"],
+  // anthropicKey is unused today but kept in the signature so a future
+  // S7.C.3 patch can disambiguate `claude_local`-with-key from
+  // `claude_local`-CLI without an API change.
+  _anthropicKey: string,
+): string | null {
+  if (choice === "claude_local") return "claude_code";
+  if (choice === "anthropic_api") return "anthropic_api";
+  return null;
+}
 
 function buildInitialDraft(): OnboardingDraft {
   return {
@@ -332,22 +361,54 @@ export function FounderOnboardingWizard() {
                 />
               )}
               {step === 4 && (
-                <Step4Plugin
-                  adapterChoice={draft.adapterChoice}
-                  anthropicKey={draft.anthropicKey}
-                  integrations={draft.integrations}
-                  validation={validation}
-                  onAdapterChoiceChange={(choice) =>
-                    patchDraft({ adapterChoice: choice })
-                  }
-                  onAnthropicKeyChange={(key) =>
-                    patchDraft({ anthropicKey: key })
-                  }
-                  onIntegrationsChange={(
-                    next: Record<IntegrationKey, boolean>,
-                  ) => patchDraft({ integrations: next })}
-                  onValidationChange={setValidation}
-                />
+                <div className="space-y-8">
+                  {/*
+                    S7.C.1 — Multi-provider chooser inserted ahead of the
+                    legacy adapter list. Six tiles, two live; selection
+                    drives the same `adapterChoice` slot Step4Plugin
+                    already manages so existing key validation + bootstrap
+                    pipeline keeps working unchanged.
+
+                    The `Step4Plugin` block below stays in place for now:
+                    its inline key field will be replaced by S7.C.2's
+                    drawer in the next ticket. The integrations toggles
+                    inside Step4Plugin remain in scope here (only the
+                    adapter selection migrates to the chooser).
+                  */}
+                  <ProviderChooser
+                    selectedId={mapAdapterToProviderId(
+                      draft.adapterChoice,
+                      draft.anthropicKey,
+                    )}
+                    onSelect={(option) => {
+                      const nextChoice = mapProviderToAdapter(option);
+                      if (nextChoice === null) return;
+                      patchDraft({ adapterChoice: nextChoice });
+                      // Switching tile clears any in-flight key validation
+                      // so the founder re-enters credentials for the new
+                      // option. Mirrors Step4Plugin's existing behaviour.
+                      if (nextChoice !== "anthropic_api") {
+                        setValidation({ status: "idle" });
+                      }
+                    }}
+                  />
+                  <Step4Plugin
+                    adapterChoice={draft.adapterChoice}
+                    anthropicKey={draft.anthropicKey}
+                    integrations={draft.integrations}
+                    validation={validation}
+                    onAdapterChoiceChange={(choice) =>
+                      patchDraft({ adapterChoice: choice })
+                    }
+                    onAnthropicKeyChange={(key) =>
+                      patchDraft({ anthropicKey: key })
+                    }
+                    onIntegrationsChange={(
+                      next: Record<IntegrationKey, boolean>,
+                    ) => patchDraft({ integrations: next })}
+                    onValidationChange={setValidation}
+                  />
+                </div>
               )}
               {step === 5 && (
                 <Step5Departments

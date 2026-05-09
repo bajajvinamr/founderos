@@ -53,25 +53,25 @@ describe("parseStreamJsonLine", () => {
     expect(parseStreamJsonLine("   \n")).toBeNull();
   });
 
-  it("parses claude_message from assistant/user/system types", () => {
+  it("parses model_message from assistant/user/system types", () => {
     const evt = parseStreamJsonLine(JSON.stringify({ type: "assistant", message: { role: "assistant" } }));
-    expect(evt?.kind).toBe("claude_message");
+    expect(evt?.kind).toBe("model_message");
     expect((evt?.payload as Record<string, unknown>).type).toBe("assistant");
   });
 
-  it("parses claude_tool_use", () => {
+  it("parses tool_call", () => {
     const evt = parseStreamJsonLine(
       JSON.stringify({ type: "tool_use", name: "bash", input: { cmd: "ls" } }),
     );
-    expect(evt?.kind).toBe("claude_tool_use");
+    expect(evt?.kind).toBe("tool_call");
   });
 
-  it("parses claude_tool_result", () => {
+  it("parses tool_result", () => {
     const evt = parseStreamJsonLine(JSON.stringify({ type: "tool_result", content: "ok" }));
-    expect(evt?.kind).toBe("claude_tool_result");
+    expect(evt?.kind).toBe("tool_result");
   });
 
-  it("parses claude_result with cost + session_id intact", () => {
+  it("parses run_complete with cost + session_id intact", () => {
     const evt = parseStreamJsonLine(
       JSON.stringify({
         type: "result",
@@ -80,7 +80,7 @@ describe("parseStreamJsonLine", () => {
         is_error: false,
       }),
     );
-    expect(evt?.kind).toBe("claude_result");
+    expect(evt?.kind).toBe("run_complete");
     const p = evt?.payload as Record<string, unknown>;
     expect(p.session_id).toBe("sess_after");
     expect(p.total_cost_usd).toBeCloseTo(0.0123);
