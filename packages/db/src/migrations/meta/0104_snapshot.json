@@ -1,0 +1,161 @@
+{
+  "id": "c3d4e5f6-a7b8-49c0-d1e2-f3a4b5c6d7e8",
+  "prevId": "a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.decision_outcomes": {
+      "name": "decision_outcomes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "approval_id": {
+          "name": "approval_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome_status": {
+          "name": "outcome_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompted_at": {
+          "name": "prompted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "answered_at": {
+          "name": "answered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "founder_note": {
+          "name": "founder_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metric_delta": {
+          "name": "metric_delta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "memory_entry_id": {
+          "name": "memory_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_decision_outcomes_approval": {
+          "name": "idx_decision_outcomes_approval",
+          "columns": [
+            {
+              "expression": "approval_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_decision_outcomes_company_status": {
+          "name": "idx_decision_outcomes_company_status",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "outcome_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "decision_outcomes_approval_id_approvals_id_fk": {
+          "name": "decision_outcomes_approval_id_approvals_id_fk",
+          "tableFrom": "decision_outcomes",
+          "tableTo": "approvals",
+          "columnsFrom": ["approval_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "decision_outcomes_company_id_companies_id_fk": {
+          "name": "decision_outcomes_company_id_companies_id_fk",
+          "tableFrom": "decision_outcomes",
+          "tableTo": "companies",
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "decision_outcomes_memory_entry_id_company_memory_id_fk": {
+          "name": "decision_outcomes_memory_entry_id_company_memory_id_fk",
+          "tableFrom": "decision_outcomes",
+          "tableTo": "company_memory",
+          "columnsFrom": ["memory_entry_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
