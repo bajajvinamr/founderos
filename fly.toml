@@ -65,9 +65,9 @@ kill_timeout = "5s"
   internal_port = 3100
   protocol = "tcp"
   processes = ["app"]
-  auto_stop_machines = "stop"     # Scale to zero when idle (single-tenant friendly)
+  auto_stop_machines = "suspend"  # Suspend (not stop) — sub-second resume vs cold start
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1        # Keep one machine warm — eliminates cold-start latency on user requests
 
   [[services.ports]]
     port = 80
