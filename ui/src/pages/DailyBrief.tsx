@@ -26,6 +26,7 @@ import { approvalsApi } from "../api/approvals";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { ApiError } from "../api/client";
+import { PageSkeleton } from "../components/PageSkeleton";
 
 export function DailyBrief() {
   const { selectedCompanyId } = useCompany();
@@ -65,11 +66,7 @@ export function DailyBrief() {
   }
 
   if (isLoading) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-10 text-sm text-muted-foreground">
-        Loading…
-      </div>
-    );
+    return <PageSkeleton variant="list" />;
   }
 
   if (error) {
