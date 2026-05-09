@@ -38,21 +38,19 @@ Flaked once during the 2026-04-23 retro run, passed 5/5 times in isolation on 20
 
 ---
 
-### 4. ~~e2e/tests/critical-flows.spec.ts > landing > [landing] hero + sign-up CTA render~~ — FIXED 2026-05-02
+### 4. ~~e2e/tests/critical-flows.spec.ts > landing > [landing] hero + sign-up CTA render~~ — RESOLVED (closes #16)
 
-**Location:** `e2e/tests/critical-flows.spec.ts:41`
+**Location:** `e2e/tests/critical-flows.spec.ts:46`
 
-**Issue:** Passes locally against vite-dev (port 3100 proxying React-refreshed `Landing.tsx`) but fails in CI under static mode (server serves built `ui/dist`). The CTA selector matches a broad family of phrases (`/sign\s*up|get\s*started|build\s*your\s*company|design\s*partner|start\s*your/i`) and Landing.tsx has multiple matching links (e.g. "Build your company →"), so this is most likely a hydration race or a build-time copy divergence in CI, not a real regression.
+**Root cause (two-part):**
+1. CTA regex only matched `/sign\s*up|get\s*started/i` but landing copy had been updated to "Build your company" and "Design partner pricing" — the broader regex `/sign\s*up|get\s*started|build\s*your\s*company|design\s*partner|start\s*your/i` was needed (commit `0af7460`).
+2. Spec navigated to `/` which redirects to `/landing` only under `deploymentMode=authenticated` (Fly prod). CI runs under `local_trusted`, where `/` falls through to CompanyRootRedirect; Landing.tsx was never mounted. Fixed by navigating directly to `/landing` (commit `679f45a`, PR #70).
 
-**Symptom:** `Error: Landing page has no visible primary CTA link — check ui/src/pages/Landing.tsx`. Reproduced on PR #15's CI run; `pnpm exec playwright test --grep "hero + sign-up CTA render"` passes locally.
+**Fix shape:** Widened CTA regex + changed `page.goto("/")` to `page.goto("/landing")`. No selector weakening — the assertion still requires a visible primary CTA link.
 
-**Why this was masked:** The E2E suite has been red on `main` for weeks because of an upstream ECONNREFUSED harness bug at the seed step (issue #7). Once the seed step actually ran, this stale assertion surfaced.
+**Verified:** CI green on `main` push (`run/25609728316`). No `.skip` on the test. Both landing assertions (`heroCandidates` + `cta.first()`) pass.
 
-**Re-enable when:**
-- Investigation confirms whether built ui/dist actually serves the same Landing copy as vite-dev, OR
-- The selector / wait strategy is hardened to handle the static-build hydration timing.
-
-**Tracked:** [#16](https://github.com/bajajvinamr/founderos/issues/16) — RESOLVED. Re-enabled in Wave 23B after the static-build E2E hardening pass; route-load smoke confirms Landing.tsx mounts cleanly. Both landing assertions now green under `pnpm e2e`.
+**Tracked:** [#16](https://github.com/bajajvinamr/founderos/issues/16) — closed.
 
 ---
 
