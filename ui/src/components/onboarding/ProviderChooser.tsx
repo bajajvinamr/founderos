@@ -67,7 +67,8 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "claude_code",
     label: "Claude Code",
-    description: "Use your existing Claude subscription via the local CLI.",
+    description:
+      "For developers — requires Claude Code CLI installed on your laptop.",
     requirement: "Requires Claude Code CLI installed on your laptop.",
     status: "live",
     adapterType: "claude_local",
