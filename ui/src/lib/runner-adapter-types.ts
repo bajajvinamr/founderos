@@ -106,6 +106,26 @@ export function isHostedRunnerAdapter(
 }
 
 /**
+ * S8 P0.1 Phase 2B — true when the agent's `claude_local` adapter is
+ * actually executing on the server (via the in-process Anthropic SDK
+ * handler) rather than on a laptop runner. Gated by the build-time
+ * `VITE_FOUNDEROS_HOSTED_AGENTS_ENABLED` flag, which mirrors the
+ * server-side `FOUNDEROS_HOSTED_AGENTS_ENABLED`. When true, the agent
+ * has no laptop-runner footprint — UI affordances should suppress the
+ * "Connect runner" CTA in favor of a "Hosted on FounderOS" badge.
+ *
+ * Exported as a function (not a precomputed boolean) so tests can mutate
+ * `import.meta.env` between cases without module re-import shenanigans.
+ */
+export function isHostedClaudeLocalAgent(
+  adapterType: string | null | undefined,
+): boolean {
+  if (adapterType !== "claude_local") return false;
+  // Vite injects env vars as strings; "1" is the canonical truthy value.
+  return import.meta.env.VITE_FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
+}
+
+/**
  * True if any agent in `agents` runs on a hosted-runner adapter. Drives the
  * gating decision for whether to render `RunnerStatusPill` on the Team page.
  */
