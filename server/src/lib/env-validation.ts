@@ -181,6 +181,26 @@ const CHECKS: EnvCheck[] = [
       "ship to design partners (S6 polish or sooner). Generate with `openssl rand -hex 48`. Council " +
       "2026-05-06 finding #4 (CAN-SPAM/GDPR BLOCK) — see decisions.md.",
   },
+  // --- local-agent JWT (load-bearing for every local adapter spawn) ---
+  {
+    name: "FOUNDEROS_AGENT_JWT_SECRET",
+    keys: ["FOUNDEROS_AGENT_JWT_SECRET"],
+    enables:
+      "Local-agent JWT signing — without it, every adapter that declares " +
+      "supportsLocalAgentJwt:true (claude_local, codex_local, cursor, gemini_local, " +
+      "opencode_local, pi_local, hermes_local) refuses to spawn at heartbeat-execute " +
+      "time and the run is marked failed with errorCode=agent_jwt_secret_missing.",
+    severity: "REQUIRED_IN_PROD",
+    hint:
+      "P0 silent-degradation fix (2026-05-09): pre-fix, missing secret produced a " +
+      "logger.warn and the spawned agent ran WITHOUT FOUNDEROS_API_KEY in env, " +
+      "causing 401s on every authenticated API call from the agent (e.g. issue " +
+      "assignment, comment, approval) — surfacing as a generic 401 inside the " +
+      "agent's output instead of a clear server-misconfiguration signal. Run " +
+      "`pnpm founderos onboard` to generate one, or `openssl rand -hex 48`. " +
+      "See ~/.founderos/.env. Companion runtime guard at " +
+      "server/src/services/heartbeat.ts AgentJwtSecretMissingError.",
+  },
   // --- provider-key validator nonce (S7.A.6, council 2026-05-08 P1) ---
   {
     name: "FOUNDEROS_NONCE_SECRET",
