@@ -46,6 +46,7 @@ import {
   AGENT_SLOTS,
   ANALYTICS_INTEGRATION_KEYS,
   bootstrapCompanyOnboarding,
+  OnboardingAdapterUnsupportedError,
   type BootstrapInput,
 } from "../services/onboarding-bootstrap.js";
 import { generateFirstDecisions } from "../services/onboarding-decisions.js";
@@ -371,9 +372,31 @@ export function onboardingRoutes(db: Db) {
         companyName,
       };
 
-      const result = await bootstrapCompanyOnboarding(db, bootstrapInput, {
-        actorUserId,
-      });
+      let result;
+      try {
+        result = await bootstrapCompanyOnboarding(db, bootstrapInput, {
+          actorUserId,
+        });
+      } catch (error) {
+        // S7.2 (audit P0.2 — 2026-05-10) — gracefully surface "coming soon"
+        // adapter choices as a 422, NOT a 500. The 4 not-yet-wired tiles
+        // (gemini_local / google_api / codex_local / openai_api) are
+        // blocked at the chooser, but the Zod schema still accepts them
+        // for forward-compat / power-user override. If one slips through,
+        // the bootstrap throws OnboardingAdapterUnsupportedError and we
+        // translate it into a clean validation-shaped error here.
+        if (error instanceof OnboardingAdapterUnsupportedError) {
+          throw unprocessable(error.message, {
+            code: "ADAPTER_NOT_YET_SUPPORTED",
+            adapterChoice: bootstrapInput.adapterChoice,
+            hint:
+              "Pick Claude Code or Anthropic API to complete onboarding. " +
+              "Other providers are coming soon — see the chooser tile " +
+              "for ETAs.",
+          });
+        }
+        throw error;
+      }
 
       // S-TC1 (council 2026-05-05 P1) — persist the founder's telemetry
       // consent decision. We do this OUTSIDE the bootstrap transaction:

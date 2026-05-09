@@ -1,11 +1,29 @@
 /**
- * Tests that POST /onboarding/bootstrap always creates agents with
- * adapterType = "claude_local", regardless of the adapterChoice field.
+ * Tests that POST /onboarding/bootstrap honors the founder's chooser
+ * answer when writing `agents.adapter_type`.
  *
- * This covers the P1-2 council finding: the original code mapped
- * "anthropic_api" → "claude_api" but no claude_api adapter is registered,
- * making those agents permanently non-functional.  The fix hardcodes
- * "claude_local" for all paths.
+ * S7.2 / audit P0.2 (2026-05-10) — pre-fix this file documented and
+ * encoded the silent collapse: every choice mapped to "claude_local"
+ * (or "byo_runner" with the BYO flag on). PR #135 made the chooser UI
+ * honest, but the bootstrap still discarded `input.adapterChoice`. The
+ * fix routes through `mapOnboardingChoiceToAdapter` from
+ * adapter-resolver.ts so the persisted answer actually drives the row
+ * value.
+ *
+ * Two LIVE wires today (PR #135):
+ *   - claude_code (UI id) → claude_local (adapter row)
+ *   - anthropic_api (UI id) → claude_local (adapter row + injected
+ *     ANTHROPIC_API_KEY secret_ref; no claude_api adapter exists)
+ *
+ * Four COMING SOON (chooser blocks selection; Zod still accepts on the
+ * wire for legacy + power-user paths):
+ *   - gemini_local  → returns its own row value (resolver supports it)
+ *   - codex_local   → returns its own row value
+ *   - openai_api    → returns its own row value
+ *   - google_api    → resolver throws (no Phase 4 runtime); bootstrap
+ *                     wraps it in OnboardingAdapterUnsupportedError;
+ *                     route surfaces a 422 with "pick another provider"
+ *                     hint, NOT a 500.
  */
 
 import express from "express";
@@ -173,7 +191,7 @@ function makePayload(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("onboarding bootstrap — adapterType is always claude_local", () => {
+describe("onboarding bootstrap — adapterType honors founder's chooser answer (S7.2)", () => {
   let savedFlag: string | undefined;
 
   beforeEach(() => {
@@ -391,16 +409,15 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
 });
 
 // ---------------------------------------------------------------------------
-// S7.0.2 — Zod schema accepts the wider 7 CLI choices
+// S7.2 — wider CLI choices map 1:1 to their matching adapter row value
 //
-// We only assert that the schema VALIDATES the wider input — the
-// downstream "agents end up with adapterType=X" behavior is gated by
-// onboarding-bootstrap.ts:307 (still collapses to claude_local or
-// byo_runner per the BYO flag); S7.2 will reverse that collapse and
-// add behavior tests here.
+// Pre-S7.2 these only asserted HTTP 201 (the schema accepted the input
+// but bootstrap collapsed to claude_local). Post-fix the adapter row
+// must reflect the chooser answer — `mapOnboardingChoiceToAdapter` is
+// the source of truth.
 // ---------------------------------------------------------------------------
 
-describe("onboarding bootstrap — Zod adapterChoice schema accepts wider CLI set (S7.0.2)", () => {
+describe("onboarding bootstrap — wider CLI set maps 1:1 to adapter row (S7.2)", () => {
   let savedFlag: string | undefined;
 
   beforeEach(() => {
@@ -426,7 +443,7 @@ describe("onboarding bootstrap — Zod adapterChoice schema accepts wider CLI se
   ] as const;
 
   for (const choice of cliChoices) {
-    it(`accepts adapterChoice=${choice} (no anthropic key required)`, async () => {
+    it(`maps adapterChoice=${choice} → adapterType=${choice} (1:1)`, async () => {
       const app = await createApp();
       const res = await request(app)
         .post("/api/onboarding/bootstrap")
@@ -439,6 +456,12 @@ describe("onboarding bootstrap — Zod adapterChoice schema accepts wider CLI se
       // No company secret should have been created — only anthropic_api
       // path stores the key.
       expect(mockSecretService.create).not.toHaveBeenCalled();
+      // Post-S7.2: adapter row mirrors the chooser answer.
+      const calls = mockAgentService.create.mock.calls;
+      expect(calls.length).toBe(4);
+      for (const [, payload] of calls) {
+        expect(payload).toMatchObject({ adapterType: choice });
+      }
     });
   }
 
@@ -489,7 +512,7 @@ describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
     else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
   });
 
-  it("accepts adapterChoice=openai_api when key is provided (no anthropic validator fires)", async () => {
+  it("maps adapterChoice=openai_api → adapterType=openai_api (key gates pass)", async () => {
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
@@ -499,6 +522,12 @@ describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
     // The OpenAI key path bypasses the Anthropic live validator —
     // wiring lands with the S7.B OpenAI tile.
     expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
+    // Post-S7.2: adapter row reflects openai_api, NOT a silent claude_local.
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "openai_api" });
+    }
   });
 
   it("rejects adapterChoice=openai_api when key is missing (auth_mode='api' gate)", async () => {
@@ -511,19 +540,24 @@ describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
     expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 
-  it("accepts adapterChoice=google_api when key is provided (Phase 4 placeholder)", async () => {
-    // S7 Phase 4 ships the Google API agent runtime. Until then the
-    // Zod schema accepts the choice + the key gate enforces a
-    // non-empty key. mapOnboardingChoiceToAdapter throws for
-    // google_api, but bootstrap-bootstrap currently collapses to
-    // claude_local pre-S7.2, so this still returns 201.
+  it("rejects adapterChoice=google_api with 422 (no agent runtime — S7 Phase 4 territory)", async () => {
+    // Post-S7.2: bootstrap honors the chooser answer instead of silently
+    // collapsing to claude_local. `mapOnboardingChoiceToAdapter` throws
+    // for `google_api` (no Phase 4 runtime). The bootstrap wraps the
+    // throw in `OnboardingAdapterUnsupportedError`; the route surfaces
+    // it as a 422 with a "pick a different provider" hint, NOT a 500.
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
       .send(makePayload("google_api", "AIza-google-test-key-1234567890"));
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(422);
+    expect(res.body.error).toMatch(/google_api/i);
+    expect(res.body.error).toMatch(/coming soon|not yet supported/i);
     expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
+    // No agents should have been created — the bootstrap aborts before
+    // the agent-creation loop.
+    expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 
   it("rejects adapterChoice=google_api when key is missing (auth_mode='api' gate)", async () => {

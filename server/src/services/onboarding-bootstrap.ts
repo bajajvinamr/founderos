@@ -136,6 +136,27 @@ export type BootstrapResult = {
   firstRunPromise?: Promise<unknown | null>;
 };
 
+/**
+ * Thrown by the bootstrap orchestrator when the founder's persisted
+ * adapter choice maps to a provider with no agent runtime yet (S7.2 —
+ * audit P0.2).
+ *
+ * The chooser UI in PR #135 already greys-out the four "coming soon"
+ * tiles, so the only way this error fires in practice is a power-user
+ * curl with one of those choices on the wire (the Zod schema accepts
+ * them for forward-compat). The route handler converts this to a 422
+ * with a "pick a different provider" message — NOT a 500.
+ *
+ * Named class so the route handler can branch on `instanceof` without
+ * string-matching the message.
+ */
+export class OnboardingAdapterUnsupportedError extends Error {
+  override readonly name = "OnboardingAdapterUnsupportedError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 function clampAutonomy(raw: number): number {
   if (!Number.isFinite(raw)) return 2;
   const rounded = Math.round(raw);
@@ -286,25 +307,58 @@ export async function bootstrapCompanyOnboarding(
 
     // 5. Provision four agents with charters.
     const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
-    // BYO-107 (ADR-011) — flag-aware adapter selection.
+    // S7.2 (audit P0.2 — 2026-05-10) — honor the founder's chooser answer.
     //
-    // Pre-flag: hardcoded "claude_local" for ALL choices. The 2026-04 P1 fix
-    //   intentionally collapsed "anthropic_api" → "claude_local" because no
-    //   "claude_api" adapter is registered (would produce broken agents). On
-    //   Fly this still doesn't actually execute (no claude CLI in container),
-    //   but at least the row shape is valid and local-dev installs work.
+    // History:
+    //   - Pre-S7.2 this line hardcoded "claude_local" for ALL choices, then
+    //     was replaced by a flag-aware "byo_runner OR claude_local" collapse.
+    //     Either way, `input.adapterChoice` was discarded — the 6-tile UI
+    //     in PR #135 was honest, but bootstrap silently overwrote the
+    //     persisted answer.
+    //   - The right mapping (CLI choices → matching `*_local` adapter row
+    //     value) already lives in `mapOnboardingChoiceToAdapter` in
+    //     adapter-resolver.ts; we now route through it.
     //
-    // Post-flag (FOUNDEROS_BYO_RUNNER_ENABLED=1): map ALL choices to
-    //   "byo_runner". The cloud enqueues runner_jobs rows and the founder's
-    //   local @founderos/runner picks them up — closing the 7-month-old
-    //   "agents can't actually run on hosted Fly" gap.
+    // BYO-runner flag: when `FOUNDEROS_BYO_RUNNER_ENABLED=1` is set the
+    //   cloud-side execution model is "enqueue runner_jobs; founder's local
+    //   runner picks them up." That flag is the OPERATOR-level switch that
+    //   intentionally overrides per-founder choice — every adapter row
+    //   becomes `byo_runner` regardless of choice. Preserved here.
     //
-    //   `anthropic_api` keeps storing the user's key as a company secret
-    //   above; the runner can read it later if a flow needs direct API calls,
-    //   but the agent execution itself is via the local claude CLI under the
-    //   founder's authed session (which they pay for via Pro).
+    // 6-tile MVP wiring (PR #135):
+    //   LIVE  — `claude_local` (Claude Code CLI), `anthropic_api` (Anthropic
+    //           key; collapses to claude_local row + injected secret because
+    //           no claude_api adapter exists yet).
+    //   COMING SOON — `gemini_local` / `google_api` / `codex_local` /
+    //           `openai_api`. The chooser blocks these from being selected,
+    //           but the Zod schema accepts them on the wire (legacy
+    //           compatibility + power-user override). The resolver throws
+    //           for `google_api` (no runtime yet); we catch that and surface
+    //           a clean 422-shaped error to the route handler instead of
+    //           letting it become a 500.
     const { isByoRunnerEnabled } = await import("../lib/byo-runner-flag.js");
-    const adapterType = isByoRunnerEnabled() ? "byo_runner" : "claude_local";
+    const { mapOnboardingChoiceToAdapter } = await import("./adapter-resolver.js");
+    let adapterType: string;
+    if (isByoRunnerEnabled()) {
+      adapterType = "byo_runner";
+    } else {
+      try {
+        adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
+      } catch (error) {
+        // The resolver throws an `Error` with a "not yet implemented"
+        // message for `google_api` (S7 Phase 4 territory). Re-throw with
+        // a marker the route handler recognizes (mirrors how
+        // anthropic-key validation surfaces 422s). The caller catches
+        // this and returns 422 with a clear "pick another provider"
+        // message — NOT a 500.
+        const reason = error instanceof Error ? error.message : "unknown";
+        throw new OnboardingAdapterUnsupportedError(
+          `Provider '${input.adapterChoice}' is not yet supported. ` +
+            `Please pick Claude Code or Anthropic API during onboarding ` +
+            `(other providers are coming soon). [${reason}]`,
+        );
+      }
+    }
     const agentIdsBySlot: Record<AgentSlot, string> = {
       cos: "",
       growth: "",
