@@ -583,7 +583,10 @@ export function agentInstructionsService() {
     const refreshedFiles = existingFiles.length === 0 ? await listFilesRecursive(nextRootPath) : existingFiles;
     if (!refreshedFiles.includes(nextEntryFile)) {
       const nextEntryContent = exported.files[nextEntryFile] ?? exported.files[exported.entryFile] ?? "";
-      await writeBundleFiles(nextRootPath, { [nextEntryFile]: nextEntryContent });
+      const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+      if (!PROTO_KEYS.has(nextEntryFile)) {
+        await writeBundleFiles(nextRootPath, { [nextEntryFile]: nextEntryContent });
+      }
     }
 
     const nextConfig = applyBundleConfig(state.config, {

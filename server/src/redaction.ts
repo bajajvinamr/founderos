@@ -29,7 +29,7 @@ function isPlainBinding(value: unknown): value is { type: "plain"; value: unknow
 }
 
 export function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
-  const redacted: Record<string, unknown> = {};
+  const redacted: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(record)) {
     if (SECRET_PAYLOAD_KEY_RE.test(key)) {
       if (isSecretRefBinding(value)) {
