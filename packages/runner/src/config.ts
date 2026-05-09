@@ -9,11 +9,16 @@
  *   FOUNDEROS_CLAUDE_BIN    — path to claude CLI (default: "claude" on PATH)
  *   FOUNDEROS_RUNNER_TIMEOUT_SEC — per-job ceiling, default 600
  *   FOUNDEROS_RUNNER_LOG_LEVEL   — debug | info | warn | error (default: info)
- *   FOUNDEROS_DISPATCHER_V2      — when truthy ("1" | "true" | "yes",
- *                                   case-insensitive) opts the runner into the
- *                                   PHASE-S7 multi-provider dispatcher path
- *                                   (Gemini, Codex, Cursor, OpenCode, …).
- *                                   Absence = safe default = legacy `runClaude`.
+ *   FOUNDEROS_DISPATCHER_V2      — opt-OUT switch for the PHASE-S7
+ *                                   multi-provider dispatcher path (Gemini,
+ *                                   Codex, Cursor, OpenCode, …). Default is
+ *                                   ON (V2). Set to "0" | "false" | "no"
+ *                                   (case-insensitive, trimmed) to revert to
+ *                                   the legacy `runClaude` path. PRs
+ *                                   #107/#110/#112/#113/#116/#118 baked the
+ *                                   adapters; V2 is now the safe default.
+ *                                   Rollback: `fly secrets set
+ *                                   FOUNDEROS_DISPATCHER_V2=0`.
  *                                   See docs/runbooks/dispatcher-v2-rollout.md.
  */
 
@@ -142,16 +147,18 @@ export function loadConfig(
 /**
  * PHASE-S7 dispatcher feature flag.
  *
- * Truthy values: "1", "true", "yes" (case-insensitive, trimmed). Anything
- * else — including unset, empty string, "0", "false" — means the legacy
- * `runClaude` path is used. Absence MUST be the safe default; downstream
- * tickets S7.A.1..S7.D.6 wire the multi-adapter dispatcher behind this
- * gate so it can be flipped/rolled back via `fly secrets`.
+ * Default: ON (V2 multi-adapter dispatcher). Opt-out values: "0", "false",
+ * "no" (case-insensitive, trimmed) revert to the legacy `runClaude` path.
+ * Anything else — including unset, empty string, "1", "true", arbitrary
+ * strings — keeps V2 ON. Inverted from the original opt-in default in
+ * task #50 once PRs #107 (interface), #110 (dispatcher), #112 (main swap),
+ * #113 (claude lifecycle), #116 (gemini), #118 (codex) all baked in prod.
+ * Rollback escape hatch: `fly secrets set FOUNDEROS_DISPATCHER_V2=0`.
  *
  * Caller convention: use this helper instead of re-parsing the env var,
- * so the truthy set stays single-sourced.
+ * so the opt-out set stays single-sourced.
  */
 export function isDispatcherV2Enabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = (env.FOUNDEROS_DISPATCHER_V2 ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
+  return !(raw === "0" || raw === "false" || raw === "no");
 }

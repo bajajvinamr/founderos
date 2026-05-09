@@ -25,9 +25,8 @@
  * buffering, SIGTERM→SIGKILL timeout escalation, instructions tempfile
  * cleanup, final-result snapshot) is ported into the AsyncGenerator
  * implementation below. `runClaude` itself is preserved unchanged so the
- * legacy V1 path in `main.ts` (when `FOUNDEROS_DISPATCHER_V2` is unset)
- * keeps working bit-for-bit. The flag flip from V1 → V2 default is a
- * separate ticket.
+ * legacy V1 path in `main.ts` (when `FOUNDEROS_DISPATCHER_V2=0` — explicit
+ * opt-out; default is V2 since task #50) keeps working bit-for-bit.
  */
 
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";

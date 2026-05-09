@@ -68,14 +68,15 @@ export async function runRunnerLoop(opts: RunnerLoopOptions): Promise<{ jobsProc
   const logger = opts.logger ?? consoleLogger(config.logLevel);
   const api = opts.apiClient ?? new RunnerApiClient(config);
 
-  // PHASE-S7 dispatcher gate. Absence = legacy runClaude (safe default);
-  // truthy = route claimed jobs through `runAdapter` (S7.1.b.3 dispatcher)
-  // so claude_local / future gemini_local / codex_local / openai_api / ...
-  // share one code path. Test seam: when `opts.spawnFn` is set, the legacy
-  // spawnImpl path runs regardless of the flag — dispatcher-flag tests rely
-  // on this to pin v2 logging without paying for the dispatcher's stubbed
-  // `claudeLocalAdapter.run()` (lifecycle implementation lands in S7.1.c.*
-  // follow-ups).
+  // PHASE-S7 dispatcher gate. Default = V2 multi-adapter dispatcher
+  // (`runAdapter`, S7.1.b.3) so claude_local / gemini_local / codex_local /
+  // openai_api / ... share one code path. Set
+  // `FOUNDEROS_DISPATCHER_V2=0|false|no` to revert to legacy runClaude
+  // (default flipped in task #50 once PRs #107/#110/#112/#113/#116/#118
+  // baked). Test seam: when `opts.spawnFn` is set, the legacy spawnImpl
+  // path runs regardless of the flag — dispatcher-flag tests rely on this
+  // to pin v2 logging without paying for the dispatcher's adapter
+  // lifecycle.
   const v2 = isDispatcherV2Enabled();
   if (v2) {
     console.info("[dispatcher] v2 (multi-adapter)");
@@ -295,9 +296,9 @@ type ClaimedPayload = RunOneJobInput["payload"];
 /**
  * Legacy direct-`runClaude` execution path. Preserves existing behavior bit
  * for bit — same SpawnArgs, same SpawnResult → CompletionBody mapping. This
- * is what runs when `FOUNDEROS_DISPATCHER_V2` is unset (safe default) AND
- * what runs whenever a `spawnFn` test seam is provided (so the existing
- * main-loop integration tests keep pinning the same surface).
+ * is what runs when `FOUNDEROS_DISPATCHER_V2=0` (explicit opt-out; default
+ * is V2) AND what runs whenever a `spawnFn` test seam is provided (so the
+ * existing main-loop integration tests keep pinning the same surface).
  */
 async function runViaLegacy(args: {
   payload: ClaimedPayload;

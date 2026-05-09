@@ -32,10 +32,10 @@
  * `AbortSignal` for user-cancel. `run()` returns one of three terminal
  * statuses (`completed` / `failed` / `cancelled`).
  *
- * Note: this adapter is dormant under V1 (`FOUNDEROS_DISPATCHER_V2` unset)
- * and goes live when the flag flips. The server-side adapter at
- * `packages/adapters/codex-local/src/server/execute.ts` is unchanged
- * and continues to power the in-process server path until then.
+ * Note: this adapter is dormant only under V1 (`FOUNDEROS_DISPATCHER_V2=0`
+ * — explicit opt-out; default is V2 since task #50). The server-side
+ * adapter at `packages/adapters/codex-local/src/server/execute.ts` is
+ * unchanged and continues to power the in-process server path under V1.
  */
 
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";

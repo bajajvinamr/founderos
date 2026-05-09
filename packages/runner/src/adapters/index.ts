@@ -43,8 +43,8 @@ import { geminiLocalAdapter } from "./gemini.js";
  *   - S7.C / future — cursor_local, openai_api, anthropic_api, google_api.
  *
  * Note: `gemini_local` and `codex_local` are dormant under V1
- * (`FOUNDEROS_DISPATCHER_V2` unset). They go live when the dispatcher
- * flag flips (separate ticket).
+ * (`FOUNDEROS_DISPATCHER_V2=0` — explicit opt-out; default V2 is ON
+ * since task #50).
  *
  * Use `getAdapter(type)` for runtime lookups so the registry doesn't
  * leak to call sites that only need a single handler.

@@ -1,25 +1,21 @@
 /**
- * PHASE-S7 dispatcher flag (`FOUNDEROS_DISPATCHER_V2`) — S7.A.0 acceptance.
+ * PHASE-S7 dispatcher flag (`FOUNDEROS_DISPATCHER_V2`) — task #50 default flip.
  *
  * Two layers of coverage:
  *
- *   1. Pure unit: `isDispatcherV2Enabled()` parses the truthy set
- *      ("1" | "true" | "yes", case-insensitive) and treats absence /
- *      "0" / "false" / arbitrary values as falsy. This is the contract
- *      every downstream ticket (S7.A.1..S7.D.6) depends on; if it drifts,
- *      the rollback escape hatch documented in the runbook breaks.
+ *   1. Pure unit: `isDispatcherV2Enabled()` defaults to TRUE and only
+ *      returns FALSE when the env var is the explicit opt-out set
+ *      ("0" | "false" | "no", case-insensitive, trimmed). Absence,
+ *      empty, "1", "true", arbitrary values all keep V2 ON. This is the
+ *      contract every downstream adapter (S7.A.1..S7.D.6) depends on;
+ *      if it drifts, the rollback escape hatch documented in the
+ *      runbook breaks.
  *
  *   2. Integration: `runRunnerLoop()` chooses the spawner path based on
  *      the env var and logs `[dispatcher] v1 (legacy runClaude)` or
  *      `[dispatcher] v2 (multi-adapter)` on startup. This is what the
  *      24h soak in docs/runbooks/dispatcher-v2-rollout.md greps for —
  *      losing this log line means the soak loses its primary signal.
- *
- * NOTE: until S7.A.5 lands, the v2 branch falls through to `runClaude`
- * with a `console.warn` ("v2 path requested but not yet implemented;
- * falling back to v1"). The test asserts the LOG (the observable
- * decision), not the dispatch difference, because the dispatch isn't
- * different yet.
  */
 
 import { afterEach, describe, it, expect, vi } from "vitest";
@@ -102,20 +98,26 @@ const makeJobPayload = (id = "job-1"): JobPayload => ({
 });
 
 describe("isDispatcherV2Enabled (pure parse)", () => {
-  it("treats unset env as falsy (safe default)", () => {
-    expect(isDispatcherV2Enabled({})).toBe(false);
+  it("treats unset env as truthy (V2 is the default)", () => {
+    expect(isDispatcherV2Enabled({})).toBe(true);
   });
 
-  it("treats empty / whitespace / 0 / false / arbitrary as falsy", () => {
-    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "" })).toBe(false);
-    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "   " })).toBe(false);
+  it("treats empty / whitespace as truthy (default V2 wins)", () => {
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "" })).toBe(true);
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "   " })).toBe(true);
+  });
+
+  it("treats 0 / false / no as falsy (explicit opt-out, case-insensitive, trimmed)", () => {
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "0" })).toBe(false);
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "false" })).toBe(false);
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "FALSE" })).toBe(false);
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "False" })).toBe(false);
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "no" })).toBe(false);
-    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "maybe" })).toBe(false);
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "NO" })).toBe(false);
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "  0  " })).toBe(false);
   });
 
-  it("accepts 1 / true / yes (case-insensitive, trimmed)", () => {
+  it("accepts 1 / true / yes / arbitrary as truthy (anything outside the opt-out set keeps V2 ON)", () => {
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "1" })).toBe(true);
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "true" })).toBe(true);
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "TRUE" })).toBe(true);
@@ -123,6 +125,7 @@ describe("isDispatcherV2Enabled (pure parse)", () => {
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "yes" })).toBe(true);
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "YES" })).toBe(true);
     expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "  1  " })).toBe(true);
+    expect(isDispatcherV2Enabled({ FOUNDEROS_DISPATCHER_V2: "maybe" })).toBe(true);
   });
 });
 
@@ -132,8 +135,8 @@ describe("runRunnerLoop dispatcher path selection", () => {
     vi.restoreAllMocks();
   });
 
-  it("logs v1 path when FOUNDEROS_DISPATCHER_V2 is unset (safe default)", async () => {
-    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "");
+  it("logs v1 path when FOUNDEROS_DISPATCHER_V2=0 (explicit opt-out)", async () => {
+    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "0");
 
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -166,7 +169,7 @@ describe("runRunnerLoop dispatcher path selection", () => {
     const infoCalls = infoSpy.mock.calls.map((c) => c.join(" "));
     expect(infoCalls).toContain("[dispatcher] v1 (legacy runClaude)");
     expect(infoCalls).not.toContain("[dispatcher] v2 (multi-adapter)");
-    // No "v2 path requested" warn when the flag is unset.
+    // No "v2 path requested" warn when the flag is the explicit opt-out.
     const warnCalls = warnSpy.mock.calls.map((c) => c.join(" "));
     expect(warnCalls.some((m) => m.includes("v2 path requested"))).toBe(false);
   });

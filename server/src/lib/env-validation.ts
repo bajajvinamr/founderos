@@ -126,9 +126,9 @@ const CHECKS: EnvCheck[] = [
       "Multi-provider dispatcher in @founderos/runner (Gemini, Codex, Cursor, OpenCode, OpenAI-API)",
     severity: "INFO",
     hint:
-      "Optional. Truthy values ('1' | 'true' | 'yes', case-insensitive) opt the runner into the PHASE-S7 " +
-      "multi-adapter dispatcher. Absence is the safe default — runner uses the legacy `runClaude` path. " +
-      "Flip per docs/runbooks/dispatcher-v2-rollout.md (24h soak, then `fly secrets unset` rolls back). " +
+      "Optional opt-OUT switch. Default is V2 ON since task #50 (PRs #107/#110/#112/#113/#116/#118 baked). " +
+      "Set to '0' | 'false' | 'no' (case-insensitive) to revert to the legacy `runClaude` path; absence " +
+      "or any other value keeps V2 ON. Rollback: `fly secrets set FOUNDEROS_DISPATCHER_V2=0`. " +
       "Server-side env-validation entry exists so operators discover the flag at boot; the runtime read " +
       "happens in `packages/runner/src/config.ts:isDispatcherV2Enabled` on the founder's machine.",
   },
