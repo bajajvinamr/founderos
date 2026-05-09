@@ -73,7 +73,7 @@ describe("cursor execute", () => {
           id: "agent-1",
           companyId: "company-1",
           name: "Cursor Coder",
-          adapterType: "cursor",
+          adapterType: "cursor_local",
           adapterConfig: {},
         },
         runtime: {
@@ -147,7 +147,7 @@ describe("cursor execute", () => {
           id: "agent-1",
           companyId: "company-1",
           name: "Cursor Coder",
-          adapterType: "cursor",
+          adapterType: "cursor_local",
           adapterConfig: {},
         },
         runtime: {
@@ -208,7 +208,7 @@ describe("cursor execute", () => {
           id: "agent-1",
           companyId: "company-1",
           name: "Cursor Coder",
-          adapterType: "cursor",
+          adapterType: "cursor_local",
           adapterConfig: {},
         },
         runtime: {

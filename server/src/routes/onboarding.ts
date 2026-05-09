@@ -23,8 +23,10 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import type { Db } from "@founderos/db";
-import { unprocessable } from "../errors.js";
+import { and, eq } from "drizzle-orm";
+import { ONBOARDING_ADAPTER_CHOICES } from "@founderos/shared";
+import { authUsers, instanceUserRoles, type Db } from "@founderos/db";
+import { forbidden, unprocessable } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { onboardingBootstrapLimiter } from "../middleware/rate-limit.js";
 import { requireCompanyAccess } from "../middleware/require-company-access.js";
@@ -77,7 +79,15 @@ const bootstrapSchema = z.object({
     })
     .nullable()
     .optional(),
-  adapterChoice: z.enum(["claude_local", "anthropic_api", "skip"]).optional().default("anthropic_api"),
+  // S7.0.2 (multi-CLI runner sprint, 2026-05-07) — widened from the
+  // Claude-only triplet to all 7 CLI choices + anthropic_api + skip.
+  // Canonical list lives in `@founderos/shared` and mirrors
+  // `ADAPTER_CHOICES` in `ui/src/components/onboarding/onboarding-types.ts`.
+  // Only `anthropic_api` triggers the live key validation below; all CLI
+  // choices skip the key gate. See onboarding-bootstrap.ts for how the
+  // choice maps to the actual `agents.adapter_type` value (S7.2 reverses
+  // the byo_runner collapse so the user's CLI pick is preserved).
+  adapterChoice: z.enum(ONBOARDING_ADAPTER_CHOICES).optional().default("anthropic_api"),
   anthropicKey: z.string().default(""),
   integrations: z.record(z.boolean()).optional().default({}),
   // S1.9 — only NON-core departments are passed; the 5 core (chief-of-staff,

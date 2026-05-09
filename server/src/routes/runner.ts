@@ -69,6 +69,11 @@ function ttlDaysToExpiresAt(days: number | null | undefined): Date | null {
   return new Date(Date.now() + resolved * ONE_DAY_MS);
 }
 
+function expiresInDaysFromExpiresAt(expiresAt: Date | null): number | null {
+  if (!expiresAt) return null;
+  return Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / ONE_DAY_MS));
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sha256Hex(plaintext: string): string {
@@ -265,6 +270,9 @@ export function runnerJobRoutes(db: Db): Router {
         promptHash: runnerJobs.promptHash,
         sessionIdHint: runnerJobs.sessionIdHint,
         runtimeConfig: runnerJobs.runtimeConfig,
+        // S7.0.1 — surfaced to runner so the dispatcher can pick the
+        // right CLI handler (Claude vs Gemini vs Codex etc.).
+        adapterType: runnerJobs.adapterType,
         status: runnerJobs.status,
         heartbeatRunId: runnerJobs.heartbeatRunId,
       })
@@ -333,6 +341,12 @@ export function runnerJobRoutes(db: Db): Router {
       sessionId: existing.sessionIdHint,
       runtimeConfig,
       promptHash: existing.promptHash,
+      // S7.0.1 — adapter type drives the runner-side dispatcher.
+      // Defaults to "claude_local" if the row predates the schema column
+      // (legacy fallback for any rows that slipped through during
+      // migration; the column has a NOT NULL DEFAULT so this is a belt
+      // alongside the suspenders).
+      adapterType: existing.adapterType ?? "claude_local",
       // OpenAPI: `addDirs` is optional. v0 has no cloud-suggested add-dirs;
       // the runner derives them from runtimeConfig if present.
       addDirs: Array.isArray((runtimeConfig as { addDirs?: unknown }).addDirs)
@@ -606,6 +620,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         label: row.label,
         createdAt: row.createdAt.toISOString(),
         expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+        expiresInDays: expiresInDaysFromExpiresAt(row.expiresAt),
       });
     },
   );
@@ -768,6 +783,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         label: created.label,
         createdAt: created.createdAt.toISOString(),
         expiresAt: created.expiresAt ? created.expiresAt.toISOString() : null,
+        expiresInDays: expiresInDaysFromExpiresAt(created.expiresAt),
         rotatedFromTokenId: old.id,
       });
     },
@@ -802,9 +818,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         // W0.3 — surface expiresAt + a derived expiresInDays so the UI can
         // render "Expires in N days" without re-implementing the math.
         expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-        expiresInDays: r.expiresAt
-          ? Math.max(0, Math.ceil((r.expiresAt.getTime() - now) / ONE_DAY_MS))
-          : null,
+        expiresInDays: expiresInDaysFromExpiresAt(r.expiresAt),
         online: r.lastSeenAt ? now - r.lastSeenAt.getTime() <= RUNNER_ONLINE_WINDOW_MS : false,
       })),
     });
@@ -846,9 +860,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
         revokedAt: r.revokedAt ? r.revokedAt.toISOString() : null,
         expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-        expiresInDays: r.expiresAt
-          ? Math.max(0, Math.ceil((r.expiresAt.getTime() - now) / ONE_DAY_MS))
-          : null,
+        expiresInDays: expiresInDaysFromExpiresAt(r.expiresAt),
         rotatedFromTokenId: r.rotatedFromTokenId,
         online:
           r.revokedAt === null && r.lastSeenAt !== null

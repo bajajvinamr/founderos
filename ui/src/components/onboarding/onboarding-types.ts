@@ -6,6 +6,13 @@
  * over the wire when the founder advances past "Plug in your brain".
  */
 
+import {
+  ONBOARDING_ADAPTER_CHOICES,
+  ONBOARDING_CLI_CHOICES,
+  type OnboardingAdapterChoice,
+  type OnboardingCliChoice,
+} from "@founderos/shared";
+
 export const BOTTLENECKS = [
   "hiring",
   "growth",
@@ -116,16 +123,28 @@ export interface FirstDecisionCard {
 }
 
 /**
- * Where the agent's Claude auth comes from.
- *   - `claude_local`: user has the Claude Code CLI installed and authed.
- *     The adapter spawns `claude` locally; we never see an API key.
- *     Works for anyone with Claude Pro or a local subscription.
- *   - `anthropic_api`: user provides an sk-ant-... key. Required for
- *     hosted deployments where we can't shell into a local CLI.
- *   - `skip`: set it up later in Settings → Providers.
+ * Where the agent's LLM auth comes from at onboarding.
+ *
+ * S7.0.2 (multi-CLI runner sprint, 2026-05-07) — widened from the
+ * Claude-only triplet to the full set of CLI adapters the @founderos/runner
+ * dispatcher will support post-S7.A. Until S7.4 ships the wider UI picker,
+ * the wizard surfaces only `claude_local` / `anthropic_api` / `skip`; the
+ * schema is purposely wider so a future UI revision can pass any of the
+ * 7 CLI choices without an API change.
+ *
+ * Canonical list lives in `@founderos/shared` so the UI and server
+ * Zod enum stay locked together. See the docstring on
+ * `ONBOARDING_ADAPTER_CHOICES` for per-value semantics.
  */
-export const ADAPTER_CHOICES = ["claude_local", "anthropic_api", "skip"] as const;
-export type AdapterChoice = (typeof ADAPTER_CHOICES)[number];
+export const ADAPTER_CHOICES = ONBOARDING_ADAPTER_CHOICES;
+export type AdapterChoice = OnboardingAdapterChoice;
+
+export const CLI_ADAPTER_CHOICES = ONBOARDING_CLI_CHOICES;
+export type CliAdapterChoice = OnboardingCliChoice;
+
+export function isCliAdapterChoice(choice: AdapterChoice): choice is CliAdapterChoice {
+  return (CLI_ADAPTER_CHOICES as readonly string[]).includes(choice);
+}
 
 export interface OnboardingDraft {
   vision: string;

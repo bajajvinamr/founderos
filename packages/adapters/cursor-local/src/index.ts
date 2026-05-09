@@ -1,4 +1,4 @@
-export const type = "cursor";
+export const type = "cursor_local";
 export const label = "Cursor CLI (local)";
 export const DEFAULT_CURSOR_LOCAL_MODEL = "auto";
 
@@ -48,7 +48,7 @@ export const models = CURSOR_FALLBACK_MODEL_IDS.map((id) => ({ id, label: id }))
 
 export const agentConfigurationDoc = `# cursor agent configuration
 
-Adapter: cursor
+Adapter: cursor_local
 
 Use when:
 - You want FounderOS to run Cursor Agent CLI locally as the agent runtime

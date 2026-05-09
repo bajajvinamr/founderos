@@ -510,7 +510,7 @@ describe("parseSessionCompactionPolicy", () => {
   });
 
   it("keeps conservative defaults for adapters without confirmed native compaction", () => {
-    expect(parseSessionCompactionPolicy(buildAgent("cursor"))).toEqual({
+    expect(parseSessionCompactionPolicy(buildAgent("cursor_local"))).toEqual({
       enabled: true,
       maxSessionRuns: 200,
       maxRawInputTokens: 2_000_000,

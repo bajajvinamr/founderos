@@ -22,7 +22,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { integrations, workspaceDepartments } from "@founderos/db";
-import type { AgentRole } from "@founderos/shared";
+import type { AgentRole, OnboardingAdapterChoice } from "@founderos/shared";
 import {
   accessService,
   agentService,
@@ -106,7 +106,7 @@ export type BootstrapInput = {
   bottlenecks: string[];
   team: "solo" | "cofounder" | "small_team";
   cofounder?: { name: string | null; email: string | null } | null;
-  adapterChoice: "claude_local" | "anthropic_api" | "skip";
+  adapterChoice: OnboardingAdapterChoice;
   anthropicKey: string;
   integrations?: Record<string, boolean>;
   /** S1.9 — non-core departments the founder opted in to (engineering, ops). */

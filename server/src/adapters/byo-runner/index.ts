@@ -127,6 +127,11 @@ export function createByoRunnerAdapter(db: Db): ServerAdapterModule {
       });
 
       // ─── Enqueue runner_jobs row ────────────────────────────────────────
+      // S7.0.1 — write `agent.adapterType` to `runner_jobs.adapter_type`.
+      // The runner reads this field via the claim API to decide which CLI
+      // to spawn. Fallback to "claude_local" preserves prior behavior for
+      // any agent row whose adapter_type happens to be empty (defensive;
+      // the agents schema requires it).
       let jobId: string;
       try {
         const [row] = await db
@@ -139,6 +144,7 @@ export function createByoRunnerAdapter(db: Db): ServerAdapterModule {
             promptHash,
             sessionIdHint: asString(runtime.sessionId, "") || null,
             runtimeConfig: runtimeConfigJson,
+            adapterType: agent.adapterType ?? "claude_local",
             status: "queued",
           })
           .returning({ id: runnerJobs.id });
