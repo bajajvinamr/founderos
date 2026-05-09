@@ -28,10 +28,13 @@ permissions:
 env:
   FLY_APP: founderos
   FLY_URL: https://founderos.fly.dev
-  VERCEL_URL: https://founderos-bice.vercel.app
-  # Hardcoded from .vercel/project.json — these are not secrets.
-  VERCEL_ORG_ID: team_u2B2mxbkSdhU9d5bqdM1EmNA
-  VERCEL_PROJECT_ID: prj_D8tbUPZIdJBkSIc2Adz1f8yqcn77
+  # Vercel deploy was removed 2026-05-07: the legacy Vercel host is now a
+  # static 301 redirect (vercel.json) frozen at the architecture cutover. No
+  # SPA content is served from Vercel — Fly serves both API and UI on a
+  # single origin. If the redirect target ever needs to change, run
+  # `npx vercel deploy --prod` manually; auto-deploy on every commit was
+  # dead weight and was failing CI when VERCEL_TOKEN wasn't set as a
+  # GitHub secret. See CLAUDE.md "Single-origin from 2026-05-03 onward".
 
 jobs:
   # ─── 1. Preflight: typecheck + tests. Fail fast. ─────────────────────
@@ -135,35 +138,10 @@ jobs:
           path: /tmp/fly-previous-version
           retention-days: 7
 
-  # ─── 3. Deploy Vercel frontend ───────────────────────────────────────
-  deploy-vercel:
-    name: Deploy Vercel frontend
-    needs: deploy-fly
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Deploy to Vercel
-        timeout-minutes: 12
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
-        run: |
-          npx vercel@latest --prod --yes --token="$VERCEL_TOKEN"
-
-  # ─── 4. Smoke tests ──────────────────────────────────────────────────
+  # ─── 3. Smoke tests ──────────────────────────────────────────────────
   smoke:
     name: Smoke (post-deploy)
-    needs: [deploy-fly, deploy-vercel]
+    needs: [deploy-fly]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -180,8 +158,6 @@ jobs:
           set +e
           scripts/ci/smoke.sh \
             --url "$FLY_URL/api/healthz" \
-            --url "$VERCEL_URL/" \
-            --url "$VERCEL_URL/api/healthz" \
             --retries 3 --initial-delay 2 --timeout 30 \
             --json "$RUNNER_TEMP/smoke-results.json"
           rc=$?
@@ -270,7 +246,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: read
+      contents: write # required by repository_dispatch (createDispatchEvent)
       actions: write
     steps:
       - name: Dispatch auth-canary-trigger
@@ -339,9 +315,7 @@ jobs:
         run: |
           chmod +x scripts/ci/rollback-verify.sh scripts/ci/smoke.sh
           scripts/ci/rollback-verify.sh \
-            --url "$FLY_URL/api/healthz" \
-            --url "$VERCEL_URL/" \
-            --url "$VERCEL_URL/api/healthz"
+            --url "$FLY_URL/api/healthz"
 
       - name: Post GitHub deployment status (rollback)
         uses: actions/github-script@v7
@@ -371,7 +345,7 @@ jobs:
   # ─── 6. Notify: always runs last ─────────────────────────────────────
   notify:
     name: Notify
-    needs: [preflight, deploy-fly, deploy-vercel, smoke, rollback-on-fail]
+    needs: [preflight, deploy-fly, smoke, rollback-on-fail]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -383,7 +357,6 @@ jobs:
           rb="${{ needs.rollback-on-fail.result }}"
           pre="${{ needs.preflight.result }}"
           fly="${{ needs.deploy-fly.result }}"
-          ver="${{ needs.deploy-vercel.result }}"
 
           if [[ "$smoke" == "success" ]]; then
             outcome="success"
@@ -397,7 +370,7 @@ jobs:
           fi
           echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
           echo "emoji=$emoji"     >> "$GITHUB_OUTPUT"
-          echo "summary=preflight=$pre fly=$fly vercel=$ver smoke=$smoke rollback=$rb" >> "$GITHUB_OUTPUT"
+          echo "summary=preflight=$pre fly=$fly smoke=$smoke rollback=$rb" >> "$GITHUB_OUTPUT"
 
       - name: Post GitHub deployment status (success path)
         if: needs.smoke.result == 'success'
@@ -420,7 +393,7 @@ jobs:
               deployment_id: deployment.id,
               state: 'success',
               description: 'Healthy in production',
-              environment_url: 'https://founderos-bice.vercel.app',
+              environment_url: 'https://founderos.fly.dev',
               environment: 'production',
             });
 

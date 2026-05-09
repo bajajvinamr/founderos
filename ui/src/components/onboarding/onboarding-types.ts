@@ -6,6 +6,17 @@
  * over the wire when the founder advances past "Plug in your brain".
  */
 
+import {
+  ONBOARDING_ADAPTER_AUTH_MODES,
+  ONBOARDING_ADAPTER_CHOICES,
+  ONBOARDING_API_CHOICES,
+  ONBOARDING_CLI_CHOICES,
+  type OnboardingAdapterAuthMode,
+  type OnboardingAdapterChoice,
+  type OnboardingApiChoice,
+  type OnboardingCliChoice,
+} from "@founderos/shared";
+
 export const BOTTLENECKS = [
   "hiring",
   "growth",
@@ -116,16 +127,50 @@ export interface FirstDecisionCard {
 }
 
 /**
- * Where the agent's Claude auth comes from.
- *   - `claude_local`: user has the Claude Code CLI installed and authed.
- *     The adapter spawns `claude` locally; we never see an API key.
- *     Works for anyone with Claude Pro or a local subscription.
- *   - `anthropic_api`: user provides an sk-ant-... key. Required for
- *     hosted deployments where we can't shell into a local CLI.
- *   - `skip`: set it up later in Settings → Providers.
+ * Where the agent's LLM auth comes from at onboarding.
+ *
+ * S7.0.2 (multi-CLI runner sprint, 2026-05-07) — widened to the
+ * 6-tile MVP scope (claude_local / anthropic_api / gemini_local /
+ * codex_local / openai_api / google_api) plus `skip`. Legacy CLI
+ * values (opencode_local / pi_local / cursor_local / hermes_local)
+ * are retained in the schema for backwards compatibility but are
+ * NOT part of the MVP wizard surface.
+ *
+ * Canonical list lives in `@founderos/shared` so the UI and server
+ * Zod enum stay locked together. See the docstrings on
+ * `ONBOARDING_ADAPTER_CHOICES` and `ONBOARDING_ADAPTER_AUTH_MODES`
+ * in `packages/shared/src/constants.ts` for per-value semantics.
  */
-export const ADAPTER_CHOICES = ["claude_local", "anthropic_api", "skip"] as const;
-export type AdapterChoice = (typeof ADAPTER_CHOICES)[number];
+export const ADAPTER_CHOICES = ONBOARDING_ADAPTER_CHOICES;
+export type AdapterChoice = OnboardingAdapterChoice;
+
+export const CLI_ADAPTER_CHOICES = ONBOARDING_CLI_CHOICES;
+export type CliAdapterChoice = OnboardingCliChoice;
+
+export const API_ADAPTER_CHOICES = ONBOARDING_API_CHOICES;
+export type ApiAdapterChoice = OnboardingApiChoice;
+
+/**
+ * S7.0.2 — `auth_mode` discriminator. UI tile renders the API-key
+ * input field iff `ADAPTER_AUTH_MODES[choice] === 'api'`. CLI choices
+ * skip the key input entirely (the runner inherits the user's local
+ * CLI auth). `skip` shows neither — it's a "decide later" branch.
+ */
+export const ADAPTER_AUTH_MODES = ONBOARDING_ADAPTER_AUTH_MODES;
+export type AdapterAuthMode = OnboardingAdapterAuthMode;
+
+export function isCliAdapterChoice(choice: AdapterChoice): choice is CliAdapterChoice {
+  return (CLI_ADAPTER_CHOICES as readonly string[]).includes(choice);
+}
+
+export function isApiAdapterChoice(choice: AdapterChoice): choice is ApiAdapterChoice {
+  return (API_ADAPTER_CHOICES as readonly string[]).includes(choice);
+}
+
+/** True if the wizard should render an API-key input for this choice. */
+export function adapterChoiceRequiresKey(choice: AdapterChoice): boolean {
+  return ADAPTER_AUTH_MODES[choice] === "api";
+}
 
 export interface OnboardingDraft {
   vision: string;

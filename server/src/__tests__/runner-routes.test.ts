@@ -4,7 +4,7 @@
  * Covers all 7 endpoints from docs/api/runner-openapi.yaml against real
  * embedded Postgres + a mini express harness:
  *
- *   Token-management (session-auth, instance-admin):
+ *   Token-management (session-auth, company-owner or instance-admin):
  *     POST   /api/companies/:id/runner-tokens           — issue
  *     DELETE /api/companies/:id/runner-tokens/:tokenId  — revoke (idempotent)
  *     GET    /api/companies/:id/runner-status           — liveness
@@ -30,6 +30,7 @@ import {
   agents,
   authUsers,
   companies,
+  companyMemberships,
   createDb,
   heartbeatRunEvents,
   heartbeatRuns,
@@ -57,14 +58,14 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
   let temp: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
 
   /** Build a session-auth (board) harness app for a given userId. */
-  function adminApp(userId: string, isInstanceAdmin = true) {
+  function adminApp(userId: string, isInstanceAdmin = true, companyIds: string[] = []) {
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
       (req as unknown as { actor: unknown }).actor = {
         type: "board",
         userId,
-        companyIds: [],
+        companyIds,
         isInstanceAdmin,
         source: "session",
       };
@@ -147,7 +148,13 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
   }
 
   /** Insert a queued runner_jobs row directly (skips the adapter materialization). */
-  async function makeQueuedJob(args: { companyId: string; agentId: string; runId: string }) {
+  async function makeQueuedJob(args: {
+    companyId: string;
+    agentId: string;
+    runId: string;
+    /** S7.0.1 — adapter the runner should dispatch to. Defaults to claude_local. */
+    adapterType?: string;
+  }) {
     const [row] = await db
       .insert(runnerJobs)
       .values({
@@ -157,6 +164,7 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
         prompt: "test prompt",
         promptHash: "a".repeat(64),
         runtimeConfig: JSON.stringify({ timeoutSec: 60 }),
+        adapterType: args.adapterType ?? "claude_local",
         status: "queued",
       })
       .returning();
@@ -449,6 +457,10 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
 
       expect(res.status).toBe(201);
       expect(res.body.expiresAt).toBeTruthy();
+      // RunnerInstallDialog reads expiresInDays for the "Token expires in N days"
+      // copy. 90-day default TTL, allow 89-90 to absorb sub-second clock drift.
+      expect(res.body.expiresInDays).toBeGreaterThanOrEqual(89);
+      expect(res.body.expiresInDays).toBeLessThanOrEqual(90);
       const expiresAt = new Date(res.body.expiresAt);
       const expectedMs = Date.now() + 90 * 86_400_000;
       // Allow ±10s drift for test latency between handler clock + assertion clock.
@@ -549,6 +561,9 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       expect(rotated.body.rotatedFromTokenId).toBe(old.body.tokenId);
       expect(rotated.body.label).toBe("rotate-me"); // carried over
       expect(rotated.body.expiresAt).toBeTruthy();
+      // Same UI contract as issue: rotate response must surface expiresInDays.
+      expect(rotated.body.expiresInDays).toBeGreaterThanOrEqual(89);
+      expect(rotated.body.expiresInDays).toBeLessThanOrEqual(90);
 
       // DB chain + revocation invariants.
       const [oldRow] = await db
@@ -762,6 +777,63 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
       expect(res.status).toBe(404);
     });
+
+    /**
+     * S7.0.1 (council R1+R2 P1, Codex+Gemini both rounds) — round-trip test
+     * for `runner_jobs.adapter_type`. Without this column flowing from
+     * enqueue → DB → claim API → JobPayload, the multi-CLI dispatcher
+     * (S7.1) has nothing to dispatch on. Pin the contract so a future
+     * regression that drops the field can't merge silently.
+     */
+    it("S7.0.1 — claim API returns adapterType from runner_jobs row", async () => {
+      const company = await makeCompany("Adapter Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        adapterType: "gemini_local",
+      });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "g".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(res.status).toBe(200);
+      expect(res.body.adapterType).toBe("gemini_local");
+
+      // DB row should also carry the adapter type unchanged across the claim.
+      const [updated] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
+      expect(updated.adapterType).toBe("gemini_local");
+    });
+
+    it("S7.0.1 — claim API defaults adapterType to claude_local when row predates the column", async () => {
+      // Simulate a row inserted via raw SQL bypassing the Drizzle default
+      // (this is the "agent rows that slipped through migration" defensive
+      // path — the NOT NULL DEFAULT in the migration normally handles this,
+      // but the dispatcher legacy-fallback should be belt+suspenders).
+      const company = await makeCompany("Legacy Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        // Default → claude_local (mirrors the production default).
+      });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "L".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(res.status).toBe(200);
+      expect(res.body.adapterType).toBe("claude_local");
+    });
   });
 
   describe("POST /api/runner/jobs/:id/events — append batch", () => {
@@ -792,7 +864,7 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
             },
             {
               eventId: "22222222-2222-2222-2222-222222222222",
-              kind: "claude_message",
+              kind: "model_message",
               ts: new Date().toISOString(),
               payload: { text: "hi", role: "assistant" },
             },
@@ -808,13 +880,76 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       expect(events.find((e) => e.eventType === "stdout_line")?.message).toBe(
         "claude says hello",
       );
-      expect(events.find((e) => e.eventType === "claude_message")?.payload).toMatchObject({
+      expect(events.find((e) => e.eventType === "model_message")?.payload).toMatchObject({
         text: "hi",
         role: "assistant",
       });
 
       const [updated] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
       expect(updated.status).toBe("streaming");
+    });
+
+    it("accepts legacy claude_* kinds during S7.1.b.1 cutover window", async () => {
+      // Backwards-compat: in-flight v0.1.x runners still emit the old
+      // Claude-only kinds. The validator MUST keep accepting them until
+      // those runners are aged out (Phase 5+).
+      const company = await makeCompany("Legacy Kinds Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "C".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const claim = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(claim.status).toBe(200);
+
+      const res = await request(app)
+        .post(`/api/runner/jobs/${job.id}/events`)
+        .send({
+          events: [
+            {
+              eventId: "33333333-3333-3333-3333-333333333333",
+              kind: "claude_message",
+              ts: new Date().toISOString(),
+              payload: { text: "legacy", role: "assistant" },
+            },
+            {
+              eventId: "44444444-4444-4444-4444-444444444444",
+              kind: "claude_tool_use",
+              ts: new Date().toISOString(),
+              payload: { name: "bash" },
+            },
+            {
+              eventId: "55555555-5555-5555-5555-555555555555",
+              kind: "claude_tool_result",
+              ts: new Date().toISOString(),
+              payload: { content: "ok" },
+            },
+            {
+              eventId: "66666666-6666-6666-6666-666666666666",
+              kind: "claude_result",
+              ts: new Date().toISOString(),
+              payload: { session_id: "sess_legacy", total_cost_usd: 0.001 },
+            },
+          ],
+        });
+      expect(res.status).toBe(204);
+
+      const events = await db
+        .select()
+        .from(heartbeatRunEvents)
+        .where(eq(heartbeatRunEvents.runId, run.id));
+      expect(events).toHaveLength(4);
+      const kinds = events.map((e) => e.eventType).sort();
+      expect(kinds).toEqual([
+        "claude_message",
+        "claude_result",
+        "claude_tool_result",
+        "claude_tool_use",
+      ]);
     });
 
     it("403 when a different token tries to append (claim ownership gate)", async () => {

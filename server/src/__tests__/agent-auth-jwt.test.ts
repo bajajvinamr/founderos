@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLocalAgentJwt, verifyLocalAgentJwt } from "../agent-auth-jwt.js";
+import {
+  AgentJwtSecretMissingError,
+  createLocalAgentJwt,
+  verifyLocalAgentJwt,
+} from "../agent-auth-jwt.js";
 
 describe("agent local JWT", () => {
   const secretEnv = "FOUNDEROS_AGENT_JWT_SECRET";
@@ -57,20 +61,31 @@ describe("agent local JWT", () => {
     expect(claims!.jti!.length).toBeGreaterThan(0);
   });
 
-  it("returns null when secret is missing", () => {
+  it("throws AgentJwtSecretMissingError when secret is missing", () => {
+    // Type-system elimination: createLocalAgentJwt no longer returns
+    // `string | null` — missing secret is a server misconfiguration
+    // (NOT a runtime "this token is invalid" failure), so it throws.
+    // Same for verifyLocalAgentJwt: missing config throws (caller treats
+    // as 5xx), but a malformed token still returns null (caller treats
+    // as 401).
     process.env[secretEnv] = "";
-    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
-    expect(token).toBeNull();
-    expect(verifyLocalAgentJwt("abc.def.ghi")).toBeNull();
+    expect(() =>
+      createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1"),
+    ).toThrow(AgentJwtSecretMissingError);
+    expect(() => verifyLocalAgentJwt("abc.def.ghi")).toThrow(
+      AgentJwtSecretMissingError,
+    );
   });
 
   it("does NOT fall back to BETTER_AUTH_SECRET when FOUNDEROS_AGENT_JWT_SECRET is absent", () => {
     delete process.env[secretEnv];
     process.env[betterAuthSecretEnv] = "fallback-secret";
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
-    // Without a dedicated agent JWT secret, JWT issuance returns null — no key confusion
-    expect(token).toBeNull();
+    // Without a dedicated agent JWT secret, JWT issuance throws — no
+    // silent fallback to BETTER_AUTH_SECRET, no key confusion.
+    expect(() =>
+      createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1"),
+    ).toThrow(AgentJwtSecretMissingError);
   });
 
   it("rejects expired tokens", () => {

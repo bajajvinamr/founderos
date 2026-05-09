@@ -23,8 +23,13 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import type { Db } from "@founderos/db";
-import { unprocessable } from "../errors.js";
+import { and, eq } from "drizzle-orm";
+import {
+  ONBOARDING_ADAPTER_AUTH_MODES,
+  ONBOARDING_ADAPTER_CHOICES,
+} from "@founderos/shared";
+import { authUsers, instanceUserRoles, type Db } from "@founderos/db";
+import { forbidden, unprocessable } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { onboardingBootstrapLimiter } from "../middleware/rate-limit.js";
 import { requireCompanyAccess } from "../middleware/require-company-access.js";
@@ -77,7 +82,15 @@ const bootstrapSchema = z.object({
     })
     .nullable()
     .optional(),
-  adapterChoice: z.enum(["claude_local", "anthropic_api", "skip"]).optional().default("anthropic_api"),
+  // S7.0.2 (multi-CLI runner sprint, 2026-05-07) — widened from the
+  // Claude-only triplet to all 7 CLI choices + anthropic_api + skip.
+  // Canonical list lives in `@founderos/shared` and mirrors
+  // `ADAPTER_CHOICES` in `ui/src/components/onboarding/onboarding-types.ts`.
+  // Only `anthropic_api` triggers the live key validation below; all CLI
+  // choices skip the key gate. See onboarding-bootstrap.ts for how the
+  // choice maps to the actual `agents.adapter_type` value (S7.2 reverses
+  // the byo_runner collapse so the user's CLI pick is preserved).
+  adapterChoice: z.enum(ONBOARDING_ADAPTER_CHOICES).optional().default("anthropic_api"),
   anthropicKey: z.string().default(""),
   integrations: z.record(z.boolean()).optional().default({}),
   // S1.9 — only NON-core departments are passed; the 5 core (chief-of-staff,
@@ -256,18 +269,37 @@ export function onboardingRoutes(db: Db) {
 
       const input = req.body as z.infer<typeof bootstrapSchema>;
 
-      if (input.adapterChoice === "anthropic_api") {
+      // S7.0.2 — auth_mode discriminator gates the API-key requirement.
+      // Only `auth_mode === 'api'` choices require a key field; CLI
+      // choices (claude_local + the rest of the *_local family) and
+      // `skip` (auth_mode='none') bypass the gate entirely. This keeps
+      // the load-bearing CLAUDE.md invariant intact: "Adapter choice on
+      // onboarding: claude_local + skip don't need an API key."
+      //
+      // Live API validation is only wired for `anthropic_api` today —
+      // the OpenAI and Google validators land with their respective
+      // S7.B tiles. Until then, the gate enforces a minimum-length
+      // string check so a paste-failure or empty submission is
+      // rejected before the bootstrap transaction starts.
+      const authMode = ONBOARDING_ADAPTER_AUTH_MODES[input.adapterChoice];
+      if (authMode === "api") {
         if (!input.anthropicKey || input.anthropicKey.length < 10) {
           throw unprocessable(
-            "Anthropic API key is required when adapterChoice is 'anthropic_api'",
+            `API key is required when adapterChoice is '${input.adapterChoice}'`,
           );
         }
-        const keyCheck = await validateAnthropicKey(input.anthropicKey);
-        if (!keyCheck.valid) {
-          throw unprocessable(
-            `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
-          );
+        if (input.adapterChoice === "anthropic_api") {
+          const keyCheck = await validateAnthropicKey(input.anthropicKey);
+          if (!keyCheck.valid) {
+            throw unprocessable(
+              `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
+            );
+          }
         }
+        // openai_api / google_api: live validation lands with the
+        // respective S7.B tiles; for now the length check above is the
+        // backstop and the runtime adapter will surface a clear error
+        // if the key is wrong at first run.
       }
 
       // S-TC2 (council 2026-05-05 P2 — analytics milestone for paid users).

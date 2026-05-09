@@ -118,6 +118,20 @@ const CHECKS: EnvCheck[] = [
       "registered, /api/runner/* returns 404, and onboarding shows the legacy claude_local picker. " +
       "Default-off until E2E green per the Sprint 0 rollout plan.",
   },
+  // --- dispatcher v2 (PHASE-S7, 2026-05-08) ---
+  {
+    name: "FOUNDEROS_DISPATCHER_V2",
+    keys: ["FOUNDEROS_DISPATCHER_V2"],
+    enables:
+      "Multi-provider dispatcher in @founderos/runner (Gemini, Codex, Cursor, OpenCode, OpenAI-API)",
+    severity: "INFO",
+    hint:
+      "Optional. Truthy values ('1' | 'true' | 'yes', case-insensitive) opt the runner into the PHASE-S7 " +
+      "multi-adapter dispatcher. Absence is the safe default — runner uses the legacy `runClaude` path. " +
+      "Flip per docs/runbooks/dispatcher-v2-rollout.md (24h soak, then `fly secrets unset` rolls back). " +
+      "Server-side env-validation entry exists so operators discover the flag at boot; the runtime read " +
+      "happens in `packages/runner/src/config.ts:isDispatcherV2Enabled` on the founder's machine.",
+  },
   // --- observability ---
   {
     name: "SENTRY_DSN",
@@ -166,6 +180,46 @@ const CHECKS: EnvCheck[] = [
       "is gated separately and not yet GA. Graduate to REQUIRED_IN_PROD when the customer-email templates " +
       "ship to design partners (S6 polish or sooner). Generate with `openssl rand -hex 48`. Council " +
       "2026-05-06 finding #4 (CAN-SPAM/GDPR BLOCK) — see decisions.md.",
+  },
+  // --- local-agent JWT (load-bearing for every local adapter spawn) ---
+  {
+    name: "FOUNDEROS_AGENT_JWT_SECRET",
+    keys: ["FOUNDEROS_AGENT_JWT_SECRET"],
+    enables:
+      "Local-agent JWT signing — without it, every adapter that declares " +
+      "supportsLocalAgentJwt:true (claude_local, codex_local, cursor, gemini_local, " +
+      "opencode_local, pi_local, hermes_local) refuses to spawn at heartbeat-execute " +
+      "time and the run is marked failed with errorCode=agent_jwt_secret_missing.",
+    severity: "REQUIRED_IN_PROD",
+    hint:
+      "P0 silent-degradation fix (2026-05-09): pre-fix, missing secret produced a " +
+      "logger.warn and the spawned agent ran WITHOUT FOUNDEROS_API_KEY in env, " +
+      "causing 401s on every authenticated API call from the agent (e.g. issue " +
+      "assignment, comment, approval) — surfacing as a generic 401 inside the " +
+      "agent's output instead of a clear server-misconfiguration signal. Run " +
+      "`pnpm founderos onboard` to generate one, or `openssl rand -hex 48`. " +
+      "See ~/.founderos/.env. Companion runtime guard at " +
+      "server/src/services/heartbeat.ts AgentJwtSecretMissingError.",
+  },
+  // --- provider-key validator nonce (S7.A.6, council 2026-05-08 P1) ---
+  {
+    name: "FOUNDEROS_NONCE_SECRET",
+    keys: ["FOUNDEROS_NONCE_SECRET"],
+    enables:
+      "HMAC signing key for the unauthenticated POST /api/providers/validate-key " +
+      "single-use nonce primitive. The nonce closes the IP-rotation bypass on the " +
+      "key-checker abuse model — without this secret, GET /api/providers/issue-nonce " +
+      "throws and the validator endpoint can't be reached.",
+    severity: "REQUIRED_IN_PROD",
+    hint:
+      "Must be at least 32 bytes / 64 hex chars. Generate with `openssl rand -hex 48`. " +
+      "Set via `fly secrets set FOUNDEROS_NONCE_SECRET=...` on the founderos app. " +
+      "WARN-severity is not enough here because the validator is the onboarding gate — " +
+      "founders trying to plug in their first API key would hit a 500 with no ability " +
+      "to retry. Boot-time hard-fail is the right shape: the validate-nonce.ts module " +
+      "throws lazily on first call, so a missing secret would surface only when the " +
+      "first founder hits onboarding rather than at deploy. See server/src/lib/" +
+      "validate-nonce.ts:86-104 for the runtime guard this duplicates at boot.",
   },
 ];
 

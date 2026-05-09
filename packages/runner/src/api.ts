@@ -23,6 +23,31 @@ export interface JobDescriptor {
   createdAt: string;
 }
 
+/**
+ * Adapter type carried from the cloud through to the runner.
+ *
+ * S7.0.1 — kept as a plain string union here (NOT `AgentAdapterType` from
+ * `@founderos/shared`) so the runner package can stay free of the shared
+ * deep dep. The DB CHECK constraint at migration 0105 + the cloud-side
+ * Zod schema enforce validity before this field reaches the runner.
+ *
+ * Default fallback: "claude_local". Pre-S7 rows that wrote "byo_runner"
+ * still map to claude via the dispatcher's legacy-fallback path.
+ */
+export type RunnerAdapterType =
+  | "claude_local"
+  | "codex_local"
+  | "gemini_local"
+  | "opencode_local"
+  | "pi_local"
+  | "cursor_local"
+  | "openclaw_gateway"
+  | "hermes_local"
+  | "byo_runner"
+  | "process"
+  | "http"
+  | (string & {}); // tolerate unknown values for forward-compatibility
+
 export interface JobPayload {
   jobId: string;
   agentId: string;
@@ -37,16 +62,43 @@ export interface JobPayload {
     [k: string]: unknown;
   };
   promptHash: string;
+  /**
+   * S7.0.1 — adapter type the runner should dispatch on. Server returns
+   * this from the claim API (`server/src/routes/runner.ts:303`). May be
+   * absent on responses from a pre-S7.0.1 server build — defaults to
+   * "claude_local" at the consumer.
+   */
+  adapterType?: RunnerAdapterType;
   addDirs?: string[];
 }
 
+/**
+ * S7.1.b.1 — provider-neutral runner event kinds. Council R1+R2 finding
+ * (Codex P1 confirmed by Gemini): the prior Claude-specific names hardcoded
+ * Claude semantics into the runner API, server validator, and tests, so
+ * future Gemini/Codex/OpenAI/Google adapters would either lie as Claude
+ * events or lose structured streaming detail.
+ *
+ * Mapping from the legacy Claude-only names:
+ *   claude_message      → model_message    (assistant text from the model)
+ *   claude_tool_use     → tool_call        (model invokes a tool)
+ *   claude_tool_result  → tool_result      (tool returns to model)
+ *   claude_result       → run_complete     (run finishes; cost + session_id)
+ *
+ * The wire format the runner ingests (Claude stream-json, OpenAI SSE, etc.)
+ * stays adapter-shaped — it's the runner's INTERNAL kind that's neutralized.
+ * Adapter-specific fields ride on the existing per-event `payload` envelope.
+ *
+ * TODO(Phase 5+) — drop legacy kinds from the server validator once all
+ * adapters emit neutral kinds and v0.1.x runners are aged out.
+ */
 export type RunnerEventKind =
   | "stdout_line"
   | "stderr_line"
-  | "claude_message"
-  | "claude_tool_use"
-  | "claude_tool_result"
-  | "claude_result";
+  | "model_message"
+  | "tool_call"
+  | "tool_result"
+  | "run_complete";
 
 export interface RunnerEvent {
   eventId: string;

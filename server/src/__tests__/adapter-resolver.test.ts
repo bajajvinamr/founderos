@@ -1,10 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
+  mapOnboardingChoiceToAdapter,
   resolveAgentAdapter,
   resolveAgentAdaptersBatch,
   type ProviderAvailability,
 } from "../services/adapter-resolver.js";
-import type { AgentProviderPreference } from "@founderos/shared";
+import {
+  ONBOARDING_ADAPTER_CHOICES,
+  type AgentProviderPreference,
+  type OnboardingAdapterChoice,
+} from "@founderos/shared";
 
 const allAvailable: ProviderAvailability = {
   anthropic: { api: true, cli: true },
@@ -209,6 +214,67 @@ describe("resolveAgentAdaptersBatch", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.failingAgentKey).toBe("picky");
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// S7.0.2 — mapOnboardingChoiceToAdapter
+// ──────────────────────────────────────────────────────────────────────────
+
+describe("mapOnboardingChoiceToAdapter (S7.0.2)", () => {
+  // Identity mappings: every CLI choice should map to the same string used
+  // in `runner_jobs.adapter_type` CHECK + `agents.adapter_type`.
+  const cliIdentityCases: Array<[OnboardingAdapterChoice, string]> = [
+    ["claude_local", "claude_local"],
+    ["codex_local", "codex_local"],
+    ["gemini_local", "gemini_local"],
+    ["opencode_local", "opencode_local"],
+    ["pi_local", "pi_local"],
+    ["cursor_local", "cursor_local"],
+    ["hermes_local", "hermes_local"],
+  ];
+
+  for (const [choice, expected] of cliIdentityCases) {
+    it(`maps ${choice} → ${expected} (identity for CLI choices)`, () => {
+      expect(mapOnboardingChoiceToAdapter(choice)).toBe(expected);
+    });
+  }
+
+  // Non-CLI sentinels collapse to claude_local (no claude_api adapter
+  // exists; skip preserves pre-S7 default behavior).
+  it("maps anthropic_api → claude_local (no claude_api adapter exists)", () => {
+    expect(mapOnboardingChoiceToAdapter("anthropic_api")).toBe("claude_local");
+  });
+
+  it("maps openai_api → openai_api (1:1 with registered adapter)", () => {
+    expect(mapOnboardingChoiceToAdapter("openai_api")).toBe("openai_api");
+  });
+
+  it("throws for google_api (S7 Phase 4 — not yet implemented)", () => {
+    expect(() => mapOnboardingChoiceToAdapter("google_api")).toThrow(
+      /not yet implemented/i,
+    );
+  });
+
+  it("maps skip → claude_local (preserves pre-S7 default)", () => {
+    expect(mapOnboardingChoiceToAdapter("skip")).toBe("claude_local");
+  });
+
+  // Exhaustiveness — every value in ONBOARDING_ADAPTER_CHOICES must EITHER
+  // map to a non-empty adapter type OR explicitly throw a "not yet
+  // implemented" error. Catches new entries that forget to extend the
+  // helper.
+  it("maps every ONBOARDING_ADAPTER_CHOICES value (returns string or throws explicitly)", () => {
+    for (const choice of ONBOARDING_ADAPTER_CHOICES) {
+      try {
+        const mapped = mapOnboardingChoiceToAdapter(choice);
+        expect(typeof mapped).toBe("string");
+        expect(mapped.length).toBeGreaterThan(0);
+      } catch (err) {
+        // Explicit "not yet implemented" is the only acceptable throw.
+        expect((err as Error).message).toMatch(/not yet implemented/i);
+      }
     }
   });
 });

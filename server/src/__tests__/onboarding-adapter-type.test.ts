@@ -149,7 +149,7 @@ const charterSlot = (slot: string) => ({
 });
 
 function makePayload(
-  adapterChoice: "claude_local" | "anthropic_api" | "skip",
+  adapterChoice: string,
   anthropicKey = "",
 ) {
   return {
@@ -387,5 +387,162 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     for (const [, payload] of calls) {
       expect(payload).toMatchObject({ adapterType: "byo_runner" });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S7.0.2 — Zod schema accepts the wider 7 CLI choices
+//
+// We only assert that the schema VALIDATES the wider input — the
+// downstream "agents end up with adapterType=X" behavior is gated by
+// onboarding-bootstrap.ts:307 (still collapses to claude_local or
+// byo_runner per the BYO flag); S7.2 will reverse that collapse and
+// add behavior tests here.
+// ---------------------------------------------------------------------------
+
+describe("onboarding bootstrap — Zod adapterChoice schema accepts wider CLI set (S7.0.2)", () => {
+  let savedFlag: string | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    savedFlag = process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+  });
+
+  afterEach(() => {
+    if (savedFlag === undefined) delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
+  });
+
+  // Each of the 7 CLI choices should pass Zod validation (HTTP 201).
+  const cliChoices = [
+    "codex_local",
+    "gemini_local",
+    "opencode_local",
+    "pi_local",
+    "cursor_local",
+    "hermes_local",
+  ] as const;
+
+  for (const choice of cliChoices) {
+    it(`accepts adapterChoice=${choice} (no anthropic key required)`, async () => {
+      const app = await createApp();
+      const res = await request(app)
+        .post("/api/onboarding/bootstrap")
+        .send(makePayload(choice));
+
+      // 201 = Zod accepted + downstream pipeline ran.
+      expect(res.status).toBe(201);
+      // No key validation should have fired for a CLI choice.
+      expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
+      // No company secret should have been created — only anthropic_api
+      // path stores the key.
+      expect(mockSecretService.create).not.toHaveBeenCalled();
+    });
+  }
+
+  it("rejects adapterChoice=not_a_real_cli with 400 (Zod validation error)", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("not_a_real_cli"));
+
+    expect(res.status).toBe(400);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("anthropic_api still requires a key (regression test for the gate)", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", ""));
+
+    expect(res.status).toBe(422);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S7.0.2 — 6-tile MVP additions: openai_api, google_api + auth_mode gate
+//
+// These cover the new `auth_mode === 'api'` path. The Zod schema accepts
+// both new values; the bootstrap route enforces a non-empty key check
+// for every `auth_mode === 'api'` choice. Live API validation is only
+// wired for `anthropic_api` today (OpenAI/Google validators land with
+// the respective S7.B tiles), so the OpenAI/Google paths assert the
+// shape-level gate, not the live validation.
+// ---------------------------------------------------------------------------
+
+describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
+  let savedFlag: string | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    savedFlag = process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+  });
+
+  afterEach(() => {
+    if (savedFlag === undefined) delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
+  });
+
+  it("accepts adapterChoice=openai_api when key is provided (no anthropic validator fires)", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("openai_api", "sk-openai-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    // The OpenAI key path bypasses the Anthropic live validator —
+    // wiring lands with the S7.B OpenAI tile.
+    expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
+  });
+
+  it("rejects adapterChoice=openai_api when key is missing (auth_mode='api' gate)", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("openai_api", ""));
+
+    expect(res.status).toBe(422);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts adapterChoice=google_api when key is provided (Phase 4 placeholder)", async () => {
+    // S7 Phase 4 ships the Google API agent runtime. Until then the
+    // Zod schema accepts the choice + the key gate enforces a
+    // non-empty key. mapOnboardingChoiceToAdapter throws for
+    // google_api, but bootstrap-bootstrap currently collapses to
+    // claude_local pre-S7.2, so this still returns 201.
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("google_api", "AIza-google-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
+  });
+
+  it("rejects adapterChoice=google_api when key is missing (auth_mode='api' gate)", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("google_api", ""));
+
+    expect(res.status).toBe(422);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an arbitrary string outside the enum with 400", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("totally_made_up_provider", "irrelevant"));
+
+    expect(res.status).toBe(400);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 });

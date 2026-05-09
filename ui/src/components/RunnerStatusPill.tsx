@@ -1,7 +1,12 @@
 /**
  * Inline pill that surfaces runner-liveness for a company. Shown next to
- * the page title when at least one byo_runner agent is configured. Polls
- * `/api/companies/:id/runner-status` every 10 s and renders:
+ * the page title when at least one hosted-runner agent is configured —
+ * see `BYO_RUNNER_HOSTED_ADAPTERS` in `lib/runner-adapter-types.ts` for
+ * the gating set (`claude_local`, `codex_local`, `gemini_local`,
+ * `opencode_local`, `openai_api`). Server-side adapters (`process`,
+ * `http`) intentionally do NOT surface the pill.
+ *
+ * Polls `/api/companies/:id/runner-status` every 10 s and renders:
  *
  *   - Green "Runner online (N)"      — at least one token has lastSeenAt < 30 s
  *   - Yellow "Runner stale"          — token(s) exist but none online

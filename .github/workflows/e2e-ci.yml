@@ -118,6 +118,10 @@ jobs:
       - name: Seed demo data
         env:
           DATABASE_URL: postgres://founderos:founderos@127.0.0.1:54329/founderos
+          # P0 audit finding #5 (2026-05-09): seed-demo* scripts refuse to run
+          # without this gate. CI is pointed at the embedded PG above (port
+          # 54329, NOT prod), so confirming the gate is correct here.
+          FOUNDEROS_SEED_DEMO: "1"
         run: pnpm seed:demo
         continue-on-error: false
 

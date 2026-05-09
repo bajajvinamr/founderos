@@ -11,8 +11,10 @@
  */
 
 import type {
+  AgentAdapterType,
   AgentProviderPreference,
   FounderOSAdapterType,
+  OnboardingAdapterChoice,
   ProviderFamily,
 } from "@founderos/shared";
 
@@ -242,4 +244,79 @@ function familyFromAdapter(adapter: FounderOSAdapterType): ProviderFamily {
 
 function executionFromAdapter(adapter: FounderOSAdapterType): "cli" | "api" {
   return adapter.endsWith("_api") ? "api" : "cli";
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// S7.0.2 — Onboarding choice → adapter type mapping
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the founder's onboarding adapter pick into the concrete
+ * `agents.adapter_type` value to write into the DB.
+ *
+ * This is the simple, deterministic counterpart to `resolveAgentAdapter`:
+ * the founder explicitly picked a CLI in the wizard, and this function
+ * just translates the wire-format choice into the row value. It does NOT
+ * consult availability — that's the runner's job at dispatch time
+ * (and the missing-CLI experience surfaces there as a clean error
+ * rather than a silent no-op).
+ *
+ * Used by `onboarding-bootstrap.ts` (S7.2) to reverse the historical
+ * "all choices collapse to byo_runner" behavior.
+ *
+ * Notes:
+ *   - `anthropic_api` collapses to `claude_local` because no
+ *     `claude_api` adapter exists in the codebase. The Anthropic key
+ *     itself is still stored as a company secret upstream of this
+ *     function — adapters that need it (currently only `claude_local`
+ *     when CLI auth is missing) read from there.
+ *   - `openai_api` maps 1:1 to the registered `openai_api` adapter
+ *     (added to AGENT_ADAPTER_TYPES alongside the S7 sprint).
+ *   - `google_api` is part of the 6-tile MVP onboarding surface but
+ *     has no agent runtime handler yet — Phase 4 of S7 ships the
+ *     Google API adapter. For now this throws a clear "not yet
+ *     implemented" error so the bootstrap call site (S7.2) surfaces
+ *     it rather than silently writing a row that the dispatcher
+ *     can't execute.
+ *   - `skip` defaults to `claude_local` to preserve pre-S7 behavior
+ *     for founders who defer the decision; they can change it later
+ *     in Settings → Providers.
+ *   - `cursor_local` aligns with the rest of the `*_local` family
+ *     post-S7.0.4 rename (was `"cursor"` pre-2026-05-07). Cursor is
+ *     OUT of MVP wizard surface but the schema retains it for
+ *     legacy compatibility.
+ */
+export function mapOnboardingChoiceToAdapter(
+  choice: OnboardingAdapterChoice,
+): AgentAdapterType {
+  switch (choice) {
+    case "claude_local":
+    case "anthropic_api":
+    case "skip":
+      return "claude_local";
+    case "codex_local":
+      return "codex_local";
+    case "openai_api":
+      return "openai_api";
+    case "gemini_local":
+      return "gemini_local";
+    case "google_api":
+      // S7.0.2 — Google API adapter ships in S7 Phase 4. Until then
+      // the choice is accepted at the wire (so the wizard can render
+      // the 6-tile MVP grid) but explicitly errors here so callers
+      // see a clear "not yet implemented" signal instead of a silent
+      // half-provisioning.
+      throw new Error(
+        "google_api adapter is not yet implemented (S7 Phase 4) — " +
+          "pick a different provider during onboarding.",
+      );
+    case "opencode_local":
+      return "opencode_local";
+    case "pi_local":
+      return "pi_local";
+    case "cursor_local":
+      return "cursor_local";
+    case "hermes_local":
+      return "hermes_local";
+  }
 }
