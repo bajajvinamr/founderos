@@ -11,6 +11,7 @@ export default defineConfig({
     projects: [
       "packages/shared",
       "packages/db",
+      "packages/adapters/claude-local",
       "packages/adapters/codex-local",
       "packages/adapters/opencode-local",
       "packages/runner",
