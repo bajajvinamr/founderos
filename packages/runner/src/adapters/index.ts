@@ -23,16 +23,29 @@ import type { RunnerAdapterType } from "../api.js";
 import type { AnyAdapter } from "../handlers/types.js";
 
 import { claudeLocalAdapter } from "./claude.js";
+import { geminiLocalAdapter } from "./gemini.js";
 
 /**
- * The runner's adapter registry. Phase-4 adapters (gemini_local,
- * codex_local, cursor_local, openai_api, anthropic_api, google_api) will
- * extend this map as they land. Use `getAdapter(type)` for runtime
- * lookups so the registry doesn't leak to call sites that need a
- * single handler.
+ * The runner's adapter registry. Phase-4 adapters land here as they
+ * implement the {@link AnyAdapter} contract:
+ *   - S7.1.b.2 — `claude_local` (structural template; lifecycle in
+ *                S7.1.c.1).
+ *   - S7.B.gemini — `gemini_local` (mirrors claude_local; encodes the
+ *                   `GEMINI_CLI_TRUST_WORKSPACE` (Invariant 1) and
+ *                   `MODEL_CAPACITY_EXHAUSTED` (Invariant 2) gotchas
+ *                   from `~/.claude/rules/vinamr-invariants.md`).
+ *   - S7.C / future — codex_local, cursor_local, openai_api,
+ *                     anthropic_api, google_api.
+ *
+ * Note: `gemini_local` is dormant under V1 (`FOUNDEROS_DISPATCHER_V2`
+ * unset). It goes live when the dispatcher flag flips (separate ticket).
+ *
+ * Use `getAdapter(type)` for runtime lookups so the registry doesn't
+ * leak to call sites that only need a single handler.
  */
 export const ADAPTER_HANDLERS = {
   claude_local: claudeLocalAdapter,
+  gemini_local: geminiLocalAdapter,
 } as const satisfies Partial<Record<RunnerAdapterType, AnyAdapter>>;
 
 export type ImplementedAdapterType = keyof typeof ADAPTER_HANDLERS;
