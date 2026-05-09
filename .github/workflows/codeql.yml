@@ -5,12 +5,21 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/dist/**"
+      - "**/build/**"
+      - "**/.next/**"
+      - "**/coverage/**"
+      - "docs/**"
+      - "**/*.md"
   schedule:
     - cron: "0 6 * * 1"
 
+# Never cancel a main-branch or scheduled CodeQL run — Security tab results
+# require successful runs on main. Only PRs are cancel-on-superseded.
 concurrency:
   group: codeql-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
