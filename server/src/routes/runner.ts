@@ -28,6 +28,7 @@ import { z } from "zod";
 import type { Db } from "@founderos/db";
 import {
   agents,
+  companyMemberships,
   companies,
   heartbeatRunEvents,
   runnerJobs,
@@ -38,7 +39,7 @@ import { validate } from "../middleware/validate.js";
 import { logger } from "../middleware/logger.js";
 import { logActivity } from "../services/index.js";
 import { conflict, forbidden, notFound, unauthorized } from "../errors.js";
-import { assertCompanyAccess, assertInstanceAdmin } from "./authz.js";
+import { assertCompanyAccess } from "./authz.js";
 import { LOCAL_BOARD_USER_ID } from "../auth/post-signup-hook.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -68,6 +69,11 @@ function ttlDaysToExpiresAt(days: number | null | undefined): Date | null {
   return new Date(Date.now() + resolved * ONE_DAY_MS);
 }
 
+function expiresInDaysFromExpiresAt(expiresAt: Date | null): number | null {
+  if (!expiresAt) return null;
+  return Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / ONE_DAY_MS));
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sha256Hex(plaintext: string): string {
@@ -86,6 +92,30 @@ function generateRunnerToken(): string {
   const buf = randomBytes(TOKEN_RANDOM_BYTES * 2);
   const alnum = buf.toString("base64").replace(/[^A-Za-z0-9]/g, "");
   return `fos_${alnum.slice(0, 32)}`;
+}
+
+async function assertCanManageRunnerTokens(db: Db, req: Request, companyId: string): Promise<void> {
+  if (req.actor.type !== "board") throw unauthorized();
+  if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return;
+  if (!req.actor.userId) throw forbidden("Company owner or instance admin required");
+
+  const [ownerMembership] = await db
+    .select({ id: companyMemberships.id })
+    .from(companyMemberships)
+    .where(
+      and(
+        eq(companyMemberships.companyId, companyId),
+        eq(companyMemberships.principalType, "user"),
+        eq(companyMemberships.principalId, req.actor.userId),
+        eq(companyMemberships.status, "active"),
+        eq(companyMemberships.membershipRole, "owner"),
+      ),
+    )
+    .limit(1);
+
+  if (!ownerMembership) {
+    throw forbidden("Company owner or instance admin required");
+  }
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -240,6 +270,9 @@ export function runnerJobRoutes(db: Db): Router {
         promptHash: runnerJobs.promptHash,
         sessionIdHint: runnerJobs.sessionIdHint,
         runtimeConfig: runnerJobs.runtimeConfig,
+        // S7.0.1 — surfaced to runner so the dispatcher can pick the
+        // right CLI handler (Claude vs Gemini vs Codex etc.).
+        adapterType: runnerJobs.adapterType,
         status: runnerJobs.status,
         heartbeatRunId: runnerJobs.heartbeatRunId,
       })
@@ -308,6 +341,12 @@ export function runnerJobRoutes(db: Db): Router {
       sessionId: existing.sessionIdHint,
       runtimeConfig,
       promptHash: existing.promptHash,
+      // S7.0.1 — adapter type drives the runner-side dispatcher.
+      // Defaults to "claude_local" if the row predates the schema column
+      // (legacy fallback for any rows that slipped through during
+      // migration; the column has a NOT NULL DEFAULT so this is a belt
+      // alongside the suspenders).
+      adapterType: existing.adapterType ?? "claude_local",
       // OpenAPI: `addDirs` is optional. v0 has no cloud-suggested add-dirs;
       // the runner derives them from runtimeConfig if present.
       addDirs: Array.isArray((runtimeConfig as { addDirs?: unknown }).addDirs)
@@ -510,17 +549,17 @@ export function runnerTokenManagementRoutes(db: Db): Router {
    * log row written before the response so a successful 201 implies an
    * audit-discoverable issuance event.
    *
-   * Authorization: instance-admin (any board user with admin access). Owner-
-   * only would be tighter but breaks the local_implicit dev mode where the
-   * synthetic principal needs to issue tokens for QA.
+   * Authorization: company owner or instance-admin. SaaS founders need to
+   * issue a runner token for their own company so Claude Code can execute on
+   * their local machine. local_implicit remains allowed for dev/QA.
    */
   router.post(
     "/companies/:companyId/runner-tokens",
     validate(issueTokenBodySchema),
     requireCompanyAccess,
     async (req, res) => {
-      assertInstanceAdmin(req);
       const companyId = req.params.companyId as string;
+      await assertCanManageRunnerTokens(db, req, companyId);
       const body = req.body as z.infer<typeof issueTokenBodySchema>;
       const label = body.label ?? "";
       // W0.3 — `undefined` → 90-day default; explicit `null` → indefinite.
@@ -581,6 +620,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         label: row.label,
         createdAt: row.createdAt.toISOString(),
         expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+        expiresInDays: expiresInDaysFromExpiresAt(row.expiresAt),
       });
     },
   );
@@ -594,8 +634,8 @@ export function runnerTokenManagementRoutes(db: Db): Router {
     "/companies/:companyId/runner-tokens/:tokenId",
     requireCompanyAccess,
     async (req, res) => {
-      assertInstanceAdmin(req);
       const companyId = req.params.companyId as string;
+      await assertCanManageRunnerTokens(db, req, companyId);
       const tokenId = req.params.tokenId as string;
 
       const [target] = await db
@@ -656,8 +696,8 @@ export function runnerTokenManagementRoutes(db: Db): Router {
     validate(rotateTokenBodySchema),
     requireCompanyAccess,
     async (req, res) => {
-      assertInstanceAdmin(req);
       const companyId = req.params.companyId as string;
+      await assertCanManageRunnerTokens(db, req, companyId);
       const oldTokenId = req.params.tokenId as string;
       const body = req.body as z.infer<typeof rotateTokenBodySchema>;
 
@@ -743,6 +783,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         label: created.label,
         createdAt: created.createdAt.toISOString(),
         expiresAt: created.expiresAt ? created.expiresAt.toISOString() : null,
+        expiresInDays: expiresInDaysFromExpiresAt(created.expiresAt),
         rotatedFromTokenId: old.id,
       });
     },
@@ -777,9 +818,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         // W0.3 — surface expiresAt + a derived expiresInDays so the UI can
         // render "Expires in N days" without re-implementing the math.
         expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-        expiresInDays: r.expiresAt
-          ? Math.max(0, Math.ceil((r.expiresAt.getTime() - now) / ONE_DAY_MS))
-          : null,
+        expiresInDays: expiresInDaysFromExpiresAt(r.expiresAt),
         online: r.lastSeenAt ? now - r.lastSeenAt.getTime() <= RUNNER_ONLINE_WINDOW_MS : false,
       })),
     });
@@ -821,9 +860,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
         revokedAt: r.revokedAt ? r.revokedAt.toISOString() : null,
         expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-        expiresInDays: r.expiresAt
-          ? Math.max(0, Math.ceil((r.expiresAt.getTime() - now) / ONE_DAY_MS))
-          : null,
+        expiresInDays: expiresInDaysFromExpiresAt(r.expiresAt),
         rotatedFromTokenId: r.rotatedFromTokenId,
         online:
           r.revokedAt === null && r.lastSeenAt !== null

@@ -3,7 +3,12 @@
  * for embedded test harnesses or wrappers.
  */
 
-export { loadConfig, RunnerConfigError, type RunnerConfig } from "./config.js";
+export {
+  loadConfig,
+  RunnerConfigError,
+  type RunnerConfig,
+  type RunnerConfigOverrides,
+} from "./config.js";
 export { RunnerApiClient, ApiError, type RunnerEvent, type JobPayload, type JobDescriptor } from "./api.js";
 export { runClaude, parseStreamJsonLine, buildClaudeArgs } from "./spawn.js";
 export { runRunnerLoop, consoleLogger, type RunnerLogger, type RunnerLoopOptions } from "./main.js";

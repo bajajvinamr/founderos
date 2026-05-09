@@ -34,7 +34,7 @@ describe("cursor local skill sync", () => {
     const ctx = {
       agentId: "agent-1",
       companyId: "company-1",
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       config: {
         env: {
           HOME: home,
@@ -68,7 +68,7 @@ describe("cursor local skill sync", () => {
     const ctx = {
       agentId: "agent-3",
       companyId: "company-1",
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       config: {
         env: {
           HOME: home,
@@ -111,7 +111,7 @@ describe("cursor local skill sync", () => {
     const configuredCtx = {
       agentId: "agent-2",
       companyId: "company-1",
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       config: {
         env: {
           HOME: home,

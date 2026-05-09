@@ -4,32 +4,58 @@ Local execution runner for [FounderOS](https://founderos.fly.dev). Polls the Fou
 
 > **Why this exists.** FounderOS runs as a hosted control plane, but the actual LLM execution happens on _your_ machine — under _your_ authed CLI session and _your_ subscription billing. The cloud never sees your Anthropic API keys; it just enqueues work and reads back the events. See [ADR-011](https://github.com/founderos-ai/founderos/blob/main/docs/adr/011-byo-runner.md) for the full rationale.
 
-## Install
+## Quickstart
+
+No install required — `npx` runs the runner directly:
+
+```bash
+npx @founderos/runner start \
+  --token=fos_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  --server-url=https://founderos.fly.dev
+```
+
+### Windows (PowerShell)
+
+```powershell
+npx @founderos/runner start --token=fos_xxx --server-url=https://founderos.fly.dev
+```
+
+> **Common typo:** `npm install -g @founderos/` (with a trailing slash, no
+> package name) makes npm look for a local `@founderos\package.json` and
+> fail with `ENOENT`. The package name is `@founderos/runner` — and you
+> don't actually need to install it globally; `npx` is enough.
+
+### Prerequisites
+
+- **Node.js ≥ 20** — `node --version` to check.
+- **`claude` CLI** installed and authenticated — `claude --version` should work in your shell. If you use a different LLM CLI, the multi-CLI dispatcher (PHASE-S7, in progress) will support Codex, Gemini, OpenCode, Pi, and Cursor.
+
+### Get a token
+
+Issue a runner token from the FounderOS dashboard → Settings → Runner Tokens. The plaintext is shown **once** at issuance — store it in a password manager. Tokens are scoped to a single company; revoke from the dashboard whenever a machine is decommissioned.
+
+## Install (optional)
+
+For long-running setups (a dedicated runner machine, a service file), install the binary globally instead of using `npx`:
 
 ```bash
 npm install -g @founderos/runner
+founderos-runner start --token=fos_xxx --server-url=https://founderos.fly.dev
 ```
 
-You also need:
+## Configuration reference
 
-- **Node.js ≥ 20**
-- **`claude` CLI** installed and authenticated (`claude --version` should work in your shell)
+Every option can be set via flag OR environment variable. Flags override env vars when both are present.
 
-## Configure
+| Flag | Env var | Required | Default | Notes |
+|---|---|---|---|---|
+| `--token=<...>` | `FOUNDEROS_RUNNER_TOKEN` | yes | — | Bearer token (`fos_<32 chars>`) |
+| `--server-url=<...>` | `FOUNDEROS_RUNNER_URL` | yes | — | e.g. `https://founderos.fly.dev` |
+| `--claude-bin=<...>` | `FOUNDEROS_CLAUDE_BIN` | no | `claude` | Override if `claude` isn't on `PATH` |
+| `--timeout-sec=<n>` | `FOUNDEROS_RUNNER_TIMEOUT_SEC` | no | `600` | Per-job hard ceiling, 1..3600 |
+| `--log-level=<...>` | `FOUNDEROS_RUNNER_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 
-The runner reads everything from environment variables:
-
-| Var | Required | Default | Notes |
-|---|---|---|---|
-| `FOUNDEROS_RUNNER_URL` | yes | — | Cloud base URL, e.g. `https://founderos.fly.dev` |
-| `FOUNDEROS_RUNNER_TOKEN` | yes | — | Bearer token (`fos_<32 chars>`) issued from the FounderOS dashboard |
-| `FOUNDEROS_CLAUDE_BIN` | no | `claude` | Override if `claude` isn't on `PATH` |
-| `FOUNDEROS_RUNNER_TIMEOUT_SEC` | no | `600` | Per-job hard ceiling |
-| `FOUNDEROS_RUNNER_LOG_LEVEL` | no | `info` | `debug \| info \| warn \| error` |
-
-Issue a token from the FounderOS dashboard → Settings → Runner Tokens. The plaintext is shown **once** at issuance — store it in a secret manager or password vault.
-
-## Run
+### Env-var form (macOS/Linux shells, scripts, systemd unit files)
 
 ```bash
 export FOUNDEROS_RUNNER_URL=https://founderos.fly.dev
@@ -74,6 +100,18 @@ EOF
 launchctl load ~/Library/LaunchAgents/dev.founderos.runner.plist
 ```
 
+## Run as a service (Windows, NSSM)
+
+Windows ships no equivalent to launchd / systemd, but [NSSM](https://nssm.cc) wraps any executable as a service:
+
+```powershell
+# After `npm install -g @founderos/runner`
+nssm install FounderOSRunner "C:\Program Files\nodejs\founderos-runner.cmd"
+nssm set FounderOSRunner AppParameters "start --token=fos_xxx --server-url=https://founderos.fly.dev"
+nssm set FounderOSRunner Start SERVICE_AUTO_START
+nssm start FounderOSRunner
+```
+
 ## Run as a service (Linux, systemd)
 
 ```ini
@@ -110,6 +148,19 @@ WantedBy=default.target
 - Revoke from the dashboard whenever a machine is decommissioned; revoked tokens get a 401 on the next request.
 
 See the [runner threat model](https://github.com/founderos-ai/founderos/blob/main/docs/security/runner-threat-model.md).
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `npm error code ENOENT` ... `@founderos\package.json` | Trailing slash typo (`npm install -g @founderos/`) | Use `npx @founderos/runner start --token=...` |
+| `config error: FOUNDEROS_RUNNER_TOKEN is required` | No token passed | Add `--token=fos_...` or set `FOUNDEROS_RUNNER_TOKEN` |
+| `config error: ... must match fos_<32 alphanumeric>` | Token format wrong | Re-issue a fresh token from the dashboard |
+| `unknown or malformed flag(s): --token` | Flag without value (`--token` not `--token=fos_...`) | Use `--token=fos_xxx` form |
+| `claude: command not found` (during a job) | `claude` CLI not on `PATH` | Install Claude Code, or pass `--claude-bin=/full/path/to/claude` |
+| 401 Unauthorized on every request | Token revoked or expired | Re-issue from dashboard → Settings → Runner Tokens |
+
+For anything else, the runner emits structured `[debug]` logs when `--log-level=debug` is set — open an issue with the relevant log lines.
 
 ## Local development
 

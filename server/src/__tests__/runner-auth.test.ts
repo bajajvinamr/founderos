@@ -194,28 +194,44 @@ describeEmbeddedPostgres("runnerAuthMiddleware — BYO-101", () => {
 
     const mw = runnerAuthMiddleware(db);
 
+    // The middleware fires the lastSeenAt update with .then/.catch (no await),
+    // so we can't synchronously observe the row state. Poll for the write to
+    // land instead of using a fixed sleep — under CI parallel load a 50ms
+    // sleep wasn't always enough and the assertion failed with
+    // "expected null not to be null".
+    async function waitForLastSeenAt(deadlineMs = 5_000): Promise<Date> {
+      const start = Date.now();
+      while (Date.now() - start < deadlineMs) {
+        const [row] = await db
+          .select({ lastSeenAt: runnerTokens.lastSeenAt })
+          .from(runnerTokens)
+          .where(eq(runnerTokens.id, token.id));
+        if (row?.lastSeenAt) return row.lastSeenAt;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      throw new Error(
+        `lastSeenAt did not land within ${deadlineMs}ms — middleware fire-and-forget UPDATE likely failed`,
+      );
+    }
+
     // First poll — lastSeenAt should be set.
     {
       const { req, res, next } = makeFakeReqRes(`Bearer ${plaintext}`);
       await mw(req, res, next);
     }
 
-    // Give the fire-and-forget update a tick to land.
-    await new Promise((r) => setTimeout(r, 50));
-
-    const [afterFirst] = await db
-      .select({ lastSeenAt: runnerTokens.lastSeenAt })
-      .from(runnerTokens)
-      .where(eq(runnerTokens.id, token.id));
-    expect(afterFirst.lastSeenAt).not.toBeNull();
-    const firstSeenAt = afterFirst.lastSeenAt!;
+    const firstSeenAt = await waitForLastSeenAt();
+    expect(firstSeenAt).not.toBeNull();
 
     // Second poll within the 30s debounce window — should NOT write again.
     {
       const { req, res, next } = makeFakeReqRes(`Bearer ${plaintext}`);
       await mw(req, res, next);
     }
-    await new Promise((r) => setTimeout(r, 50));
+    // Give any (incorrect) second write a chance to land before asserting
+    // it didn't — 100ms is well past the typical fire-and-forget window
+    // observed in CI (<50ms when not contended).
+    await new Promise((r) => setTimeout(r, 100));
 
     const [afterSecond] = await db
       .select({ lastSeenAt: runnerTokens.lastSeenAt })

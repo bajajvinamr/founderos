@@ -399,7 +399,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const args = buildArgs(resumeSessionId);
     if (onMeta) {
       await onMeta({
-        adapterType: "cursor",
+        adapterType: "cursor_local",
         command: resolvedCommand,
         cwd,
         commandNotes,

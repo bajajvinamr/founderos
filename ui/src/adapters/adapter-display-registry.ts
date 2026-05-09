@@ -84,7 +84,7 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     description: "Local Pi agent",
     icon: Terminal,
   },
-  cursor: {
+  cursor_local: {
     label: "Cursor",
     description: "Local Cursor agent",
     icon: MousePointer2,

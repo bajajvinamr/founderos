@@ -73,7 +73,7 @@ describe("adapter model listing", () => {
       hasError: true,
     }));
 
-    const models = await listAdapterModels("cursor");
+    const models = await listAdapterModels("cursor_local");
     expect(models).toEqual(cursorFallbackModels);
   });
 
@@ -94,8 +94,8 @@ describe("adapter model listing", () => {
     }));
     setCursorModelsRunnerForTests(runner);
 
-    const first = await listAdapterModels("cursor");
-    const second = await listAdapterModels("cursor");
+    const first = await listAdapterModels("cursor_local");
+    const second = await listAdapterModels("cursor_local");
 
     expect(runner).toHaveBeenCalledTimes(1);
     expect(first).toEqual(second);
