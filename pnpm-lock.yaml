@@ -517,7 +517,7 @@ importers:
         specifier: ^3.888.0
         version: 3.1031.0
       '@clerk/backend':
-        specifier: ^1.21.0
+        specifier: ^1.34.0
         version: 1.34.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@founderos/adapter-claude-local':
         specifier: workspace:*
