@@ -19,15 +19,40 @@ export interface LocalAgentJwtClaims {
 
 const JWT_ALGORITHM = "HS256";
 
+/**
+ * Thrown when FOUNDEROS_AGENT_JWT_SECRET is not present in process.env at the
+ * point where a JWT is needed. This is a server-misconfiguration failure
+ * (NOT a runtime "your token is invalid" failure) — the type system and
+ * dev-mode auto-bootstrap (`server/src/boot/jwt-secret-bootstrap.ts`) make
+ * this branch unreachable in normal operation.
+ *
+ * Distinct from runtime verification failures (bad signature, expired token,
+ * missing claims) which continue to return null from `verifyLocalAgentJwt` —
+ * those are legitimate "this token is not valid" outcomes that callers
+ * already handle as 401.
+ */
+export class AgentJwtSecretMissingError extends Error {
+  readonly code = "agent_jwt_secret_missing";
+  constructor() {
+    super(
+      "FOUNDEROS_AGENT_JWT_SECRET is not configured. " +
+        "Local-CLI agents cannot authenticate to the FounderOS API without it. " +
+        "In development: this should be auto-bootstrapped at boot — file a bug. " +
+        "In production: run `pnpm founderos onboard` or set the secret explicitly.",
+    );
+    this.name = "AgentJwtSecretMissingError";
+  }
+}
+
 function parseNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.floor(parsed);
 }
 
-function jwtConfig() {
+function jwtConfigOrThrow() {
   const secret = process.env.FOUNDEROS_AGENT_JWT_SECRET?.trim();
-  if (!secret) return null;
+  if (!secret) throw new AgentJwtSecretMissingError();
 
   return {
     secret,
@@ -65,9 +90,20 @@ function safeCompare(a: string, b: string) {
   return timingSafeEqual(left, right);
 }
 
-export function createLocalAgentJwt(agentId: string, companyId: string, adapterType: string, runId: string) {
-  const config = jwtConfig();
-  if (!config) return null;
+/**
+ * Issue a signed local-agent JWT. Throws `AgentJwtSecretMissingError` when
+ * the server is missing the signing secret — the type system therefore makes
+ * the "no token" path unrepresentable at every call site (heartbeat,
+ * adapter spawn, etc.). Callers that previously did `if (!token) ...` should
+ * delete that branch — it is now unreachable.
+ */
+export function createLocalAgentJwt(
+  agentId: string,
+  companyId: string,
+  adapterType: string,
+  runId: string,
+): string {
+  const config = jwtConfigOrThrow();
 
   const now = Math.floor(Date.now() / 1000);
   const claims: LocalAgentJwtClaims = {
@@ -93,10 +129,19 @@ export function createLocalAgentJwt(agentId: string, companyId: string, adapterT
   return `${signingInput}.${signature}`;
 }
 
+/**
+ * Verify a local-agent JWT. Returns the decoded claims on success, or `null`
+ * when the token itself is invalid (bad signature, expired, missing claims,
+ * issuer/audience mismatch). Throws `AgentJwtSecretMissingError` when the
+ * server has no signing secret — that is a misconfiguration, not "this
+ * token is invalid," and the auth middleware should not silently treat it
+ * as anonymous-fallback.
+ */
 export function verifyLocalAgentJwt(token: string): LocalAgentJwtClaims | null {
   if (!token) return null;
-  const config = jwtConfig();
-  if (!config) return null;
+  // Missing config throws — surfaces server misconfiguration loud rather
+  // than silently masquerading as "token rejected."
+  const config = jwtConfigOrThrow();
 
   const parts = token.split(".");
   if (parts.length !== 3) return null;

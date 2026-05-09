@@ -188,7 +188,12 @@ describeEmbeddedPostgres("heartbeat — FOUNDEROS_AGENT_JWT_SECRET hard-fail", (
       const run = await waitForRunStatus(runId, ["failed", "succeeded", "cancelled"]);
       expect(run.status).toBe("failed");
       expect(run.errorCode).toBe("agent_jwt_secret_missing");
-      expect(run.error).toContain("FOUNDEROS_AGENT_JWT_SECRET is not set");
+      // Message text comes from AgentJwtSecretMissingError in agent-auth-jwt.ts.
+      // The actionable hint (`pnpm founderos onboard`) is always present in
+      // production; the precise wording before that is asserted to surface
+      // the env var name so an operator grepping logs finds it.
+      expect(run.error).toContain("FOUNDEROS_AGENT_JWT_SECRET");
+      expect(run.error).toContain("not configured");
       expect(run.error).toContain("pnpm founderos onboard");
       expect(executeSpy).not.toHaveBeenCalled();
     },
