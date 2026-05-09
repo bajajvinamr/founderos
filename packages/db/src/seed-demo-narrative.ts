@@ -30,6 +30,16 @@ import {
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
+if (process.env.FOUNDEROS_SEED_DEMO !== "1") {
+  console.error(
+    "[seed-demo-narrative] Refusing to run: this script writes demo-only " +
+      "company memory + integrations into the configured DATABASE_URL. Set " +
+      "FOUNDEROS_SEED_DEMO=1 to confirm you are pointing at a development/test " +
+      "database, never production. See docs/runbooks/seed-demo.md for safe usage.",
+  );
+  process.exit(1);
+}
+
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
 const db = createDb(url);
@@ -41,10 +51,10 @@ console.log("[seed-narrative] Wiring memory + decision inbox + integrations…")
 // ──────────────────────────────────────────────────────────────────────────
 const allCompanies = await db.select().from(companies);
 const byName = Object.fromEntries(allCompanies.map((c) => [c.name, c]));
-const agnost = byName["agnost.ai"];
-const pred = byName["Pred"];
-const gravton = byName["Gravton Labs"];
-if (!agnost || !pred || !gravton) {
+const acme = byName["Acme Robotics"];
+const beta = byName["Beta Labs"];
+const demoCorp = byName["Demo Corp"];
+if (!acme || !beta || !demoCorp) {
   throw new Error(
     "Core 3-company seed missing. Run seed-demo.ts and seed-demo-depth.ts first.",
   );
@@ -79,9 +89,9 @@ type MemorySeed = {
 };
 
 const memorySeeds: MemorySeed[] = [
-  // ─── agnost.ai ────────────────────────────────────────────────────────────
+  // ─── Acme Robotics ────────────────────────────────────────────────────────
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "founder_note",
     title: "Labs buy eval throughput, not model quality",
     body:
@@ -91,7 +101,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "experiment_outcome",
     title: "SWE-bench-Live beat SWE-bench-Verified on churn",
     body:
@@ -100,7 +110,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 17,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "weekly_summary",
     title: "Week of Apr 7 — Anthropic DP signed, Cohere scoping",
     body:
@@ -109,7 +119,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 14,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "founder_note",
     title: "Don't ship a closed-source rubric SDK",
     body:
@@ -119,7 +129,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "experiment_outcome",
     title: "HN front page drives research engineers, not customers",
     body:
@@ -128,7 +138,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 9,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "founder_note",
     title: "Reproducibility is the only defensible claim in AI",
     body:
@@ -138,7 +148,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "milestone",
     title: "First DP revenue — $4k MRR",
     body:
@@ -147,7 +157,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 45,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "experiment_outcome",
     title: "Paper-first launches work, product-first launches don't",
     body:
@@ -156,7 +166,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 52,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "founder_note",
     title: "Kepler's hiring bar: 'can another lab replicate in 2 weeks?'",
     body:
@@ -165,7 +175,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 40,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "weekly_summary",
     title: "Week of Mar 24 — 1k GitHub stars in 48h",
     body:
@@ -174,7 +184,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 32,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "experiment_outcome",
     title: "Discord beats Slack for research communities",
     body:
@@ -183,9 +193,9 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 60,
   },
 
-  // ─── Pred ─────────────────────────────────────────────────────────────────
+  // ─── Beta Labs ────────────────────────────────────────────────────────────
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "founder_note",
     title: "EPL Saturday matchdays are 4x weekday GMV",
     body:
@@ -195,7 +205,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "experiment_outcome",
     title: "Cricket is a trap — PL+UCL wedge is our moat",
     body:
@@ -205,7 +215,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "founder_note",
     title: "Kill suspicious markets within 90 seconds",
     body:
@@ -215,7 +225,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "weekly_summary",
     title: "Week of Apr 7 — GW32 Liverpool vs Chelsea",
     body:
@@ -224,7 +234,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 14,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "experiment_outcome",
     title: "UK creators convert better than Indian PL fanclubs",
     body:
@@ -233,7 +243,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 22,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "founder_note",
     title: "FIU filings are discovery, not paperwork",
     body:
@@ -242,7 +252,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 30,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "experiment_outcome",
     title: "Live commentary Reels settle faster than text wraps",
     body:
@@ -251,7 +261,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 40,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "milestone",
     title: "Crossed 40K MAU",
     body:
@@ -260,7 +270,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 8,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "founder_note",
     title: "Never ship limits that users can instantly raise",
     body:
@@ -270,7 +280,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "experiment_outcome",
     title: "Pre-match market lists drive 40% of pre-kickoff deposits",
     body:
@@ -279,7 +289,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 50,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "weekly_summary",
     title: "Week of Mar 10 — Series Seed closed",
     body:
@@ -288,9 +298,9 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 42,
   },
 
-  // ─── Gravton Labs ─────────────────────────────────────────────────────────
+  // ─── Demo Corp ────────────────────────────────────────────────────────────
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "founder_note",
     title: "Warby Parker renewed on citation lift, not rank",
     body:
@@ -300,7 +310,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "experiment_outcome",
     title: "Free scanner → paid: 9.1% at $99 beats 4.2% at $49",
     body:
@@ -309,7 +319,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 18,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "founder_note",
     title: "GEO category creation = one essay per month forever",
     body:
@@ -319,16 +329,16 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "experiment_outcome",
     title: "Enterprise demos: lead with their brand, not our platform",
     body:
-      "Priya changed her demo opener from 'here is Gravton' to 'here is how Lululemon actually appears in Claude right now' — screen-shared live. Close rate went from 18% to 44% over 14 demos. Never pitch the platform first; pitch the buyer's reality.",
+      "Priya changed her demo opener from 'here is Demo Corp' to 'here is how Lululemon actually appears in Claude right now' — screen-shared live. Close rate went from 18% to 44% over 14 demos. Never pitch the platform first; pitch the buyer's reality.",
     topic: "sales",
     daysAgo: 20,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "founder_note",
     title: "Citation rate correlates with HN + Reddit, not Google DR",
     body:
@@ -338,7 +348,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "weekly_summary",
     title: "Week of Apr 7 — Everlane renewed at +16%",
     body:
@@ -347,7 +357,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 14,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "experiment_outcome",
     title: "Podcast circuit outperforms paid SEO 10x",
     body:
@@ -356,7 +366,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 35,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "founder_note",
     title: "OpenAI rate limits are the ceiling, not infra cost",
     body:
@@ -365,7 +375,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 28,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "milestone",
     title: "11 signed pilots, $352K total ACV",
     body:
@@ -375,7 +385,7 @@ const memorySeeds: MemorySeed[] = [
     pinned: true,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "experiment_outcome",
     title: "Page-1 Google for 'generative engine optimization' drives inbound",
     body:
@@ -384,7 +394,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 42,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "founder_note",
     title: "CS delivers monthly exec reports — the renewal happens here",
     body:
@@ -393,7 +403,7 @@ const memorySeeds: MemorySeed[] = [
     daysAgo: 50,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "weekly_summary",
     title: "Week of Mar 24 — Benchmark Report hit the WSJ citation",
     body:
@@ -438,9 +448,9 @@ type ApprovalSeed = {
 };
 
 const approvalSeeds: ApprovalSeed[] = [
-  // ─── agnost.ai ────────────────────────────────────────────────────────────
+  // ─── Acme Robotics ────────────────────────────────────────────────────────
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "vendor_spend",
     requesterName: "Vera",
     status: "pending",
@@ -450,7 +460,7 @@ const approvalSeeds: ApprovalSeed[] = [
     amountUsd: 42_000,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "partnership",
     requesterName: "Bodhi",
     status: "approved",
@@ -463,18 +473,18 @@ const approvalSeeds: ApprovalSeed[] = [
       "Approved — 4th DP, keeps us on track for 5-by-seed-round goal.",
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "external_talk",
     requesterName: "Nova",
     status: "approved",
     title: "Keynote — AIEngWorld Summit (SF, May 14)",
     rationale:
-      "30-min slot right after Anthropic's keynote. Category-defining moment for agnost. Talk title: 'The eval is the product'.",
+      "30-min slot right after Anthropic's keynote. Category-defining moment for Acme. Talk title: 'The eval is the product'.",
     decidedAgo: 6,
     decisionNote: "Approved — exactly the audience we're recruiting from.",
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "hire_request",
     requesterName: "Kepler",
     status: "rejected",
@@ -487,7 +497,7 @@ const approvalSeeds: ApprovalSeed[] = [
       "Rejected — equity ask breaks the band. Revisit at seed when we can offer larger cash + lower %.",
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "tool_spend",
     requesterName: "Sage",
     status: "approved",
@@ -498,7 +508,7 @@ const approvalSeeds: ApprovalSeed[] = [
     decidedAgo: 2,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "marketing_spend",
     requesterName: "Atlas",
     status: "pending",
@@ -508,7 +518,7 @@ const approvalSeeds: ApprovalSeed[] = [
     amountUsd: 18_000,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     type: "policy",
     requesterName: "Nova",
     status: "approved",
@@ -520,9 +530,9 @@ const approvalSeeds: ApprovalSeed[] = [
       "Approved — Kepler's 'open the tools, close the service' framework.",
   },
 
-  // ─── Pred ─────────────────────────────────────────────────────────────────
+  // ─── Beta Labs ────────────────────────────────────────────────────────────
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "vendor_spend",
     requesterName: "Dev",
     status: "pending",
@@ -532,7 +542,7 @@ const approvalSeeds: ApprovalSeed[] = [
     amountUsd: 96_000,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "partnership",
     requesterName: "Karthik",
     status: "rejected",
@@ -545,7 +555,7 @@ const approvalSeeds: ApprovalSeed[] = [
       "Rejected — cricket is a trap, PL+UCL wedge is the moat. No exceptions.",
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "policy",
     requesterName: "Anaya",
     status: "approved",
@@ -556,7 +566,7 @@ const approvalSeeds: ApprovalSeed[] = [
     decisionNote: "Approved — the exact kind of voluntary move regulators remember.",
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "hire_request",
     requesterName: "Meher",
     status: "pending",
@@ -566,7 +576,7 @@ const approvalSeeds: ApprovalSeed[] = [
     amountUsd: 84_000,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "marketing_spend",
     requesterName: "Zara",
     status: "approved",
@@ -578,7 +588,7 @@ const approvalSeeds: ApprovalSeed[] = [
     decisionNote: "Approved — single biggest matchday of the year. Go big.",
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "vendor_spend",
     requesterName: "Ishaan",
     status: "approved",
@@ -589,7 +599,7 @@ const approvalSeeds: ApprovalSeed[] = [
     decidedAgo: 7,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "external_talk",
     requesterName: "Arjun",
     status: "pending",
@@ -598,7 +608,7 @@ const approvalSeeds: ApprovalSeed[] = [
       "30-min fireside with a gov'ment policy advisor. Unfiltered public position on regulatory thesis. Risk: quoted out of context on cricket. Reward: credibility with next 10 investors.",
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     type: "policy",
     requesterName: "Anaya",
     status: "approved",
@@ -609,9 +619,9 @@ const approvalSeeds: ApprovalSeed[] = [
     decisionNote: "Approved — defensive posture. Revisit post-Series A.",
   },
 
-  // ─── Gravton Labs ─────────────────────────────────────────────────────────
+  // ─── Demo Corp ────────────────────────────────────────────────────────────
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "partnership",
     requesterName: "Priya",
     status: "pending",
@@ -621,7 +631,7 @@ const approvalSeeds: ApprovalSeed[] = [
     amountUsd: 68_000,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "vendor_spend",
     requesterName: "Aarav",
     status: "pending",
@@ -631,7 +641,7 @@ const approvalSeeds: ApprovalSeed[] = [
     amountUsd: 60_000,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "hire_request",
     requesterName: "Rohan",
     status: "approved",
@@ -644,7 +654,7 @@ const approvalSeeds: ApprovalSeed[] = [
       "Approved — category creation is the moat; need senior capacity.",
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "marketing_spend",
     requesterName: "Mira",
     status: "rejected",
@@ -657,7 +667,7 @@ const approvalSeeds: ApprovalSeed[] = [
       "Rejected — we are bootstrapped. Podcast circuit outperforms paid 10x at this stage. Revisit post-raise.",
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "tool_spend",
     requesterName: "Priya",
     status: "approved",
@@ -668,7 +678,7 @@ const approvalSeeds: ApprovalSeed[] = [
     decidedAgo: 8,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "external_talk",
     requesterName: "Rohan",
     status: "approved",
@@ -678,7 +688,7 @@ const approvalSeeds: ApprovalSeed[] = [
     decidedAgo: 2,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "partnership",
     requesterName: "Kiran",
     status: "pending",
@@ -687,7 +697,7 @@ const approvalSeeds: ApprovalSeed[] = [
       "Semrush has brand tracking data we don't. Co-authorship grants joint distribution to their 150K-brand email list. Risk: dilutes our category-creation stake.",
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     type: "vendor_spend",
     requesterName: "Tanvi",
     status: "approved",
@@ -755,30 +765,30 @@ type IntegrationSpec = {
 };
 
 const integrationSpecs: IntegrationSpec[] = [
-  // agnost.ai — slack + hubspot + posthog (research + DP funnel tracking)
+  // Acme Robotics — slack + hubspot + posthog (research + DP funnel tracking)
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "slack",
     keyHint: "7s4A",
     config: {
-      team_id: "T04AGNOST",
-      team_name: "agnost.ai",
+      team_id: "T04ACME",
+      team_name: "Acme Robotics",
       default_channel: "C04OPS",
     },
     connectedDaysAgo: 58,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "hubspot",
     keyHint: "b21C",
     config: {
       portal_id: "46204108",
-      account_name: "agnost.ai",
+      account_name: "Acme Robotics",
     },
     connectedDaysAgo: 42,
   },
   {
-    companyId: agnost.id,
+    companyId: acme.id,
     kind: "posthog",
     keyHint: "phc_",
     config: {
@@ -788,30 +798,30 @@ const integrationSpecs: IntegrationSpec[] = [
     connectedDaysAgo: 50,
   },
 
-  // Pred — slack + hubspot + posthog (matchday ops + CRM + product analytics)
+  // Beta Labs — slack + hubspot + posthog (matchday ops + CRM + product analytics)
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "slack",
     keyHint: "9k2P",
     config: {
-      team_id: "T09PRED",
-      team_name: "Pred",
+      team_id: "T09BETA",
+      team_name: "Beta Labs",
       default_channel: "C09MATCHDAY",
     },
     connectedDaysAgo: 180,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "hubspot",
     keyHint: "f4T2",
     config: {
       portal_id: "52119874",
-      account_name: "Pred",
+      account_name: "Beta Labs",
     },
     connectedDaysAgo: 120,
   },
   {
-    companyId: pred.id,
+    companyId: beta.id,
     kind: "posthog",
     keyHint: "phc_",
     config: {
@@ -821,30 +831,30 @@ const integrationSpecs: IntegrationSpec[] = [
     connectedDaysAgo: 160,
   },
 
-  // Gravton Labs — slack + hubspot + posthog (enterprise pipeline heavy)
+  // Demo Corp — slack + hubspot + posthog (enterprise pipeline heavy)
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "slack",
     keyHint: "3x8G",
     config: {
-      team_id: "T03GRAV",
-      team_name: "Gravton Labs",
+      team_id: "T03DEMO",
+      team_name: "Demo Corp",
       default_channel: "C03GTM",
     },
     connectedDaysAgo: 95,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "hubspot",
     keyHint: "a9D1",
     config: {
       portal_id: "47712203",
-      account_name: "Gravton Labs",
+      account_name: "Demo Corp",
     },
     connectedDaysAgo: 88,
   },
   {
-    companyId: gravton.id,
+    companyId: demoCorp.id,
     kind: "posthog",
     keyHint: "phc_",
     config: {
@@ -1449,13 +1459,13 @@ if (!existingLW) {
 // ══════════════════════════════════════════════════════════════════════════
 console.log("\n[seed-narrative] ✓ Narrative layer complete.");
 console.log("  • company_memory per company:");
-console.log(`    - agnost.ai    ${memorySeeds.filter((m) => m.companyId === agnost.id).length}`);
-console.log(`    - Pred         ${memorySeeds.filter((m) => m.companyId === pred.id).length}`);
-console.log(`    - Gravton Labs ${memorySeeds.filter((m) => m.companyId === gravton.id).length}`);
+console.log(`    - Acme Robotics ${memorySeeds.filter((m) => m.companyId === acme.id).length}`);
+console.log(`    - Beta Labs     ${memorySeeds.filter((m) => m.companyId === beta.id).length}`);
+console.log(`    - Demo Corp     ${memorySeeds.filter((m) => m.companyId === demoCorp.id).length}`);
 console.log("  • approvals added per company:");
-console.log(`    - agnost.ai    ${approvalSeeds.filter((a) => a.companyId === agnost.id).length}`);
-console.log(`    - Pred         ${approvalSeeds.filter((a) => a.companyId === pred.id).length}`);
-console.log(`    - Gravton Labs ${approvalSeeds.filter((a) => a.companyId === gravton.id).length}`);
+console.log(`    - Acme Robotics ${approvalSeeds.filter((a) => a.companyId === acme.id).length}`);
+console.log(`    - Beta Labs     ${approvalSeeds.filter((a) => a.companyId === beta.id).length}`);
+console.log(`    - Demo Corp     ${approvalSeeds.filter((a) => a.companyId === demoCorp.id).length}`);
 console.log(`  • integrations connected: ${integrationRecords.length} (3 per main company)`);
 console.log(`  • integration_data rows:  ${dataInserts.length}`);
 process.exit(0);
