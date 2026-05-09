@@ -31,9 +31,56 @@ import { Router } from "express";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import dns from "node:dns/promises";
+import net from "node:net";
 import type { Db } from "@founderos/db";
 import { pluginRegistryService } from "../services/plugin-registry.js";
 import { logger } from "../middleware/logger.js";
+
+// ---------------------------------------------------------------------------
+// Dev-proxy loopback enforcement
+// ---------------------------------------------------------------------------
+
+/**
+ * Allowed loopback IP literals for the dev proxy.
+ *
+ * Note: `localhost` is INTENTIONALLY excluded — it's resolvable at fetch time
+ * via the system resolver, which makes it the only form vulnerable to DNS
+ * rebinding or local-DNS hijack. Plugin authors must declare `127.0.0.1` or
+ * `::1` literally in `devUiUrl`.
+ */
+const ALLOWED_LOOPBACK_IPS = new Set<string>(["127.0.0.1", "::1"]);
+
+/**
+ * Defense-in-depth fetch-time check: even though the upstream hostname guard
+ * already restricts the set of accepted hostnames, we resolve the hostname
+ * once more and assert the resolved IP is loopback. This blocks any path
+ * where a non-IP hostname (or an IP whose interpretation is ambiguous) ends
+ * up being passed through.
+ *
+ * - Literal IPs skip resolution (would no-op anyway) and are checked against
+ *   `ALLOWED_LOOPBACK_IPS` directly.
+ * - Hostnames are resolved via `dns.lookup(hostname, { family: 0 })` and the
+ *   resolved address is asserted to be loopback. Throws otherwise.
+ *
+ * Exported for unit testing.
+ */
+export async function assertLoopbackResolution(hostname: string): Promise<void> {
+  if (net.isIP(hostname) > 0) {
+    if (!ALLOWED_LOOPBACK_IPS.has(hostname)) {
+      throw new Error(
+        `plugin-ui-static: non-loopback IP ${hostname} blocked`,
+      );
+    }
+    return;
+  }
+  const resolved = await dns.lookup(hostname, { family: 0 });
+  if (!ALLOWED_LOOPBACK_IPS.has(resolved.address)) {
+    throw new Error(
+      `plugin-ui-static: hostname ${hostname} resolved to non-loopback ${resolved.address}`,
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -340,21 +387,26 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
             return;
           }
 
-          // Dev proxy is restricted to loopback addresses only.
+          // Dev proxy is restricted to literal loopback IPs only.
           // Validate the *constructed* targetUrl hostname (not the base) to
           // catch any path-based override that slipped past the checks above.
+          //
+          // SECURITY: `localhost` is intentionally excluded — it is name-
+          // resolved at fetch time, making it the only form vulnerable to
+          // DNS rebinding (devUiUrl registered as `http://localhost:5173`,
+          // attacker rebinds `localhost` to an internal IP between checks).
+          // Literal IPs are not name-resolved and are safe.
           const devHost = targetUrl.hostname;
           const isLoopback =
-            devHost === "localhost" ||
-            devHost === "127.0.0.1" ||
-            devHost === "::1" ||
-            devHost === "[::1]";
+            devHost === "127.0.0.1" || devHost === "::1";
           if (!isLoopback) {
             log.warn(
               { pluginId: plugin.id, devUiUrl, host: devHost },
-              "plugin-ui-static: devUiUrl must target localhost, rejecting proxy",
+              "plugin-ui-static: devUiUrl must target literal loopback IP (127.0.0.1 or ::1), rejecting proxy",
             );
-            res.status(400).json({ error: "devUiUrl must target localhost" });
+            res.status(400).json({
+              error: "devUiUrl must target literal loopback IP (127.0.0.1 or ::1)",
+            });
             return;
           }
 
@@ -364,6 +416,13 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
           );
 
           try {
+            // Defense-in-depth: assert the hostname resolves to loopback at
+            // fetch time. Closes the DNS-rebinding window where a hostname
+            // that passed the literal-IP guard above could still resolve to
+            // a non-loopback address (this guard catches misconfiguration or
+            // any future regression that re-permits hostnames).
+            await assertLoopbackResolution(targetUrl.hostname);
+
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 10_000);
             try {
