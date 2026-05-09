@@ -42,6 +42,13 @@ export interface ProviderOption {
   label: string;
   /** One-line description, ~6-12 words. */
   description: string;
+  /**
+   * Plain-English "what this requires" line shown under the description.
+   * Tells the founder up-front what they need (CLI / key / signup) so the
+   * choice is honest before they pick — surfaces audit P0.4. Roughly 8-16
+   * words; never empty.
+   */
+  requirement: string;
   status: ProviderStatus;
   /** Engineering-ticket reference (e.g., "S7.B.2") — only set when coming-soon. */
   etaPhase?: string;
@@ -61,6 +68,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     id: "claude_code",
     label: "Claude Code",
     description: "Use your existing Claude subscription via the local CLI.",
+    requirement: "Requires Claude Code CLI installed on your laptop.",
     status: "live",
     adapterType: "claude_local",
     authMode: "subscription",
@@ -69,6 +77,8 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     id: "anthropic_api",
     label: "Anthropic API",
     description: "Bring your own Anthropic API key for hosted deployments.",
+    requirement:
+      "Requires an Anthropic API key (get one at console.anthropic.com).",
     status: "live",
     adapterType: "claude_local",
     authMode: "api_key",
@@ -77,6 +87,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     id: "gemini_cli",
     label: "Gemini CLI",
     description: "Use your Google AI subscription via the local CLI.",
+    requirement: "Requires Google AI Studio account and Gemini CLI on your laptop.",
     status: "coming-soon",
     etaPhase: "S7.B.2",
     adapterType: "gemini_local",
@@ -86,6 +97,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     id: "google_api",
     label: "Google API",
     description: "Bring your own Google AI API key for hosted deployments.",
+    requirement: "Requires a Google AI API key (aistudio.google.com/apikey).",
     status: "coming-soon",
     etaPhase: "S7.B.2",
     adapterType: "gemini_local",
@@ -95,6 +107,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     id: "codex_cli",
     label: "Codex CLI",
     description: "Use your OpenAI subscription via the local Codex CLI.",
+    requirement: "Requires GitHub Codex CLI installed on your laptop.",
     status: "coming-soon",
     etaPhase: "S7.B.1",
     adapterType: "codex_local",
@@ -104,6 +117,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     id: "openai_api",
     label: "OpenAI API",
     description: "Bring your own OpenAI API key (GPT-4o / o3).",
+    requirement: "Requires an OpenAI API key (platform.openai.com/api-keys).",
     status: "coming-soon",
     etaPhase: "S7.B.4",
     adapterType: "openai_api",
@@ -141,8 +155,10 @@ export function ProviderChooser({ selectedId, onSelect }: Props) {
           Pick your AI provider
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Two providers are live today. The other four ship across S7 — pick
-          the one you want and we'll route your agents through it.
+          Two providers run agents today (Claude Code + Anthropic API). The
+          other four are coming soon — they're shown so you can plan, but
+          they can't be selected yet. Each tile lists exactly what it
+          requires.
         </p>
       </div>
 
