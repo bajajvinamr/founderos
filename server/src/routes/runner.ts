@@ -69,6 +69,11 @@ function ttlDaysToExpiresAt(days: number | null | undefined): Date | null {
   return new Date(Date.now() + resolved * ONE_DAY_MS);
 }
 
+function expiresInDaysFromExpiresAt(expiresAt: Date | null): number | null {
+  if (!expiresAt) return null;
+  return Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / ONE_DAY_MS));
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sha256Hex(plaintext: string): string {
@@ -615,6 +620,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         label: row.label,
         createdAt: row.createdAt.toISOString(),
         expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+        expiresInDays: expiresInDaysFromExpiresAt(row.expiresAt),
       });
     },
   );
@@ -777,6 +783,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         label: created.label,
         createdAt: created.createdAt.toISOString(),
         expiresAt: created.expiresAt ? created.expiresAt.toISOString() : null,
+        expiresInDays: expiresInDaysFromExpiresAt(created.expiresAt),
         rotatedFromTokenId: old.id,
       });
     },
@@ -811,9 +818,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         // W0.3 — surface expiresAt + a derived expiresInDays so the UI can
         // render "Expires in N days" without re-implementing the math.
         expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-        expiresInDays: r.expiresAt
-          ? Math.max(0, Math.ceil((r.expiresAt.getTime() - now) / ONE_DAY_MS))
-          : null,
+        expiresInDays: expiresInDaysFromExpiresAt(r.expiresAt),
         online: r.lastSeenAt ? now - r.lastSeenAt.getTime() <= RUNNER_ONLINE_WINDOW_MS : false,
       })),
     });
@@ -855,9 +860,7 @@ export function runnerTokenManagementRoutes(db: Db): Router {
         lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
         revokedAt: r.revokedAt ? r.revokedAt.toISOString() : null,
         expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
-        expiresInDays: r.expiresAt
-          ? Math.max(0, Math.ceil((r.expiresAt.getTime() - now) / ONE_DAY_MS))
-          : null,
+        expiresInDays: expiresInDaysFromExpiresAt(r.expiresAt),
         rotatedFromTokenId: r.rotatedFromTokenId,
         online:
           r.revokedAt === null && r.lastSeenAt !== null
