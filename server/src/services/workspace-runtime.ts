@@ -148,8 +148,11 @@ function readJsonFile(filePath: string): Record<string, unknown> {
 function findWorkspaceRoot(startCwd: string) {
   let current = path.resolve(startCwd);
   while (true) {
-    if (existsSync(path.join(current, "pnpm-workspace.yaml"))) {
+    try {
+      readFileSync(path.join(current, "pnpm-workspace.yaml"));
       return current;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }
     const parent = path.dirname(current);
     if (parent === current) return null;
@@ -159,12 +162,14 @@ function findWorkspaceRoot(startCwd: string) {
 
 function isLinkedGitWorktreeCheckout(rootDir: string) {
   const gitMetadataPath = path.join(rootDir, ".git");
-  if (!existsSync(gitMetadataPath)) return false;
-
-  const stat = lstatSync(gitMetadataPath);
-  if (!stat.isFile()) return false;
-
-  return readFileSync(gitMetadataPath, "utf8").trimStart().startsWith("gitdir:");
+  try {
+    const stat = lstatSync(gitMetadataPath);
+    if (!stat.isFile()) return false;
+    return readFileSync(gitMetadataPath, "utf8").trimStart().startsWith("gitdir:");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
 }
 
 function discoverWorkspacePackagePaths(rootDir: string): Map<string, string> {
@@ -172,17 +177,26 @@ function discoverWorkspacePackagePaths(rootDir: string): Map<string, string> {
   const ignoredDirNames = new Set([".git", ".founderos", "dist", "node_modules"]);
 
   function visit(dirPath: string) {
-    if (!existsSync(dirPath)) return;
+    let dirEntries;
+    try {
+      dirEntries = readdirSync(dirPath, { withFileTypes: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
 
     const packageJsonPath = path.join(dirPath, "package.json");
-    if (existsSync(packageJsonPath)) {
+    try {
       const packageJson = readJsonFile(packageJsonPath);
       if (typeof packageJson.name === "string" && packageJson.name.length > 0) {
         packagePaths.set(packageJson.name, dirPath);
       }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      // No package.json in this dir — continue traversal.
     }
 
-    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+    for (const entry of dirEntries) {
       if (!entry.isDirectory()) continue;
       if (ignoredDirNames.has(entry.name)) continue;
       visit(path.join(dirPath, entry.name));

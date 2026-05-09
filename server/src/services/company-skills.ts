@@ -906,13 +906,24 @@ export async function discoverProjectWorkspaceSkillDirectories(target: ProjectSk
 
 async function readLocalSkillImports(companyId: string, sourcePath: string): Promise<ImportedSkill[]> {
   const resolvedPath = path.resolve(sourcePath);
-  const stat = await fs.stat(resolvedPath).catch(() => null);
-  if (!stat) {
-    throw unprocessable(`Skill source path does not exist: ${sourcePath}`);
+
+  // Attempt to read as a file first. If the path is a directory we get EISDIR;
+  // if it does not exist we get ENOENT. This avoids the TOCTOU window that
+  // would exist between a prior stat() check and the subsequent readFile().
+  let markdownResult: string | null = null;
+  try {
+    markdownResult = await fs.readFile(resolvedPath, "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      throw unprocessable(`Skill source path does not exist: ${sourcePath}`);
+    }
+    if (code !== "EISDIR") throw err;
+    // EISDIR means the path is a directory — fall through to the directory walk below.
   }
 
-  if (stat.isFile()) {
-    const markdown = await fs.readFile(resolvedPath, "utf8");
+  if (markdownResult !== null) {
+    const markdown = markdownResult;
     const parsed = parseFrontmatterMarkdown(markdown);
     const slug = deriveImportedSkillSlug(parsed.frontmatter, path.basename(path.dirname(resolvedPath)));
     const parsedMetadata = isPlainRecord(parsed.frontmatter.metadata) ? parsed.frontmatter.metadata : null;

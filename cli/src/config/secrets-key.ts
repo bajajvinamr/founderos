@@ -30,15 +30,19 @@ export function ensureLocalSecretsKeyFile(
       : config.secrets.localEncrypted.keyFilePath;
   const keyFilePath = resolveRuntimeLikePath(configuredPath, configPath);
 
-  if (fs.existsSync(keyFilePath)) {
-    return { status: "existing", path: keyFilePath };
-  }
-
   fs.mkdirSync(path.dirname(keyFilePath), { recursive: true });
-  fs.writeFileSync(keyFilePath, randomBytes(32).toString("base64"), {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  try {
+    fs.writeFileSync(keyFilePath, randomBytes(32).toString("base64"), {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      return { status: "existing", path: keyFilePath };
+    }
+    throw err;
+  }
   try {
     fs.chmodSync(keyFilePath, 0o600);
   } catch {

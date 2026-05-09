@@ -85,8 +85,19 @@ function formatValidationError(err: unknown): string {
 
 export function readConfig(configPath?: string): FounderOSConfig | null {
   const filePath = resolveConfigPath(configPath);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = parseJson(filePath);
+  let rawContents: string;
+  try {
+    rawContents = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawContents);
+  } catch (err) {
+    throw new Error(`Failed to parse JSON at ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+  }
   const migrated = migrateLegacyConfig(raw);
   const parsed = founderosConfigSchema.safeParse(migrated);
   if (!parsed.success) {
@@ -104,10 +115,13 @@ export function writeConfig(
   fs.mkdirSync(dir, { recursive: true });
 
   // Backup existing config before overwriting
-  if (fs.existsSync(filePath)) {
-    const backupPath = filePath + ".backup";
+  const backupPath = filePath + ".backup";
+  try {
     fs.copyFileSync(filePath, backupPath);
     fs.chmodSync(backupPath, 0o600);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    // No existing config to back up — proceed with fresh write.
   }
 
   fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n", {

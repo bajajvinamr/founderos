@@ -62,13 +62,16 @@ let settingsCache: AdapterSettings | null = null;
 function ensureDirs(): void {
   fs.mkdirSync(ADAPTER_PLUGINS_DIR, { recursive: true });
   const pkgJsonPath = path.join(ADAPTER_PLUGINS_DIR, "package.json");
-  if (!fs.existsSync(pkgJsonPath)) {
+  try {
     fs.writeFileSync(pkgJsonPath, JSON.stringify({
       name: "founderos-adapter-plugins",
       version: "0.0.0",
       private: true,
       description: "Managed directory for FounderOS external adapter plugins. Do not edit manually.",
-    }, null, 2) + "\n");
+    }, null, 2) + "\n", { flag: "wx" });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    // File already exists — nothing to do.
   }
 }
 
