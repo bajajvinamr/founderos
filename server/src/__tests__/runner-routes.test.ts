@@ -864,7 +864,7 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
             },
             {
               eventId: "22222222-2222-2222-2222-222222222222",
-              kind: "claude_message",
+              kind: "model_message",
               ts: new Date().toISOString(),
               payload: { text: "hi", role: "assistant" },
             },
@@ -880,13 +880,76 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       expect(events.find((e) => e.eventType === "stdout_line")?.message).toBe(
         "claude says hello",
       );
-      expect(events.find((e) => e.eventType === "claude_message")?.payload).toMatchObject({
+      expect(events.find((e) => e.eventType === "model_message")?.payload).toMatchObject({
         text: "hi",
         role: "assistant",
       });
 
       const [updated] = await db.select().from(runnerJobs).where(eq(runnerJobs.id, job.id));
       expect(updated.status).toBe("streaming");
+    });
+
+    it("accepts legacy claude_* kinds during S7.1.b.1 cutover window", async () => {
+      // Backwards-compat: in-flight v0.1.x runners still emit the old
+      // Claude-only kinds. The validator MUST keep accepting them until
+      // those runners are aged out (Phase 5+).
+      const company = await makeCompany("Legacy Kinds Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const job = await makeQueuedJob({ companyId: company.id, agentId: agent.id, runId: run.id });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "C".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const claim = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
+      expect(claim.status).toBe(200);
+
+      const res = await request(app)
+        .post(`/api/runner/jobs/${job.id}/events`)
+        .send({
+          events: [
+            {
+              eventId: "33333333-3333-3333-3333-333333333333",
+              kind: "claude_message",
+              ts: new Date().toISOString(),
+              payload: { text: "legacy", role: "assistant" },
+            },
+            {
+              eventId: "44444444-4444-4444-4444-444444444444",
+              kind: "claude_tool_use",
+              ts: new Date().toISOString(),
+              payload: { name: "bash" },
+            },
+            {
+              eventId: "55555555-5555-5555-5555-555555555555",
+              kind: "claude_tool_result",
+              ts: new Date().toISOString(),
+              payload: { content: "ok" },
+            },
+            {
+              eventId: "66666666-6666-6666-6666-666666666666",
+              kind: "claude_result",
+              ts: new Date().toISOString(),
+              payload: { session_id: "sess_legacy", total_cost_usd: 0.001 },
+            },
+          ],
+        });
+      expect(res.status).toBe(204);
+
+      const events = await db
+        .select()
+        .from(heartbeatRunEvents)
+        .where(eq(heartbeatRunEvents.runId, run.id));
+      expect(events).toHaveLength(4);
+      const kinds = events.map((e) => e.eventType).sort();
+      expect(kinds).toEqual([
+        "claude_message",
+        "claude_result",
+        "claude_tool_result",
+        "claude_tool_use",
+      ]);
     });
 
     it("403 when a different token tries to append (claim ownership gate)", async () => {

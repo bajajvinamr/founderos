@@ -79,12 +79,15 @@ export function buildClaudeArgs(args: {
 
 /**
  * Parse one line of claude stream-json into a RunnerEvent. The mapping
- * follows ADR-011 § "Event taxonomy":
- *   - `assistant` / `user` messages → claude_message
- *   - `tool_use` blocks → claude_tool_use
- *   - `tool_result` blocks → claude_tool_result
- *   - `result` (final stats) → claude_result
+ * follows ADR-011 § "Event taxonomy", neutralized in S7.1.b.1:
+ *   - `assistant` / `user` / `system` messages → model_message
+ *   - `tool_use` blocks → tool_call
+ *   - `tool_result` blocks → tool_result
+ *   - `result` (final stats) → run_complete
  *   - anything else → stdout_line (raw)
+ *
+ * The Claude wire-format `type` strings stay Claude-shaped (the CLI emits
+ * Claude-shaped JSON) — only the emitted runner-internal `kind` is neutral.
  */
 export function parseStreamJsonLine(line: string): RunnerEvent | null {
   const trimmed = line.trim();
@@ -118,7 +121,7 @@ export function parseStreamJsonLine(line: string): RunnerEvent | null {
   if (type === "result") {
     return {
       eventId: makeEventId(),
-      kind: "claude_result",
+      kind: "run_complete",
       ts: new Date().toISOString(),
       payload: obj,
     };
@@ -126,7 +129,7 @@ export function parseStreamJsonLine(line: string): RunnerEvent | null {
   if (type === "assistant" || type === "user" || type === "system") {
     return {
       eventId: makeEventId(),
-      kind: "claude_message",
+      kind: "model_message",
       ts: new Date().toISOString(),
       payload: obj,
     };
@@ -134,7 +137,7 @@ export function parseStreamJsonLine(line: string): RunnerEvent | null {
   if (type === "tool_use") {
     return {
       eventId: makeEventId(),
-      kind: "claude_tool_use",
+      kind: "tool_call",
       ts: new Date().toISOString(),
       payload: obj,
     };
@@ -142,7 +145,7 @@ export function parseStreamJsonLine(line: string): RunnerEvent | null {
   if (type === "tool_result") {
     return {
       eventId: makeEventId(),
-      kind: "claude_tool_result",
+      kind: "tool_result",
       ts: new Date().toISOString(),
       payload: obj,
     };
@@ -181,7 +184,7 @@ export async function materializeInstructions(
 
 /**
  * Snapshot of the terminal `result` event. The dispatcher's stdout reader
- * calls this on every claude_result event so the LATEST value wins (matches
+ * calls this on every run_complete event so the LATEST value wins (matches
  * the prior inline behavior at the previous spawn.ts:252-258).
  */
 export interface ClaudeFinalResult {
@@ -191,8 +194,9 @@ export interface ClaudeFinalResult {
 }
 
 /**
- * Pull `session_id` + `total_cost_usd` out of a parsed `claude_result`
- * event payload. Returns null if the payload isn't a usable object.
+ * Pull `session_id` + `total_cost_usd` out of a parsed `run_complete`
+ * event payload (Claude wire-format `result` type). Returns null if the
+ * payload isn't a usable object.
  *
  * Pure — no I/O. Mirrors the field-extraction logic that previously lived
  * inline in `runClaude`'s stdout handler.
