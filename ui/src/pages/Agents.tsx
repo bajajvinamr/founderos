@@ -25,6 +25,7 @@ import { AgentProviderBadge } from "../components/AgentProviderBadge";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { RunnerStatusPill } from "../components/RunnerStatusPill";
 import { RunnerInstallDialog } from "../components/RunnerInstallDialog";
+import { hasHostedRunnerAdapter } from "../lib/runner-adapter-types";
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -208,8 +209,13 @@ export function Agents() {
     return counts;
   }, [agents]);
 
-  const hasByoRunner = useMemo(
-    () => (agents ?? []).some((a) => a.adapterType === "byo_runner"),
+  // Render the runner liveness pill only when at least one agent runs on a
+  // hosted-runner adapter (claude_local, codex_local, gemini_local,
+  // opencode_local, openai_api — see lib/runner-adapter-types.ts). Server-
+  // side adapters (process, http) are excluded because their liveness is
+  // not what the BYO runner pill represents.
+  const hasHostedRunner = useMemo(
+    () => hasHostedRunnerAdapter(agents),
     [agents],
   );
   const [runnerDialogOpen, setRunnerDialogOpen] = useState(false);
@@ -251,7 +257,7 @@ export function Agents() {
               : `${totalCount} ${totalCount === 1 ? "teammate" : "teammates"} on the roster`}
           </h1>
           <div className="flex items-center gap-3">
-            {hasByoRunner && selectedCompanyId && (
+            {hasHostedRunner && selectedCompanyId && (
               <RunnerStatusPill
                 companyId={selectedCompanyId}
                 onClick={() => setRunnerDialogOpen(true)}
