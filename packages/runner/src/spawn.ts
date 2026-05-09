@@ -14,16 +14,34 @@
  * Result extraction: the LAST `claude_result` event (kind `result` in
  * stream-json terms) carries the cost + sessionId. We snapshot it so the
  * caller can read it after the child exits.
+ *
+ * S7.1.a refactor (pure code-motion): Claude-specific helpers
+ * (`buildClaudeArgs`, `parseStreamJsonLine`, `materializeInstructions`,
+ * `extractClaudeFinalResult`) live in `./adapters/claude.ts`. This file
+ * keeps the adapter-agnostic orchestration: process spawn, timeout
+ * escalation (SIGTERM → SIGKILL), stdout/stderr line buffering, drain on
+ * exit, instructions-tempfile cleanup. The dispatcher + handler interface
+ * land in S7.1.b under `/council` review — out of scope for this ticket.
+ * The public surface (`runClaude`, `buildClaudeArgs`, `parseStreamJsonLine`,
+ * `SpawnArgs`, `SpawnResult`) is preserved unchanged.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
-import { writeFile, mkdtemp, rm } from "node:fs/promises";
-import path from "node:path";
-import os from "node:os";
 import { performance } from "node:perf_hooks";
 
 import { makeEventId, type RunnerEvent } from "./api.js";
+import {
+  buildClaudeArgs,
+  extractClaudeFinalResult,
+  materializeInstructions,
+  parseStreamJsonLine,
+} from "./adapters/claude.js";
+
+// Re-export the Claude-specific helpers from their new home so the
+// long-standing public API in `index.ts` and `spawn-pure.test.ts` keeps
+// resolving via `./spawn.js`. Pure code-motion: zero behavior change.
+export { buildClaudeArgs, parseStreamJsonLine } from "./adapters/claude.js";
 
 export interface SpawnArgs {
   binary: string;
@@ -49,138 +67,6 @@ export interface SpawnResult {
   timedOut: boolean;
   /** Captured `result` event from stream-json — null if claude never emitted one. */
   finalResult: { sessionId?: string | null; costUsd?: number | null; raw: Record<string, unknown> } | null;
-}
-
-/**
- * Build the claude CLI argv. Kept pure so it's unit-testable without
- * actually spawning a child.
- */
-export function buildClaudeArgs(args: {
-  sessionId?: string | null;
-  model?: string | null;
-  maxTurns?: number | null;
-  instructionsFilePath?: string | null;
-  addDirs?: string[];
-}): string[] {
-  const argv = ["--print", "-", "--output-format", "stream-json", "--verbose"];
-  if (args.sessionId) {
-    argv.push("--resume", args.sessionId);
-  }
-  if (args.model) {
-    argv.push("--model", args.model);
-  }
-  if (typeof args.maxTurns === "number" && args.maxTurns > 0) {
-    argv.push("--max-turns", String(args.maxTurns));
-  }
-  if (args.instructionsFilePath) {
-    argv.push("--append-system-prompt-file", args.instructionsFilePath);
-  }
-  for (const dir of args.addDirs ?? []) {
-    argv.push("--add-dir", dir);
-  }
-  return argv;
-}
-
-/**
- * Parse one line of claude stream-json into a RunnerEvent. The mapping
- * follows ADR-011 § "Event taxonomy":
- *   - `assistant` / `user` messages → claude_message
- *   - `tool_use` blocks → claude_tool_use
- *   - `tool_result` blocks → claude_tool_result
- *   - `result` (final stats) → claude_result
- *   - anything else → stdout_line (raw)
- */
-export function parseStreamJsonLine(line: string): RunnerEvent | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-
-  // Try strict JSON first.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    return {
-      eventId: makeEventId(),
-      kind: "stdout_line",
-      ts: new Date().toISOString(),
-      payload: trimmed,
-    };
-  }
-
-  if (!parsed || typeof parsed !== "object") {
-    return {
-      eventId: makeEventId(),
-      kind: "stdout_line",
-      ts: new Date().toISOString(),
-      payload: trimmed,
-    };
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  const type = typeof obj.type === "string" ? obj.type : "";
-
-  if (type === "result") {
-    return {
-      eventId: makeEventId(),
-      kind: "claude_result",
-      ts: new Date().toISOString(),
-      payload: obj,
-    };
-  }
-  if (type === "assistant" || type === "user" || type === "system") {
-    return {
-      eventId: makeEventId(),
-      kind: "claude_message",
-      ts: new Date().toISOString(),
-      payload: obj,
-    };
-  }
-  if (type === "tool_use") {
-    return {
-      eventId: makeEventId(),
-      kind: "claude_tool_use",
-      ts: new Date().toISOString(),
-      payload: obj,
-    };
-  }
-  if (type === "tool_result") {
-    return {
-      eventId: makeEventId(),
-      kind: "claude_tool_result",
-      ts: new Date().toISOString(),
-      payload: obj,
-    };
-  }
-  return {
-    eventId: makeEventId(),
-    kind: "stdout_line",
-    ts: new Date().toISOString(),
-    payload: obj,
-  };
-}
-
-/**
- * Materialize the base64 instructions blob to a tempfile so claude can
- * `--append-system-prompt-file` it. Returns the path; caller is responsible
- * for cleanup (we surface the cleanup function to keep this composable).
- */
-export async function materializeInstructions(
-  base64: string,
-): Promise<{ path: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "founderos-runner-"));
-  const filePath = path.join(dir, "instructions.md");
-  const buf = Buffer.from(base64, "base64");
-  await writeFile(filePath, buf);
-  return {
-    path: filePath,
-    cleanup: async () => {
-      try {
-        await rm(dir, { recursive: true, force: true });
-      } catch {
-        /* best-effort */
-      }
-    },
-  };
 }
 
 /**
@@ -249,13 +135,9 @@ export async function runClaude(
       stdoutBuf = stdoutBuf.slice(nl + 1);
       const evt = parseStreamJsonLine(line);
       if (!evt) continue;
-      if (evt.kind === "claude_result" && typeof evt.payload === "object" && evt.payload) {
-        const p = evt.payload as Record<string, unknown>;
-        finalResult = {
-          sessionId: typeof p.session_id === "string" ? p.session_id : null,
-          costUsd: typeof p.total_cost_usd === "number" ? p.total_cost_usd : null,
-          raw: p,
-        };
+      if (evt.kind === "claude_result") {
+        const snap = extractClaudeFinalResult(evt.payload);
+        if (snap) finalResult = snap;
       }
       void hooks.onEvent(evt);
     }
