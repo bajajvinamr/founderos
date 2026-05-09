@@ -32,7 +32,7 @@
  * outcome whether the bootstrap fired or not.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomBytes } from "node:crypto";
 import { parse as parseEnvFileContents } from "dotenv";
@@ -45,9 +45,17 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function readSecretFromEnvFile(filePath: string): string | null {
-  if (!existsSync(filePath)) return null;
+  let content: string;
   try {
-    const parsed = parseEnvFileContents(readFileSync(filePath, "utf-8"));
+    content = readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    // Other errors (EACCES, EISDIR, symlink loops, etc.) → treat as
+    // unreadable so the bootstrap regenerates rather than crashes.
+    return null;
+  }
+  try {
+    const parsed = parseEnvFileContents(content);
     const value = parsed[JWT_SECRET_ENV_KEY];
     return isNonEmptyString(value) ? value.trim() : null;
   } catch {
@@ -70,15 +78,20 @@ function appendOrCreateEnvFile(filePath: string, secret: string): void {
   const dir = dirname(filePath);
   mkdirSync(dir, { recursive: true });
 
-  const existing: Record<string, string> = existsSync(filePath)
-    ? (() => {
-        try {
-          return parseEnvFileContents(readFileSync(filePath, "utf-8"));
-        } catch {
-          return {};
-        }
-      })()
-    : {};
+  const existing: Record<string, string> = (() => {
+    let content: string;
+    try {
+      content = readFileSync(filePath, "utf-8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+      return {}; // unreadable for any reason → start fresh
+    }
+    try {
+      return parseEnvFileContents(content);
+    } catch {
+      return {};
+    }
+  })();
 
   const merged = { ...existing, [JWT_SECRET_ENV_KEY]: secret };
   const lines = [
