@@ -235,6 +235,7 @@ describe("geminiLocalAdapter.run() — S7.B.gemini lifecycle", () => {
     // when the env var is absent — the safe default is in the argv.
     const result = await geminiLocalAdapter.environmentChecks({
       env: {} as NodeJS.ProcessEnv,
+      adapterConfig: {},
     });
     expect(result.ok).toBe(true);
 
@@ -252,6 +253,7 @@ describe("geminiLocalAdapter.run() — S7.B.gemini lifecycle", () => {
     // And when env is set, the adapter still returns ok.
     const result2 = await geminiLocalAdapter.environmentChecks({
       env: { GEMINI_CLI_TRUST_WORKSPACE: "true" } as NodeJS.ProcessEnv,
+      adapterConfig: {},
     });
     expect(result2.ok).toBe(true);
   });

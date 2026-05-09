@@ -415,7 +415,7 @@ describe("AdapterHandler interface — implementability proof (S7.1.b.2)", () =>
   it("environmentChecks returns EnvironmentCheckResult for every adapter", async () => {
     const env = { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true", OPENAI_API_KEY: "sk-test", GOOGLE_API_KEY: "g-test" };
     for (const a of ALL_MOCKS) {
-      const result = await a.environmentChecks({ env });
+      const result = await a.environmentChecks({ env, adapterConfig: {} });
       expect(typeof result.ok).toBe("boolean");
     }
   });
