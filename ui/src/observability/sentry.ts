@@ -38,3 +38,22 @@ export async function captureBrowserError(
     Sentry.captureException(err);
   });
 }
+
+/**
+ * Capture an error and return the Sentry event ID so the UI can surface it
+ * to the user (e.g. ErrorBoundary fallback "Reference: <id>"). Returns null
+ * when Sentry is not initialized or the SDK declines to assign an event ID.
+ */
+export async function captureBrowserErrorWithEventId(
+  err: unknown,
+  context?: Record<string, unknown>,
+): Promise<string | null> {
+  if (!initialized) return null;
+  const Sentry = await import("@sentry/react");
+  let eventId: string | undefined;
+  Sentry.withScope((scope) => {
+    if (context) for (const [k, v] of Object.entries(context)) scope.setExtra(k, v);
+    eventId = Sentry.captureException(err);
+  });
+  return eventId ?? null;
+}
