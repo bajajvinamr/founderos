@@ -43,6 +43,7 @@ import { loadExternalAdapterPackage, getUiParserSource, getOrExtractUiParserSour
 import { logger } from "../middleware/logger.js";
 import { assertBoard } from "./authz.js";
 import { BUILTIN_ADAPTER_TYPES } from "../adapters/builtin-adapter-types.js";
+import { assertResolvedInside } from "../lib/path-guard.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -81,11 +82,19 @@ interface AdapterInfo {
 
 /**
  * Resolve the adapter package directory (same rules as plugin-loader).
+ *
+ * Local-path adapters are intentionally allowed to live anywhere on disk.
+ * npm-installed adapters are anchored under <pluginsDir>/node_modules so a
+ * crafted `packageName` cannot escape the managed tree.
  */
 function resolveAdapterPackageDir(record: AdapterPluginRecord): string {
-  return record.localPath
-    ? path.resolve(record.localPath)
-    : path.resolve(getAdapterPluginsDir(), "node_modules", record.packageName);
+  if (record.localPath) {
+    return path.resolve(record.localPath);
+  }
+  return assertResolvedInside(
+    path.resolve(getAdapterPluginsDir(), "node_modules"),
+    record.packageName,
+  );
 }
 
 /**
@@ -242,7 +251,13 @@ export function adapterRoutes() {
 
         // Read installed version from package.json
         try {
-          const pkgJsonPath = path.join(pluginsDir, "node_modules", canonicalName, "package.json");
+          // Anchor against <pluginsDir>/node_modules — `canonicalName` is
+          // user-supplied (and a scoped name legitimately contains `/`).
+          const installedPkgDir = assertResolvedInside(
+            path.resolve(pluginsDir, "node_modules"),
+            canonicalName,
+          );
+          const pkgJsonPath = path.join(installedPkgDir, "package.json");
           const pkgContent = await import("node:fs/promises");
           const pkgRaw = await pkgContent.readFile(pkgJsonPath, "utf-8");
           const pkg = JSON.parse(pkgRaw);

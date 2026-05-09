@@ -29,6 +29,7 @@ import type {
 import { normalizeAgentUrlKey } from "@founderos/shared";
 import { findActiveServerAdapter } from "../adapters/index.js";
 import { resolveFounderOSInstanceRoot } from "../home-paths.js";
+import { assertResolvedInside } from "../lib/path-guard.js";
 import { notFound, unprocessable } from "../errors.js";
 import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
 import { agentService } from "./agents.js";
@@ -1725,8 +1726,8 @@ export function companySkillService(db: Db) {
   async function createLocalSkill(companyId: string, input: CompanySkillCreateRequest): Promise<CompanySkill> {
     const slug = normalizeSkillSlug(input.slug ?? input.name) ?? "skill";
     const managedRoot = resolveManagedSkillsRoot(companyId);
-    const skillDir = path.resolve(managedRoot, slug);
-    const skillFilePath = path.resolve(skillDir, "SKILL.md");
+    const skillDir = assertResolvedInside(managedRoot, slug);
+    const skillFilePath = assertResolvedInside(skillDir, "SKILL.md");
 
     await fs.mkdir(skillDir, { recursive: true });
 
@@ -2012,8 +2013,8 @@ export function companySkillService(db: Db) {
   ) {
     const packageDir = skill.packageDir ? normalizePortablePath(skill.packageDir) : null;
     if (!packageDir) return null;
-    const catalogRoot = path.resolve(resolveManagedSkillsRoot(companyId), "__catalog__");
-    const skillDir = path.resolve(catalogRoot, buildSkillRuntimeName(skill.key, skill.slug));
+    const catalogRoot = assertResolvedInside(resolveManagedSkillsRoot(companyId), "__catalog__");
+    const skillDir = assertResolvedInside(catalogRoot, buildSkillRuntimeName(skill.key, skill.slug));
     await fs.rm(skillDir, { recursive: true, force: true });
     await fs.mkdir(skillDir, { recursive: true });
 
@@ -2023,7 +2024,7 @@ export function companySkillService(db: Db) {
         : `${packageDir}/${entry.path}`;
       const content = normalizedFiles[sourcePath];
       if (typeof content !== "string") continue;
-      const targetPath = path.resolve(skillDir, entry.path);
+      const targetPath = assertResolvedInside(skillDir, entry.path);
       await fs.mkdir(path.dirname(targetPath), { recursive: true });
       await fs.writeFile(targetPath, content, "utf8");
     }
@@ -2032,15 +2033,15 @@ export function companySkillService(db: Db) {
   }
 
   async function materializeRuntimeSkillFiles(companyId: string, skill: CompanySkill) {
-    const runtimeRoot = path.resolve(resolveManagedSkillsRoot(companyId), "__runtime__");
-    const skillDir = path.resolve(runtimeRoot, buildSkillRuntimeName(skill.key, skill.slug));
+    const runtimeRoot = assertResolvedInside(resolveManagedSkillsRoot(companyId), "__runtime__");
+    const skillDir = assertResolvedInside(runtimeRoot, buildSkillRuntimeName(skill.key, skill.slug));
     await fs.rm(skillDir, { recursive: true, force: true });
     await fs.mkdir(skillDir, { recursive: true });
 
     for (const entry of skill.fileInventory) {
       const detail = await readFile(companyId, skill.id, entry.path).catch(() => null);
       if (!detail) continue;
-      const targetPath = path.resolve(skillDir, entry.path);
+      const targetPath = assertResolvedInside(skillDir, entry.path);
       await fs.mkdir(path.dirname(targetPath), { recursive: true });
       await fs.writeFile(targetPath, detail.content, "utf8");
     }
@@ -2049,8 +2050,8 @@ export function companySkillService(db: Db) {
   }
 
   function resolveRuntimeSkillMaterializedPath(companyId: string, skill: CompanySkill) {
-    const runtimeRoot = path.resolve(resolveManagedSkillsRoot(companyId), "__runtime__");
-    return path.resolve(runtimeRoot, buildSkillRuntimeName(skill.key, skill.slug));
+    const runtimeRoot = assertResolvedInside(resolveManagedSkillsRoot(companyId), "__runtime__");
+    return assertResolvedInside(runtimeRoot, buildSkillRuntimeName(skill.key, skill.slug));
   }
 
   async function listRuntimeSkillEntries(
