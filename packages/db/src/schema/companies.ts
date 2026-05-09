@@ -65,6 +65,14 @@ export const companies = pgTable(
      */
     supportEmail: text("support_email"),
     metrics: jsonb("metrics").$type<CompanyMetrics>().notNull().default({}),
+    /**
+     * `true` for rows inserted by `seed-demo*.ts`. Buyer-trust hazard backstop:
+     * lets ops queries filter / count / purge demo data unambiguously, and
+     * gives the UI / billing / analytics layers a single column to exclude
+     * synthetic rows from real metrics. NEVER mutate this for real customer
+     * rows. Default `false`. See P0 audit finding #5 (2026-05-09).
+     */
+    isDemo: boolean("is_demo").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
