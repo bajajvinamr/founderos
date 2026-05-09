@@ -7,9 +7,9 @@ One-pager for every workflow under `.github/workflows/`. Keep this current when 
 | Wave | Scope | Workflows |
 | --- | --- | --- |
 | 22A | PR checks (this doc) | `ci.yml`, `pr-info.yml` |
-| 22B | Deploy | _(deploy workflows)_ |
-| 22C | Security | _(security scans)_ |
-| 22D | Release | `release-main.yml`, `release-smoke.yml` |
+| 22B | Deploy | `deploy-prod.yml` |
+| 22C | Security | `codeql.yml`, `gitleaks.yml`, `npm-audit.yml` |
+| 22D | Release | `release-smoke.yml` |
 | 22E | Repo meta | CODEOWNERS, issue/PR templates |
 
 Workflows outside 22A are owned by other waves — don't edit them here.
@@ -68,8 +68,9 @@ Workflows outside 22A are owned by other waves — don't edit them here.
 
 ### Other workflows (owned elsewhere)
 
-- `docker.yml`, `e2e-ci.yml`, `e2e-manual.yml`, `e2e-synthetic.yml`, `release-main.yml`, `release-smoke.yml`, `refresh-lockfile.yml` — per their own ownership.
+- `e2e-ci.yml`, `e2e-manual.yml`, `e2e-synthetic.yml`, `release-smoke.yml`, `refresh-lockfile.yml` — per their own ownership.
 - **Removed 2026-04-23 (retro):** `pr.yml` (legacy policy gate, superseded by `ci.yml`) and `release.yml` (targeted nonexistent `master` branch — Paperclip fork residue). `e2e.yml` renamed to `e2e-manual.yml` to disambiguate from `e2e-ci.yml`.
+- **Removed 2026-05-09 (CI hygiene):** `release-main.yml` (push-to-main version-bump rejected by branch protection requiring `ci (all checks)` pre-push — broken 3 weeks; canonical deploy is `deploy-prod.yml`), `docker.yml` (pushed image to GHCR; nothing consumed it — Fly uses its own builder per `fly.toml`), `ossf-scorecard.yml` (low-actionable supply-chain scan, broken by GitHub Actions billing exhaustion).
 
 ## Scripts used by CI
 

@@ -1214,7 +1214,7 @@ Once PR #20 merges and Vercel rebuilds the production hostname:
 
 ## Blockers requiring user action (I cannot do these)
 
-1. **`FLY_API_TOKEN` + `VERCEL_TOKEN` as GitHub repo secrets** — activates the deploy pipeline at `.github/workflows/release-main.yml`. Without them, deploys are manual via `fly deploy` / Vercel CLI.
+1. **`FLY_API_TOKEN` + `VERCEL_TOKEN` as GitHub repo secrets** — activates the deploy pipeline at `.github/workflows/deploy-prod.yml`. Without them, deploys are manual via `fly deploy` / Vercel CLI.
 2. **Branch protection rules on `main`** — doc ready at `docs/ops/branch-protection.md`. Need to apply via GitHub UI: require PR, require checks, dismiss stale reviews.
 3. **`SENTRY_AUTH_TOKEN`** — enables sourcemap upload in release builds. Today errors report but stack traces are minified.
 4. **Stripe live keys** — scaffold returns 501. Not wired because this is pre-revenue; no rush.

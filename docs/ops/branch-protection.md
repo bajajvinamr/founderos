@@ -56,10 +56,10 @@ GitHub → **Settings** → **Branches** → **Add rule** (or edit existing rule
 
 - [x] **Require conversation resolution before merging**
 - [ ] **Require signed commits** (recommended; off by default if your contributors aren't set up for GPG. Skip until contributor count > 1.)
-- [x] **Require linear history** (release automation produces `[skip ci]` auto-commits — linear history keeps these clean. PRs MUST squash or rebase merge.)
-- [ ] Require deployments to succeed (skip — `release-main.yml` runs on push to main AFTER merge, not before)
+- [x] **Require linear history** (PRs MUST squash or rebase merge — keeps `git log --first-parent main` clean.)
+- [ ] Require deployments to succeed (skip — `deploy-prod.yml` runs on push to main AFTER merge, not before)
 - [x] **Do not allow bypassing the above settings** (no admin override path; force-mute the gate via PR comment instead if a true emergency arises)
-- [x] **Restrict who can push to matching branches** — only GitHub Actions (for `release-main.yml`'s `[skip ci]` version-bump commit) + the repo owner.
+- [x] **Restrict who can push to matching branches** — only GitHub Actions + the repo owner.
 - [ ] Allow force pushes — **OFF**
 - [ ] Allow deletions — **OFF**
 
@@ -80,4 +80,4 @@ Option B: temporarily move it from "required" to "optional" via the same Branch 
 
 ## Why linear history
 
-The release automation (`release-main.yml`) creates an auto-commit with `[skip ci]` for CHANGELOG + version bumps. Linear history ensures these land cleanly without merge-commit clutter. Linear history also means every PR squash-merges — no merge commits in `git log --first-parent main`, which is what release notes and `git bisect` consume.
+Linear history means every PR squash-merges — no merge commits in `git log --first-parent main`, which is what release notes and `git bisect` consume.

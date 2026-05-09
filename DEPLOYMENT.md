@@ -44,7 +44,6 @@ All of those are gone now. Don't reintroduce them.
 
 ```text
 push to main
-  └─> release-main.yml      # bumps version, regenerates CHANGELOG
   └─> deploy-prod.yml
         ├── preflight        (typecheck + pnpm test:run)
         ├── deploy-fly       (flyctl deploy --remote-only --build-arg VITE_*)
