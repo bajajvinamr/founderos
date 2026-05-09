@@ -99,11 +99,23 @@ const INVITE_TOKEN_SUFFIX_LENGTH = 8;
 const INVITE_TOKEN_MAX_RETRIES = 5;
 const COMPANY_INVITE_TTL_MS = 10 * 60 * 1000;
 
+function unbiasedRandomChar(alphabet: string): string {
+  const N = alphabet.length;
+  // Reject bytes >= max to remove modulo bias on a 256-byte source.
+  // For N=36, max=252 → ~1.6% rejection rate; expected iterations ≈ 1.016.
+  // Cap at 100 iterations as a safety measure (probability of failure: < 1 in 10^148).
+  const max = 256 - (256 % N);
+  for (let i = 0; i < 100; i += 1) {
+    const buf = randomBytes(1);
+    if (buf[0]! < max) return alphabet[buf[0]! % N]!;
+  }
+  throw new Error("invite-token: rejection sampling failed");
+}
+
 function createInviteToken() {
-  const bytes = randomBytes(INVITE_TOKEN_SUFFIX_LENGTH);
   let suffix = "";
   for (let idx = 0; idx < INVITE_TOKEN_SUFFIX_LENGTH; idx += 1) {
-    suffix += INVITE_TOKEN_ALPHABET[bytes[idx]! % INVITE_TOKEN_ALPHABET.length];
+    suffix += unbiasedRandomChar(INVITE_TOKEN_ALPHABET);
   }
   return `${INVITE_TOKEN_PREFIX}${suffix}`;
 }

@@ -43,92 +43,90 @@ process.exit(1);
 
 describe("gemini_local environment diagnostics", () => {
   it("creates a missing working directory when cwd is absolute", async () => {
-    const cwd = path.join(
-      os.tmpdir(),
-      `founderos-gemini-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      "workspace",
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-gemini-local-cwd-"));
+    const cwd = path.join(root, "workspace");
 
-    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
+    try {
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "gemini_local",
+        config: {
+          command: process.execPath,
+          cwd,
+        },
+      });
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "gemini_local",
-      config: {
-        command: process.execPath,
-        cwd,
-      },
-    });
-
-    expect(result.checks.some((check) => check.code === "gemini_cwd_valid")).toBe(true);
-    expect(result.checks.some((check) => check.level === "error")).toBe(false);
-    const stats = await fs.stat(cwd);
-    expect(stats.isDirectory()).toBe(true);
-    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
+      expect(result.checks.some((check) => check.code === "gemini_cwd_valid")).toBe(true);
+      expect(result.checks.some((check) => check.level === "error")).toBe(false);
+      const stats = await fs.stat(cwd);
+      expect(stats.isDirectory()).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("passes model and yolo flags to the hello probe", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-gemini-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-    const binDir = path.join(root, "bin");
-    const cwd = path.join(root, "workspace");
-    const argsCapturePath = path.join(root, "args.json");
-    await fs.mkdir(binDir, { recursive: true });
-    await writeFakeGeminiCommand(binDir, argsCapturePath);
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-gemini-local-probe-"));
+    try {
+      const binDir = path.join(root, "bin");
+      const cwd = path.join(root, "workspace");
+      const argsCapturePath = path.join(root, "args.json");
+      await fs.mkdir(binDir, { recursive: true });
+      await writeFakeGeminiCommand(binDir, argsCapturePath);
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "gemini_local",
-      config: {
-        command: "gemini",
-        cwd,
-        model: "gemini-2.5-pro",
-        yolo: true,
-        env: {
-          GEMINI_API_KEY: "test-key",
-          FOUNDEROS_TEST_ARGS_PATH: argsCapturePath,
-          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "gemini_local",
+        config: {
+          command: "gemini",
+          cwd,
+          model: "gemini-2.5-pro",
+          yolo: true,
+          env: {
+            GEMINI_API_KEY: "test-key",
+            FOUNDEROS_TEST_ARGS_PATH: argsCapturePath,
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
         },
-      },
-    });
+      });
 
-    expect(result.status).not.toBe("fail");
-    const args = JSON.parse(await fs.readFile(argsCapturePath, "utf8")) as string[];
-    expect(args).toContain("--model");
-    expect(args).toContain("gemini-2.5-pro");
-    expect(args).toContain("--approval-mode");
-    expect(args).toContain("yolo");
-    expect(args).toContain("--prompt");
-    await fs.rm(root, { recursive: true, force: true });
+      expect(result.status).not.toBe("fail");
+      const args = JSON.parse(await fs.readFile(argsCapturePath, "utf8")) as string[];
+      expect(args).toContain("--model");
+      expect(args).toContain("gemini-2.5-pro");
+      expect(args).toContain("--approval-mode");
+      expect(args).toContain("yolo");
+      expect(args).toContain("--prompt");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("classifies quota exhaustion as a quota warning instead of a generic failure", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-gemini-local-quota-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-    const binDir = path.join(root, "bin");
-    const cwd = path.join(root, "workspace");
-    await fs.mkdir(binDir, { recursive: true });
-    await writeQuotaGeminiCommand(binDir);
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-gemini-local-quota-"));
+    try {
+      const binDir = path.join(root, "bin");
+      const cwd = path.join(root, "workspace");
+      await fs.mkdir(binDir, { recursive: true });
+      await writeQuotaGeminiCommand(binDir);
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "gemini_local",
-      config: {
-        command: "gemini",
-        cwd,
-        env: {
-          GEMINI_API_KEY: "test-key",
-          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "gemini_local",
+        config: {
+          command: "gemini",
+          cwd,
+          env: {
+            GEMINI_API_KEY: "test-key",
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
         },
-      },
-    });
+      });
 
-    expect(result.status).toBe("warn");
-    expect(result.checks.some((check) => check.code === "gemini_hello_probe_quota_exhausted")).toBe(true);
-    await fs.rm(root, { recursive: true, force: true });
+      expect(result.status).toBe("warn");
+      expect(result.checks.some((check) => check.code === "gemini_hello_probe_quota_exhausted")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });

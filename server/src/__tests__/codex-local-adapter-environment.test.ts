@@ -14,35 +14,30 @@ describe("codex_local environment diagnostics", () => {
     vi.unstubAllEnvs();
   });
   it("creates a missing working directory when cwd is absolute", async () => {
-    const cwd = path.join(
-      os.tmpdir(),
-      `founderos-codex-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      "workspace",
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-codex-local-cwd-"));
+    const cwd = path.join(root, "workspace");
 
-    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
+    try {
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "codex_local",
+        config: {
+          command: process.execPath,
+          cwd,
+        },
+      });
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "codex_local",
-      config: {
-        command: process.execPath,
-        cwd,
-      },
-    });
-
-    expect(result.checks.some((check) => check.code === "codex_cwd_valid")).toBe(true);
-    expect(result.checks.some((check) => check.level === "error")).toBe(false);
-    const stats = await fs.stat(cwd);
-    expect(stats.isDirectory()).toBe(true);
-    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
+      expect(result.checks.some((check) => check.code === "codex_cwd_valid")).toBe(true);
+      expect(result.checks.some((check) => check.level === "error")).toBe(false);
+      const stats = await fs.stat(cwd);
+      expect(stats.isDirectory()).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("emits codex_native_auth_present when ~/.codex/auth.json exists and OPENAI_API_KEY is unset", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-codex-auth-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-codex-auth-"));
     const codexHome = path.join(root, ".codex");
     const cwd = path.join(root, "workspace");
 
@@ -71,10 +66,7 @@ describe("codex_local environment diagnostics", () => {
   });
 
   it("emits codex_openai_api_key_missing when neither env var nor native auth exists", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-codex-noauth-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-codex-noauth-"));
     const codexHome = path.join(root, ".codex");
     const cwd = path.join(root, "workspace");
 
@@ -100,10 +92,7 @@ describe("codex_local environment diagnostics", () => {
   });
 
   itWindows("runs the hello probe when Codex is available via a Windows .cmd wrapper", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-codex-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-codex-local-probe-"));
     const binDir = path.join(root, "bin");
     const cwd = path.join(root, "workspace");
     const fakeCodex = path.join(binDir, "codex.cmd");
