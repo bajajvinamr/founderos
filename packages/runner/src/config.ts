@@ -17,7 +17,19 @@
  *                                   See docs/runbooks/dispatcher-v2-rollout.md.
  */
 
-const TOKEN_FORMAT = /^fos_[A-Za-z0-9]{32}$/;
+// Hand-rolled to avoid CodeQL js/polynomial-redos on regex-over-untrusted-input.
+function isValidRunnerToken(token: string): boolean {
+  if (token.length !== 36) return false;
+  if (!token.startsWith("fos_")) return false;
+  for (let i = 4; i < 36; i++) {
+    const c = token.charCodeAt(i);
+    const isDigit = c >= 48 && c <= 57;
+    const isUpper = c >= 65 && c <= 90;
+    const isLower = c >= 97 && c <= 122;
+    if (!isDigit && !isUpper && !isLower) return false;
+  }
+  return true;
+}
 
 export interface RunnerConfig {
   serverUrl: string;
@@ -35,11 +47,34 @@ export class RunnerConfigError extends Error {
 }
 
 /**
- * Read config from process.env. Throws RunnerConfigError with a hint when
- * a required var is missing or malformed — caller prints to stderr and exits.
+ * Optional overrides for `loadConfig`. Used by the CLI to thread parsed
+ * `--token` / `--server-url` flags through. When a key is non-empty, it
+ * takes precedence over the matching env var. When omitted or empty,
+ * the env var is consulted.
+ *
+ * v0.1.1 (2026-05-07) — added so Windows PowerShell users don't have
+ * to fight `$env:FOUNDEROS_RUNNER_TOKEN="..."` to start the runner;
+ * `npx @founderos/runner start --token=fos_... --server-url=...`
+ * works inline.
  */
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
-  const serverUrl = (env.FOUNDEROS_RUNNER_URL ?? "").trim();
+export interface RunnerConfigOverrides {
+  serverUrl?: string;
+  token?: string;
+  claudeBin?: string;
+  defaultTimeoutSec?: number;
+  logLevel?: string;
+}
+
+/**
+ * Read config from process.env, with optional flag-based overrides.
+ * Throws RunnerConfigError with a hint when a required var is missing
+ * or malformed — caller prints to stderr and exits.
+ */
+export function loadConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  overrides: RunnerConfigOverrides = {},
+): RunnerConfig {
+  const serverUrl = (overrides.serverUrl ?? env.FOUNDEROS_RUNNER_URL ?? "").trim();
   if (!serverUrl) {
     throw new RunnerConfigError(
       "FOUNDEROS_RUNNER_URL is required. Example: export FOUNDEROS_RUNNER_URL=https://founderos.fly.dev",
@@ -59,16 +94,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     );
   }
 
-  const token = (env.FOUNDEROS_RUNNER_TOKEN ?? "").trim();
-  if (!TOKEN_FORMAT.test(token)) {
+  const token = (overrides.token ?? env.FOUNDEROS_RUNNER_TOKEN ?? "").trim();
+  if (!isValidRunnerToken(token)) {
     throw new RunnerConfigError(
       "FOUNDEROS_RUNNER_TOKEN is required and must match fos_<32 alphanumeric>. Issue one from the FounderOS dashboard.",
     );
   }
 
-  const claudeBin = (env.FOUNDEROS_CLAUDE_BIN ?? "claude").trim();
+  const claudeBin = (overrides.claudeBin ?? env.FOUNDEROS_CLAUDE_BIN ?? "claude").trim();
 
-  const rawTimeout = (env.FOUNDEROS_RUNNER_TIMEOUT_SEC ?? "").trim();
+  const rawTimeout =
+    overrides.defaultTimeoutSec != null
+      ? String(overrides.defaultTimeoutSec)
+      : (env.FOUNDEROS_RUNNER_TIMEOUT_SEC ?? "").trim();
   const defaultTimeoutSec = rawTimeout ? Number(rawTimeout) : 600;
   if (!Number.isFinite(defaultTimeoutSec) || defaultTimeoutSec < 1 || defaultTimeoutSec > 3600) {
     throw new RunnerConfigError(
@@ -76,15 +114,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     );
   }
 
-  const rawLevel = (env.FOUNDEROS_RUNNER_LOG_LEVEL ?? "info").trim().toLowerCase();
+  const rawLevel = (overrides.logLevel ?? env.FOUNDEROS_RUNNER_LOG_LEVEL ?? "info").trim().toLowerCase();
   if (rawLevel !== "debug" && rawLevel !== "info" && rawLevel !== "warn" && rawLevel !== "error") {
     throw new RunnerConfigError(
       `FOUNDEROS_RUNNER_LOG_LEVEL must be debug|info|warn|error; got ${rawLevel}`,
     );
   }
 
-  // Trim trailing slash so route concatenation is predictable.
-  const normalizedUrl = serverUrl.replace(/\/+$/, "");
+  // Trim trailing slashes so route concatenation is predictable.
+  // Hand-rolled to avoid CodeQL js/polynomial-redos on regex-over-untrusted-input —
+  // serverUrl came from env / CLI flag, both of which CodeQL flags as library input.
+  let trimEnd = serverUrl.length;
+  while (trimEnd > 0 && serverUrl.charCodeAt(trimEnd - 1) === 47 /* '/' */) {
+    trimEnd -= 1;
+  }
+  const normalizedUrl = trimEnd === serverUrl.length ? serverUrl : serverUrl.slice(0, trimEnd);
 
   return {
     serverUrl: normalizedUrl,
