@@ -174,12 +174,28 @@ const completeBodySchema = z.object({
  * payload as a `payload` jsonb on heartbeat_run_events so the existing
  * aggregation infra keeps working. `eventId` is runner-supplied (idempotency)
  * but v0 server is best-effort: we don't dedup at write time.
+ *
+ * S7.1.b.1 — neutralized kinds (council R1+R2 finding). The validator
+ * accepts BOTH the new provider-neutral kinds AND the legacy Claude-only
+ * kinds during the cutover window so in-flight v0.1.x runners that still
+ * emit the old names don't 4xx. The `heartbeat_run_events.event_type`
+ * column is unconstrained `text`, so persisted strings flow straight
+ * through — no DB migration is required.
+ *
+ * TODO(Phase 5+) — drop legacy kinds once all adapters emit neutral kinds
+ * and v0.1.x runners are aged out.
  */
 const eventSchema = z.object({
   eventId: z.string().uuid(),
   kind: z.enum([
     "stdout_line",
     "stderr_line",
+    // Provider-neutral kinds (preferred — emitted by S7.1.b.1+ runners).
+    "model_message",
+    "tool_call",
+    "tool_result",
+    "run_complete",
+    // Legacy Claude-only kinds (cutover window only — see TODO above).
     "claude_message",
     "claude_tool_use",
     "claude_tool_result",

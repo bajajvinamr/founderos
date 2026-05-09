@@ -64,24 +64,27 @@ describe("adapters/claude — parseStreamJsonLine", () => {
     expect(parseStreamJsonLine("   \n")).toBeNull();
   });
 
-  it("classifies the canonical Claude stream-json event types", () => {
+  it("classifies Claude stream-json types into provider-neutral kinds", () => {
+    // S7.1.b.1 — wire-format `type` strings stay Claude-shaped; the runner
+    // INTERNAL kind is neutral so future Gemini/Codex/OpenAI/Google adapters
+    // can emit the same vocabulary without lying.
     expect(
       parseStreamJsonLine(JSON.stringify({ type: "assistant", message: {} }))?.kind,
-    ).toBe("claude_message");
+    ).toBe("model_message");
     expect(
       parseStreamJsonLine(JSON.stringify({ type: "user", message: {} }))?.kind,
-    ).toBe("claude_message");
+    ).toBe("model_message");
     expect(
       parseStreamJsonLine(JSON.stringify({ type: "system", message: {} }))?.kind,
-    ).toBe("claude_message");
+    ).toBe("model_message");
     expect(parseStreamJsonLine(JSON.stringify({ type: "tool_use" }))?.kind).toBe(
-      "claude_tool_use",
+      "tool_call",
     );
     expect(parseStreamJsonLine(JSON.stringify({ type: "tool_result" }))?.kind).toBe(
-      "claude_tool_result",
+      "tool_result",
     );
     expect(parseStreamJsonLine(JSON.stringify({ type: "result" }))?.kind).toBe(
-      "claude_result",
+      "run_complete",
     );
   });
 

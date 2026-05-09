@@ -105,13 +105,13 @@ describe("runRunnerLoop", () => {
     ) => {
       await hooks.onEvent({
         eventId: "e1",
-        kind: "claude_message",
+        kind: "model_message",
         ts: new Date().toISOString(),
         payload: { type: "assistant", message: { role: "assistant" } },
       });
       await hooks.onEvent({
         eventId: "e2",
-        kind: "claude_result",
+        kind: "run_complete",
         ts: new Date().toISOString(),
         payload: { type: "result", session_id: "sess_after", total_cost_usd: 0.025 },
       });
