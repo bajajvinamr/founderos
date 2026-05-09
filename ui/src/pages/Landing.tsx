@@ -27,16 +27,19 @@ export function Landing() {
       bodyHeight: body.style.height,
       htmlOverflow: html.style.overflow,
       htmlHeight: html.style.height,
+      title: document.title,
     };
     body.style.overflow = "auto";
     body.style.height = "auto";
     html.style.overflow = "auto";
     html.style.height = "auto";
+    document.title = "FounderOS — Run your company with AI";
     return () => {
       body.style.overflow = prev.bodyOverflow;
       body.style.height = prev.bodyHeight;
       html.style.overflow = prev.htmlOverflow;
       html.style.height = prev.htmlHeight;
+      document.title = prev.title;
     };
   }, []);
 
@@ -250,9 +253,9 @@ function Hero() {
     <section className="relative min-h-[92svh] flex flex-col justify-between pt-28 md:pt-32 pb-12">
       <div className="mx-auto max-w-6xl px-4 md:px-10 w-full flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono caps-wide text-[10px] text-pulse-accent">INDEX 001</span>
+          <span className="font-mono caps-wide text-[10px] text-pulse-accent">EARLY ACCESS</span>
           <span className="font-mono caps text-[11px] text-pulse-muted">
-            FounderOS · The AI Company OS for lean founders · Est 2026
+            18 founders live · Est 2026
           </span>
         </div>
         <div className="font-mono caps text-[11px] text-pulse-muted flex items-center gap-2 flex-wrap md:max-w-[320px] md:text-right">
@@ -280,7 +283,7 @@ function Hero() {
         >
           FounderOS gives you an AI executive team in one workspace — growth,
           content, lifecycle CRM, finance, ops — so you can run a real company
-          without building a real team. Measurable MRR lift in 14 to 30 days.
+          without building a real team. Measurable revenue growth in 14 to 30 days.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-4">
@@ -1002,7 +1005,7 @@ function Pricing() {
               <li>— 5 departments (CoS, Growth, Content, CRM, Finance Lite)</li>
               <li>— 20 workflows</li>
               <li>— 1 workspace, 1 seat</li>
-              <li>— 50k agent actions per month</li>
+              <li>— 50,000 agent tasks per month — a Daily Brief uses ~30, an inbox approval uses ~3</li>
               <li>— BYO provider keys</li>
             </ul>
             <div className="mt-8">
@@ -1087,7 +1090,7 @@ function FaqSection() {
     },
     {
       q: "Can I take my company with me?",
-      a: "Yes. One click exports your whole company — org chart, goals, projects, starter backlog — as a JSON file. Import it anywhere, replay it, clone it, send it to a friend.",
+      a: "Coming soon — we're shipping company export in our next release. If you need this now, email us at hello@founderos.dev and we'll generate it manually.",
     },
     {
       q: "How private is my data?",

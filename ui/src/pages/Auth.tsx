@@ -167,15 +167,15 @@ export function AuthPage() {
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
             {mode === "sign_in"
               ? "Sign in to your FounderOS instance."
-              : "Create your account. You'll pick a company template and plug in your Anthropic key on the next step."}
+              : "Create your account. You'll choose your starting team and connect your AI provider in a quick five-minute setup."}
           </p>
 
           {/* Tab toggle */}
-          <div className="mt-6 inline-flex rounded-md border border-border p-0.5 text-xs">
+          <div className="mt-6 inline-flex rounded-md border border-border p-0.5 text-sm min-h-[40px]">
             <button
               type="button"
               disabled={isBusy}
-              className={`px-3 py-1.5 rounded-[5px] font-medium transition-colors ${
+              className={`px-4 py-2 rounded-[5px] font-medium transition-colors ${
                 mode === "sign_in"
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:text-foreground"
@@ -191,7 +191,7 @@ export function AuthPage() {
             <button
               type="button"
               disabled={isBusy}
-              className={`px-3 py-1.5 rounded-[5px] font-medium transition-colors ${
+              className={`px-4 py-2 rounded-[5px] font-medium transition-colors ${
                 mode === "sign_up"
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:text-foreground"
@@ -377,13 +377,13 @@ export function AuthPage() {
             Live in under five minutes.
           </p>
           <div className="mt-10 grid grid-cols-3 gap-6">
-            <Stat label="Providers" value="3" sub="Claude, Codex, Gemini — CLI or API" />
+            <Stat label="Providers" value="3" sub="Claude, Codex, Gemini — Any AI subscription" />
             <Stat label="Onboarding" value="<5m" sub="Template → providers → launch" />
-            <Stat label="Tenancy" value="Single" sub="One isolated instance per founder" />
+            <Stat label="Your data" value="Private" sub="Nobody else touches your company's data" />
           </div>
         </div>
         <div className="relative text-xs text-muted-foreground space-y-1">
-          <div>BYO provider keys · Your data, your infra</div>
+          <div>Use your own AI accounts · Your data, your servers</div>
           <div className="flex items-center gap-2 text-[11px]">
             <a href="/legal/terms" className="hover:text-foreground underline underline-offset-2 decoration-muted-foreground/40">Terms</a>
             <span className="text-muted-foreground/50">·</span>
