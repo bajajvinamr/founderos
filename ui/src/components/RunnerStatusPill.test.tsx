@@ -10,6 +10,12 @@ import {
   classifyRunnerStatus,
 } from "./RunnerStatusPill";
 import type { RunnerTokenSummary } from "../api/runner";
+import {
+  BYO_RUNNER_HOSTED_ADAPTERS,
+  getAdapterDisplay,
+  hasHostedRunnerAdapter,
+  isHostedRunnerAdapter,
+} from "../lib/runner-adapter-types";
 
 const mockRunnerApi = vi.hoisted(() => ({
   status: vi.fn(),
@@ -175,5 +181,126 @@ describe("<RunnerStatusPill />", () => {
       (button as HTMLButtonElement).click();
     });
     expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S7.B.7 — Hosted-runner adapter gating + display registry
+// ---------------------------------------------------------------------------
+
+describe("BYO_RUNNER_HOSTED_ADAPTERS", () => {
+  it("includes the four hosted-runner adapter types plus openai_api", () => {
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("claude_local")).toBe(true);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("codex_local")).toBe(true);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("gemini_local")).toBe(true);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("opencode_local")).toBe(true);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("openai_api")).toBe(true);
+  });
+
+  it("excludes server-side adapter types (process, http)", () => {
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("process")).toBe(false);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("http")).toBe(false);
+  });
+
+  it("excludes the legacy byo_runner sentinel (reclassified in S7.B.5)", () => {
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("byo_runner")).toBe(false);
+  });
+});
+
+describe("isHostedRunnerAdapter", () => {
+  it.each([
+    ["claude_local", true],
+    ["codex_local", true],
+    ["gemini_local", true],
+    ["opencode_local", true],
+    ["openai_api", true],
+    ["process", false],
+    ["http", false],
+    ["byo_runner", false],
+    ["unknown_type", false],
+    ["", false],
+  ] as const)("isHostedRunnerAdapter(%s) === %s", (adapterType, expected) => {
+    expect(isHostedRunnerAdapter(adapterType)).toBe(expected);
+  });
+
+  it("returns false for null / undefined adapter types", () => {
+    expect(isHostedRunnerAdapter(null)).toBe(false);
+    expect(isHostedRunnerAdapter(undefined)).toBe(false);
+  });
+});
+
+describe("hasHostedRunnerAdapter", () => {
+  it("returns true when at least one agent uses a hosted-runner adapter", () => {
+    const agents = [
+      { adapterType: "process" },
+      { adapterType: "claude_local" },
+    ];
+    expect(hasHostedRunnerAdapter(agents)).toBe(true);
+  });
+
+  it.each(["claude_local", "codex_local", "gemini_local", "opencode_local", "openai_api"])(
+    "returns true for an agent list with only %s",
+    (adapterType) => {
+      expect(hasHostedRunnerAdapter([{ adapterType }])).toBe(true);
+    },
+  );
+
+  it("returns false for an agent list of only process / http", () => {
+    expect(
+      hasHostedRunnerAdapter([
+        { adapterType: "process" },
+        { adapterType: "http" },
+      ]),
+    ).toBe(false);
+  });
+
+  it("returns false for an empty / null / undefined agent list", () => {
+    expect(hasHostedRunnerAdapter([])).toBe(false);
+    expect(hasHostedRunnerAdapter(null)).toBe(false);
+    expect(hasHostedRunnerAdapter(undefined)).toBe(false);
+  });
+
+  it("ignores agents without an adapter type", () => {
+    expect(
+      hasHostedRunnerAdapter([
+        { adapterType: null },
+        { adapterType: undefined },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe("getAdapterDisplay", () => {
+  it("returns display metadata for hosted-runner types with the expected labels", () => {
+    expect(getAdapterDisplay("claude_local")).toMatchObject({
+      label: "Claude Code",
+      shortLabel: "Claude",
+      family: "anthropic",
+    });
+    expect(getAdapterDisplay("codex_local")).toMatchObject({
+      label: "Codex CLI",
+      shortLabel: "Codex",
+      family: "openai",
+    });
+    expect(getAdapterDisplay("gemini_local")).toMatchObject({
+      label: "Gemini CLI",
+      shortLabel: "Gemini",
+      family: "google",
+    });
+    expect(getAdapterDisplay("openai_api")).toMatchObject({
+      label: "OpenAI API",
+      shortLabel: "OpenAI",
+      family: "openai",
+    });
+  });
+
+  it("returns null for server-side, unknown, or missing adapter types", () => {
+    expect(getAdapterDisplay("process")).toBeNull();
+    expect(getAdapterDisplay("http")).toBeNull();
+    expect(getAdapterDisplay("byo_runner")).toBeNull();
+    expect(getAdapterDisplay("unknown_type")).toBeNull();
+    expect(getAdapterDisplay(null)).toBeNull();
+    expect(getAdapterDisplay(undefined)).toBeNull();
+    expect(getAdapterDisplay("")).toBeNull();
   });
 });

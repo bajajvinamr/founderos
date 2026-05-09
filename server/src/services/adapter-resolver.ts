@@ -11,8 +11,10 @@
  */
 
 import type {
+  AgentAdapterType,
   AgentProviderPreference,
   FounderOSAdapterType,
+  OnboardingAdapterChoice,
   ProviderFamily,
 } from "@founderos/shared";
 
@@ -242,4 +244,57 @@ function familyFromAdapter(adapter: FounderOSAdapterType): ProviderFamily {
 
 function executionFromAdapter(adapter: FounderOSAdapterType): "cli" | "api" {
   return adapter.endsWith("_api") ? "api" : "cli";
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// S7.0.2 — Onboarding choice → adapter type mapping
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the founder's onboarding adapter pick into the concrete
+ * `agents.adapter_type` value to write into the DB.
+ *
+ * This is the simple, deterministic counterpart to `resolveAgentAdapter`:
+ * the founder explicitly picked a CLI in the wizard, and this function
+ * just translates the wire-format choice into the row value. It does NOT
+ * consult availability — that's the runner's job at dispatch time
+ * (and the missing-CLI experience surfaces there as a clean error
+ * rather than a silent no-op).
+ *
+ * Used by `onboarding-bootstrap.ts` (S7.2) to reverse the historical
+ * "all choices collapse to byo_runner" behavior.
+ *
+ * Notes:
+ *   - `anthropic_api` collapses to `claude_local` because no
+ *     `claude_api` adapter exists in the codebase. The Anthropic key
+ *     itself is still stored as a company secret upstream of this
+ *     function — adapters that need it (currently only `claude_local`
+ *     when CLI auth is missing) read from there.
+ *   - `skip` defaults to `claude_local` to preserve pre-S7 behavior
+ *     for founders who defer the decision; they can change it later
+ *     in Settings → Providers.
+ *   - `cursor_local` aligns with the rest of the `*_local` family
+ *     post-S7.0.4 rename (was `"cursor"` pre-2026-05-07).
+ */
+export function mapOnboardingChoiceToAdapter(
+  choice: OnboardingAdapterChoice,
+): AgentAdapterType {
+  switch (choice) {
+    case "claude_local":
+    case "anthropic_api":
+    case "skip":
+      return "claude_local";
+    case "codex_local":
+      return "codex_local";
+    case "gemini_local":
+      return "gemini_local";
+    case "opencode_local":
+      return "opencode_local";
+    case "pi_local":
+      return "pi_local";
+    case "cursor_local":
+      return "cursor_local";
+    case "hermes_local":
+      return "hermes_local";
+  }
 }

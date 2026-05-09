@@ -12,6 +12,7 @@ _Single source of truth for which sprint is next. Each session updates `Status` 
 | **S4** | Content Studio + Lifecycle CRM | not_started | 1w | S3 | – | – |
 | **S5** | Finance + scenario modeling | not_started | 1w | S2 (parallel-able with S4) | – | – |
 | **S6** | Ops + approval engine + polish | not_started | 1w | S5 | – | – |
+| **S7** | Multi-CLI Runner (BYO-AI expansion) | planned | 2-3w | S2 (parallel-able with S3+) | 2026-05-07 | – |
 
 **Status values**: `not_started` → `planned` → `in_progress` → `done` → `blocked` (with note)
 
@@ -146,6 +147,42 @@ _Single source of truth for which sprint is next. Each session updates `Status` 
 > 20–50 design partners onboarded. $500–$1,000/mo pricing test. Goal is not margin — it's proof of MRR lift.
 
 **Detailed plan**: `.planning/PHASES/PHASE-S6-ops-polish.md`
+
+---
+
+### Sprint 7 — Multi-CLI Runner (BYO-AI expansion)
+
+**Goal**: Unlock Gemini, Codex, Cursor, OpenCode, Pi, and Hermes as runner backends so design partners aren't locked into Claude Code subscriptions. Today the runner hardcodes `claude` (`packages/runner/src/spawn.ts:runClaude`); this collapses the buyer's addressable market to "people who already have Claude Pro." Multi-CLI is the ICP-expansion lever and the unlock for the India/Gemini-ecosystem and ChatGPT-ecosystem segments.
+
+**What ships**:
+- Adapter dispatcher in `@founderos/runner` — `spawn.ts` becomes adapter-aware, dispatching on `agent.adapter_type` from `runner_jobs` instead of hardcoded `runClaude`
+- Per-CLI spawn handlers for: `gemini_local`, `codex_local`, `cursor_local`, `opencode_local`, `pi_local`, `hermes_local` — each consuming its own stream-json shape, auth model, sandbox flags, and result/cost extraction
+- `packages/adapters/hermes-local/` package created from scratch (the only adapter without a package today; type slot exists in `packages/adapter-utils/src/session-compaction.ts:44`)
+- Restore the user's CLI choice end-to-end: undo the `byo_runner` collapse at `server/src/services/onboarding-bootstrap.ts:307` so `agent.adapter_type` reaches the runner with the user's actual selection
+- Onboarding UI surfaces the 7 CLI choices with friction-honest copy ("Claude Code requires Pro/Max", "Gemini CLI free tier available", etc.)
+- Agent settings allow per-agent CLI swap post-onboarding
+- E2E coverage for Claude + Gemini at minimum; smoke tests for the other 4
+- "Claude only" gate removed from production once at least 2 adapters are e2e-green
+
+**Sub-phases (planner will refine)**:
+- **S7.A — Dispatcher + Gemini** (~1w): the keystone. Deliverable: a design partner with Gemini CLI installed can run agents end-to-end. Unblocks immediate buyer demand.
+- **S7.B — Codex + Cursor + OpenCode + Pi** (~1w, parallelizable 2-at-a-time): wire 4 existing adapter packages. Each ~3 days.
+- **S7.C — Hermes** (~3d): create new package using gemini-local as template, then wire.
+- **S7.D — UI surface + e2e + Claude-only gate removal** (~3d): user-facing finishing.
+
+**Risk hot-spots (per vinamr-invariants)**:
+- **Stream-json shape divergence**: `spawn.ts` is currently hardcoded to claude's stream-json event shape. Each CLI emits different event types — need a per-CLI parser map.
+- **Auth model divergence**: Claude uses `~/.claude` config; Gemini uses `GEMINI_API_KEY` env or workspace trust (and exits 55 in untrusted dirs — see vinamr-invariants); Codex uses sandbox/approval flags that fail arg-parse if you pass `-a` (vinamr-invariants: "Codex Multi-CLI optional params cause arg-parse failure"). Each adapter must pin a stable invocation that won't break on the next CLI release.
+- **session_id / continuation semantics differ** across CLIs — runner persists `sessionId` for resumability today. Need a per-CLI session map.
+- **Cost tracking parity**: Claude emits `cost_usd` in result events; others may not. The "BYO-AI" model means cost lives in user's own subscription anyway, but the analytics dashboard must gracefully handle absent cost.
+- **The onboarding-bootstrap.ts:307 collapse to `byo_runner`**: hardcoded after the original ADR-011 fix; needs careful unwind so we don't reintroduce the "agents can't actually run on hosted Fly" gap that BYO_RUNNER originally solved.
+
+**Council requirement**: Per `~/.claude/rules/vinamr-invariants.md`, this touches the runner runtime, onboarding, schema, server services, and UI — well over the >2-services / >10-files threshold. `/council` is mandatory before execute.
+
+**Success criteria**:
+> A design partner with EITHER Claude Code OR Gemini CLI installed can complete onboarding, run their first agent task end-to-end, and see results in the UI. Phase ships when both flows pass e2e and onboarding UI no longer claims "Claude only" support.
+
+**Detailed plan**: `.planning/PHASES/PHASE-S7-multi-cli-runner.md` (to be created by `/gsd-plan-phase 7`)
 
 ---
 

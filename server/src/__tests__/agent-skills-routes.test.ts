@@ -266,9 +266,9 @@ describe("agent skill routes", () => {
   });
 
   it("keeps runtime materialization for persistent skill adapters", async () => {
-    mockAgentService.getById.mockResolvedValue(makeAgent("cursor"));
+    mockAgentService.getById.mockResolvedValue(makeAgent("cursor_local"));
     mockAdapter.listSkills.mockResolvedValue({
-      adapterType: "cursor",
+      adapterType: "cursor_local",
       supported: true,
       mode: "persistent",
       desiredSkills: ["founderos-ai/founderos/founderos"],
