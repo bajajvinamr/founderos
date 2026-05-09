@@ -69,7 +69,11 @@ const RUNNER_ONLINE_WINDOW_MS = 30_000;
  * dispatches via @founderos/runner." Pair with a `runner_jobs.adapter_type`
  * CHECK migration if the new value is also new to the enum.
  */
-const LAPTOP_RUNNER_ADAPTER_TYPES: ReadonlyArray<string> = [
+// Drizzle's `inArray` overload binds to the column's data type
+// (`AgentAdapterType` here, not `string`) and requires a mutable array,
+// so the allowlist is typed as `string[]` (the runtime values are still
+// the same fixed set — modify only via the literal here).
+const LAPTOP_RUNNER_ADAPTER_TYPES: string[] = [
   "byo_runner",
   "codex_local",
   "cursor_local",
