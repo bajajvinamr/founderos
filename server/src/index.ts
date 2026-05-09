@@ -43,6 +43,7 @@ import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-
 import { maybePersistWorktreeRuntimePorts } from "./worktree-config.js";
 import { initTelemetry, getTelemetryClient } from "./telemetry.js";
 import { validateEnvOrExit } from "./lib/env-validation.js";
+import { ensureAgentJwtSecretAtBoot } from "./boot/jwt-secret-bootstrap.js";
 
 type BetterAuthSessionUser = {
   id: string;
@@ -89,6 +90,35 @@ export async function startServer(): Promise<StartedServer> {
   const sentryUp = await initServerSentry();
   if (sentryUp) logger.info("Sentry initialized");
   initTelemetry({ enabled: config.telemetryEnabled });
+  // Auto-bootstrap FOUNDEROS_AGENT_JWT_SECRET in dev/test so a fresh
+  // checkout doesn't trip 401 on first agent run. In production this is a
+  // no-op (env-validation.ts hard-fails the boot when the secret is missing
+  // under strict mode); the bootstrap module's defensive throw is
+  // belt-and-suspenders for any path that bypasses validateEnvOrExit.
+  // MUST run AFTER loadConfig() (which loads dotenv from ~/.founderos/.env
+  // and CWD/.env) and BEFORE validateEnvOrExit() so prod's hard-fail
+  // signal is preserved when someone explicitly unsets the secret.
+  try {
+    const bootstrap = ensureAgentJwtSecretAtBoot();
+    if (bootstrap.created) {
+      logger.warn(
+        { envFilePath: bootstrap.envFilePath },
+        "[founderos] Auto-generated FOUNDEROS_AGENT_JWT_SECRET in dev. " +
+          "In production, set this explicitly via fly secrets / env.",
+      );
+    } else if (bootstrap.loadedFromFile) {
+      logger.info(
+        { envFilePath: bootstrap.envFilePath },
+        "[founderos] Loaded FOUNDEROS_AGENT_JWT_SECRET from env file at boot",
+      );
+    }
+  } catch (err) {
+    // In production this re-throws and lets the index.ts top-level catch
+    // exit cleanly. In dev (where the throw is impossible), this catch is
+    // dead code — no behavior change.
+    logger.fatal({ err }, "Agent JWT secret bootstrap failed");
+    throw err;
+  }
   // Loud-fail env validation. In production: hard-exit if a REQUIRED gate
   // is missing. In dev/local_trusted: warn + continue. Runs AFTER dotenv
   // merging in loadConfig() so .env files are already loaded.

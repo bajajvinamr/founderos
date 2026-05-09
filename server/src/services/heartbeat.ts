@@ -27,7 +27,7 @@ import { publishLiveEvent } from "./live-events.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, runningProcesses } from "../adapters/index.js";
 import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec, UsageSummary } from "../adapters/index.js";
-import { createLocalAgentJwt } from "../agent-auth-jwt.js";
+import { AgentJwtSecretMissingError, createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
 import { trackAgentFirstHeartbeat } from "@founderos/shared/telemetry";
@@ -154,30 +154,11 @@ import {
   withAgentStartLock,
 } from "./heartbeat-helpers.js";
 
-/**
- * Actionable error message surfaced into the run output, activity log, and
- * live-events feed when FOUNDEROS_AGENT_JWT_SECRET is missing for an adapter
- * that requires local-JWT auth. Founders see this directly instead of a
- * generic 401 from inside the spawned agent's output.
- */
-export const AGENT_JWT_SECRET_MISSING_MESSAGE =
-  "Configuration error: FOUNDEROS_AGENT_JWT_SECRET is not set on the server. " +
-  "The agent cannot authenticate to FounderOS APIs. " +
-  "Run `pnpm founderos onboard` (or set FOUNDEROS_AGENT_JWT_SECRET in your environment) and restart the server. " +
-  "See: ~/.founderos/.env";
-
-/**
- * Marker error thrown when an adapter declares `supportsLocalAgentJwt: true`
- * but the server can't issue a JWT (FOUNDEROS_AGENT_JWT_SECRET unset). The
- * heartbeat run-execution catch handler detects this and sets a dedicated
- * errorCode + actionable error message instead of generic "adapter_failed".
- */
-export class AgentJwtSecretMissingError extends Error {
-  constructor() {
-    super(AGENT_JWT_SECRET_MISSING_MESSAGE);
-    this.name = "AgentJwtSecretMissingError";
-  }
-}
+// AgentJwtSecretMissingError is imported from "../agent-auth-jwt.js" at the
+// top of this file. The canonical definition (with .code =
+// "agent_jwt_secret_missing") lives there since that's where the throw
+// happens — createLocalAgentJwt and verifyLocalAgentJwt both throw it when
+// the signing secret is missing.
 
 export function heartbeatService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
@@ -2400,34 +2381,22 @@ export function heartbeatService(db: Db) {
       };
 
       const adapter = getServerAdapter(agent.adapterType);
-      const authToken = adapter.supportsLocalAgentJwt
+      // P0 silent-degradation fix (2026-05-09): if the adapter requires a
+      // local-agent JWT but the server has no signing secret,
+      // createLocalAgentJwt throws AgentJwtSecretMissingError. The inner-catch
+      // below detects the marker, sets errorCode=agent_jwt_secret_missing,
+      // and surfaces an actionable configuration-error message to the founder
+      // instead of letting the spawned subprocess run without
+      // FOUNDEROS_API_KEY in env (which produced confusing 401s in the
+      // agent's own output for every authenticated API call).
+      //
+      // Type-system note: createLocalAgentJwt returns `string` (not
+      // `string | null`) — the missing-secret path is the only failure mode,
+      // and it's unrepresentable here because the call throws. There is no
+      // `if (!authToken)` branch because there cannot be one.
+      const authToken: string | undefined = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
-        : null;
-      if (adapter.supportsLocalAgentJwt && !authToken) {
-        // P0 silent-degradation fix: when the local-agent JWT secret is
-        // missing/invalid, we previously logged a warn and proceeded with
-        // `authToken = null`. The spawned agent subprocess then ran without
-        // FOUNDEROS_API_KEY and every authenticated API call from the agent
-        // (e.g. /api/agents/me, issue assignment, comment, approval) returned
-        // 401 — surfacing as a generic 401 in the agent's output instead of a
-        // clear "your server is misconfigured" signal.
-        //
-        // Hard-fail at the heartbeat layer: refuse to invoke the adapter,
-        // throw a typed AgentJwtSecretMissingError carrying its own errorCode,
-        // and reuse the existing inner-catch failure pipeline. The catch
-        // handler below detects the marker and sets a dedicated errorCode +
-        // actionable error message instead of generic "adapter_failed".
-        logger.error(
-          {
-            companyId: agent.companyId,
-            agentId: agent.id,
-            runId: run.id,
-            adapterType: agent.adapterType,
-          },
-          "local agent jwt secret missing or invalid; refusing to spawn adapter without injected FOUNDEROS_API_KEY",
-        );
-        throw new AgentJwtSecretMissingError();
-      }
+        : undefined;
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
@@ -2446,7 +2415,7 @@ export function heartbeatService(db: Db) {
             startedAt: meta.startedAt,
           });
         },
-        authToken: authToken ?? undefined,
+        authToken,
       });
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({
@@ -2661,12 +2630,12 @@ export function heartbeatService(db: Db) {
       // Surface the JWT-secret-missing case with an actionable message + a
       // distinct errorCode so the founder sees "configuration error: set
       // FOUNDEROS_AGENT_JWT_SECRET" instead of a generic "adapter failed".
+      // The error itself carries the actionable message (defined on
+      // AgentJwtSecretMissingError in agent-auth-jwt.ts), so we just use
+      // err.message uniformly.
       const isJwtSecretMissing = err instanceof AgentJwtSecretMissingError;
-      const rawMessage = isJwtSecretMissing
-        ? AGENT_JWT_SECRET_MISSING_MESSAGE
-        : err instanceof Error
-          ? err.message
-          : "Unknown adapter failure";
+      const rawMessage =
+        err instanceof Error ? err.message : "Unknown adapter failure";
       const message = redactCurrentUserText(
         rawMessage,
         await getCurrentUserRedactionOptions(),
