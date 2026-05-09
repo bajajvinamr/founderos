@@ -53,6 +53,7 @@ import { Router, type Request } from "express";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Db } from "@founderos/db";
+import { agentClaudeLoginLimiter } from "../middleware/rate-limit.js";
 import { agents as agentsTable, companies, heartbeatRuns, issues as issuesTable } from "@founderos/db";
 import { and, desc, eq, inArray, not, sql } from "drizzle-orm";
 import {
@@ -2283,7 +2284,7 @@ export function agentRoutes(db: Db) {
     res.status(202).json(run);
   });
 
-  router.post("/agents/:id/claude-login", async (req, res) => {
+  router.post("/agents/:id/claude-login", agentClaudeLoginLimiter, async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
     const agent = await svc.getById(id);

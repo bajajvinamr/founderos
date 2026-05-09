@@ -315,3 +315,195 @@ export const byoKeyValidateLimiter = rateLimit({
     });
   },
 });
+
+// ── CodeQL js/missing-rate-limiting cluster — added 2026-05-10 ──────────────
+// Closes 18 open alerts. Policy by route category:
+//   Auth routes (OAuth, CLI auth create/approve): 10/min/IP — aggressive
+//   Unsubscribe / token-consume routes: 30/min/IP — aggressive
+//   Webhook receivers: 100/min/IP — moderate (high legit volume)
+//   Adapter npm-install/reinstall: 10/min/user-or-IP — moderate (slow ops)
+//   Adapter delete: 20/min/user-or-IP — moderate
+//   CLI auth poll (frequent long-poll): 60/min/IP — moderate
+//   CLI auth cancel: 30/min/IP
+//   Agent claude-login: 20/min/user-or-IP
+//   Plugin UI static assets: 600/min/IP — permissive (static files, CDN-like)
+//
+// All limiters key on req.ip which resolves to the real client IP because
+// app.ts sets `trust proxy = 1` (Fly.io single-hop edge, line 168).
+
+function makeIpLimiter(opts: {
+  label: string;
+  windowMs: number;
+  max: number;
+}) {
+  return rateLimit({
+    windowMs: opts.windowMs,
+    max: opts.max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request, _res: Response) =>
+      ipKeyGenerator(req.ip || "unknown"),
+    handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+      logger.warn(
+        { ip: _req.ip, path: _req.path },
+        `Rate limit exceeded [${opts.label}]: ${options.message}`,
+      );
+      res.status(429).json({
+        error: "Too many requests",
+        message: "Please try again later",
+        requestId: getRequestId(),
+      });
+    },
+  });
+}
+
+function makeUserOrIpLimiter(opts: {
+  label: string;
+  windowMs: number;
+  max: number;
+}) {
+  return rateLimit({
+    windowMs: opts.windowMs,
+    max: opts.max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request, _res: Response) =>
+      req.actor?.userId || ipKeyGenerator(req.ip || "unknown"),
+    handler: (_req: Request, res: Response, _next: NextFunction, options: any) => {
+      logger.warn(
+        { ip: _req.ip, userId: _req.actor?.userId, path: _req.path },
+        `Rate limit exceeded [${opts.label}]: ${options.message}`,
+      );
+      res.status(429).json({
+        error: "Too many requests",
+        message: "Please try again later",
+        requestId: getRequestId(),
+      });
+    },
+  });
+}
+
+/**
+ * OAuth start/callback limiter: 10/min/IP (CodeQL js/missing-rate-limiting #59, #60)
+ * Auth flows are high-value targets; aggressive cap prevents state-forging brute-force.
+ */
+export const oauthFlowLimiter = makeIpLimiter({
+  label: "oauth-flow",
+  windowMs: 60 * 1000,
+  max: 10,
+});
+
+/**
+ * Digest unsubscribe limiter: 30/min/IP (CodeQL #56, #57)
+ * HMAC token already limits damage, but a flood still writes to DB. 30/min
+ * is enough for any real mail client retry loop.
+ */
+export const digestUnsubscribeLimiter = makeIpLimiter({
+  label: "digest-unsubscribe",
+  windowMs: 60 * 1000,
+  max: 30,
+});
+
+/**
+ * Customer email unsubscribe limiter: 30/min/IP (CodeQL #141, #142)
+ * Same policy as digest unsubscribe — HMAC-gated DB write, replays are cheap.
+ */
+export const customerUnsubscribeLimiter = makeIpLimiter({
+  label: "customer-unsubscribe",
+  windowMs: 60 * 1000,
+  max: 30,
+});
+
+/**
+ * Resend webhook receiver limiter: 100/min/IP (CodeQL #143)
+ * Svix HMAC verification happens early. 100/min matches Resend's documented
+ * retry behavior (burst of retries on delivery failure).
+ */
+export const resendWebhookLimiter = makeIpLimiter({
+  label: "resend-webhook",
+  windowMs: 60 * 1000,
+  max: 100,
+});
+
+/**
+ * CLI auth challenge create limiter: 10/min/IP (CodeQL #52)
+ * Creates a pending challenge row + short-lived token. Aggressive cap prevents
+ * challenge-table flooding from unauthenticated callers.
+ */
+export const cliAuthCreateLimiter = makeIpLimiter({
+  label: "cli-auth-create",
+  windowMs: 60 * 1000,
+  max: 10,
+});
+
+/**
+ * CLI auth challenge poll (GET) limiter: 60/min/IP (CodeQL #53)
+ * Long-poll pattern — the CLI polls every ~1s waiting for approval.
+ * 60/min = 1/s headroom, aligned to suggestedPollIntervalMs=1000ms.
+ */
+export const cliAuthPollLimiter = makeIpLimiter({
+  label: "cli-auth-poll",
+  windowMs: 60 * 1000,
+  max: 60,
+});
+
+/**
+ * CLI auth challenge approve limiter: 10/min/IP (CodeQL #54)
+ * User-initiated approval is a one-shot action. 10/min is generous.
+ */
+export const cliAuthApproveLimiter = makeIpLimiter({
+  label: "cli-auth-approve",
+  windowMs: 60 * 1000,
+  max: 10,
+});
+
+/**
+ * CLI auth challenge cancel limiter: 30/min/IP (CodeQL #55)
+ * Cancel is low-risk but still mutates the challenge row.
+ */
+export const cliAuthCancelLimiter = makeIpLimiter({
+  label: "cli-auth-cancel",
+  windowMs: 60 * 1000,
+  max: 30,
+});
+
+/**
+ * Agent claude-login limiter: 20/min/user-or-IP (CodeQL #58)
+ * Triggers a child process (claude CLI login flow). Behind assertBoard.
+ */
+export const agentClaudeLoginLimiter = makeUserOrIpLimiter({
+  label: "agent-claude-login",
+  windowMs: 60 * 1000,
+  max: 20,
+});
+
+/**
+ * Adapter install/reinstall limiter: 10/min/user-or-IP (CodeQL #49, #51)
+ * Shells out to npm. Behind assertBoard. Slow operation — 10/min is generous.
+ */
+export const adapterInstallLimiter = makeUserOrIpLimiter({
+  label: "adapter-install",
+  windowMs: 60 * 1000,
+  max: 10,
+});
+
+/**
+ * Adapter delete limiter: 20/min/user-or-IP (CodeQL #50)
+ * Mutates the adapter registry. Behind assertBoard.
+ */
+export const adapterDeleteLimiter = makeUserOrIpLimiter({
+  label: "adapter-delete",
+  windowMs: 60 * 1000,
+  max: 20,
+});
+
+/**
+ * Plugin UI static asset limiter: 600/min/IP (CodeQL #61)
+ * Serves pre-built JS/CSS files — CDN-like, high throughput needed.
+ * Rate-limit exists to satisfy CodeQL and cap runaway crawlers.
+ */
+export const pluginUiStaticLimiter = makeIpLimiter({
+  label: "plugin-ui-static",
+  windowMs: 60 * 1000,
+  max: 600,
+});

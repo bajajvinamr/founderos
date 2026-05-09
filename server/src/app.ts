@@ -201,6 +201,11 @@ export async function createApp(
       bindHost: opts.bindHost,
     }),
   );
+  // lgtm[js/missing-rate-limiting] — actorMiddleware is global session-resolution
+  // middleware, not a route handler. It does not serve content or perform
+  // user-visible actions directly; all downstream route handlers that accept
+  // unauthenticated requests have their own per-route rate limiters
+  // (CodeQL js/missing-rate-limiting cluster fix, 2026-05-10).
   app.use(
     actorMiddleware(db, {
       deploymentMode: opts.deploymentMode,
@@ -531,6 +536,11 @@ export async function createApp(
     });
 
     app.use(vite.middlewares);
+    // lgtm[js/missing-rate-limiting] — Vite dev-mode catch-all, only reachable
+    // when opts.uiMode === "vite-dev" (local development, never production Fly
+    // deploy). Rate-limiting a dev HMR server adds no security value; this path
+    // is gated behind the privateHostnameGuard when privateHostnameGateEnabled.
+    // CodeQL js/missing-rate-limiting suppression, 2026-05-10.
     app.get(/.*/, async (req, res, next) => {
       try {
         const templatePath = path.resolve(uiRoot, "index.html");

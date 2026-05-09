@@ -18,6 +18,7 @@ import { integrationService } from "../services/integrations.js";
 import { syncHubspot } from "../services/hubspot-sync.js";
 import { createSlackClient } from "../services/slack-client.js";
 import { assertCompanyAccess } from "./authz.js";
+import { oauthFlowLimiter } from "../middleware/rate-limit.js";
 import { logger } from "../middleware/logger.js";
 import { integrations } from "@founderos/db";
 import { and, eq } from "drizzle-orm";
@@ -34,7 +35,7 @@ export function oauthRoutes(db: Db) {
    * GET /api/oauth/:kind/start?companyId=...&returnUrl=...
    * Redirects user to the provider's authorization page.
    */
-  router.get("/oauth/:kind/start", (req, res) => {
+  router.get("/oauth/:kind/start", oauthFlowLimiter, (req, res) => {
     const { kind } = req.params as { kind: string };
     const companyId = req.query.companyId as string | undefined;
     const returnUrl = (req.query.returnUrl as string | undefined) ?? "/integrations";
@@ -110,7 +111,7 @@ export function oauthRoutes(db: Db) {
    * GET /api/oauth/:kind/callback?code=...&state=...
    * Exchanges code for token, upserts integration row, redirects back.
    */
-  router.get("/oauth/:kind/callback", async (req, res) => {
+  router.get("/oauth/:kind/callback", oauthFlowLimiter, async (req, res) => {
     const { kind } = req.params as { kind: string };
     const code = req.query.code as string | undefined;
     const state = req.query.state as string | undefined;
