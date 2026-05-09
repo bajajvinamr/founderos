@@ -77,7 +77,7 @@ describe("createPostHogClient", () => {
   });
 
   describe("getEventCounts", () => {
-    it("POSTs to /api/projects/:id/query/ with correct HogQL", async () => {
+    it("POSTs to /api/projects/:id/query/ with parameterized HogQL (no interpolation)", async () => {
       const hogqlResponse = {
         columns: ["event", "cnt"],
         results: [
@@ -97,15 +97,59 @@ describe("createPostHogClient", () => {
       expect(init.method).toBe("POST");
 
       const body = JSON.parse(init.body as string) as {
-        query: { kind: string; query: string };
+        query: { kind: string; query: string; values: Record<string, string> };
       };
       expect(body.query.kind).toBe("HogQLQuery");
-      expect(body.query.query).toContain("$pageview");
-      expect(body.query.query).toContain("signed_up");
+
+      // Event names must NOT be interpolated into the query string — they live in values.
+      expect(body.query.query).not.toContain("$pageview");
+      expect(body.query.query).not.toContain("signed_up");
       expect(body.query.query).toContain("2024-01-01");
+
+      // Param refs {event0}, {event1} appear in the query; actual values are in values map.
+      expect(body.query.query).toContain("{event0}");
+      expect(body.query.query).toContain("{event1}");
+      expect(body.query.values["event0"]).toBe("$pageview");
+      expect(body.query.values["event1"]).toBe("signed_up");
 
       expect(counts["$pageview"]).toBe(1234);
       expect(counts["signed_up"]).toBe(56);
+    });
+
+    it("does not interpolate injection payloads into query string (CodeQL #11)", async () => {
+      // Attacker-controlled event names: single-quote, backslash, semicolon, comment
+      const maliciousEvents = [
+        "legit",
+        "'); DROP TABLE events; --",
+        "\\' OR 1=1 --",
+        "foo’bar",  // unicode right single quotation mark
+      ];
+
+      mockFetch.mockResolvedValueOnce(
+        makeJsonResponse({ columns: ["event", "cnt"], results: [] }),
+      );
+
+      const client = getClient();
+      await client.getEventCounts(42, maliciousEvents, new Date("2024-01-01T00:00:00Z"));
+
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as {
+        query: { kind: string; query: string; values: Record<string, string> };
+      };
+
+      // Query string must only have param refs, never raw event names.
+      for (const ev of maliciousEvents) {
+        expect(body.query.query).not.toContain(ev);
+      }
+      expect(body.query.query).not.toContain("DROP TABLE");
+      expect(body.query.query).not.toContain("OR 1=1");
+
+      // Actual values are in the values map — PostHog handles escaping.
+      expect(body.query.values["event0"]).toBe("legit");
+      expect(body.query.values["event1"]).toBe("'); DROP TABLE events; --");
+      expect(body.query.values["event2"]).toBe("\\' OR 1=1 --");
+      expect(body.query.values["event3"]).toBe("foo’bar");
     });
 
     it("returns 0 for events not present in results", async () => {
