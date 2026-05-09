@@ -48,7 +48,7 @@ import {
   writeFounderOSSkillSyncPreference,
 } from "@founderos/adapter-utils/server-utils";
 import { notFound, unprocessable } from "../errors.js";
-import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
+import { assertSafeGitHubHostname, ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
 import type { StorageService } from "../storage/types.js";
 import { accessService } from "./access.js";
 import { agentService } from "./agents.js";
@@ -221,6 +221,7 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
     }
 
     const parsed = parseGitHubSourceUrl(source.url);
+    await assertSafeGitHubHostname(parsed.hostname);
     let ref = parsed.ref;
     const warnings: string[] = [];
     const companyRelativePath = parsed.companyPath === "COMPANY.md"
