@@ -16,7 +16,12 @@
 app = "founderos"
 primary_region = "lhr"   # London — co-located with Fly Managed Postgres cluster
 kill_signal = "SIGINT"
-kill_timeout = "5s"
+# S8 P0.1 Phase 1A — give in-flight `claude` subprocess jobs a graceful
+# shutdown window. Hosted execution can have a wakeup mid-flight when the
+# rolling deploy SIGINTs; 5s is too short for the adapter to checkpoint
+# session state into /founderos/agents/<id>/state. 30s matches the
+# longest typical claude-code wakeup tick + a safety margin.
+kill_timeout = "30s"
 
 [build]
   dockerfile = "Dockerfile"
@@ -53,6 +58,11 @@ kill_timeout = "5s"
   FOUNDEROS_DEPLOYMENT_EXPOSURE = "public"
   FOUNDEROS_AUTH_PROVIDER = "supabase"
   FOUNDEROS_BYO_RUNNER_ENABLED = "1"
+  # S8 P0.1 Phase 1A — keystone feature flag for the entire server-side
+  # hosted-claude execution path. Default OFF; founder flips post-smoke
+  # via `fly secrets set FOUNDEROS_HOSTED_AGENTS_ENABLED=1`. While "0",
+  # adapter-resolver continues to route to claude_local / byo_runner.
+  FOUNDEROS_HOSTED_AGENTS_ENABLED = "0"
 
 # Persistent volume for /founderos — holds instance config, secrets key,
 # workspace files, agent session state. Survives deploys + restarts.
@@ -65,9 +75,13 @@ kill_timeout = "5s"
   internal_port = 3100
   protocol = "tcp"
   processes = ["app"]
-  auto_stop_machines = "stop"     # Scale to zero when idle (single-tenant friendly)
+  # S8 P0.1 Phase 1A — `suspend` warm-snapshots the VM instead of cold-stopping.
+  # Hosted claude execution requires a fast wakeup path; cold start tax is too
+  # high. PR #140 also lands these two values; this branch matches them
+  # exactly so the auto-merge rebase is conflict-free on these lines.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[services.ports]]
     port = 80
@@ -102,7 +116,13 @@ kill_timeout = "5s"
     protocol = "http"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "1gb"
+  # S8 P0.1 Phase 1A — bumped from shared-cpu-1x/1gb/1cpu to support hosted
+  # `claude` subprocesses. One concurrent agent run holds ~600MB resident
+  # (claude-code CLI + node + agent state); 1gb left no headroom for the
+  # server itself. 2gb + 2 vCPU lets us run 2 concurrent agent jobs while
+  # the API stays responsive. Cost: warm shared-cpu-2x in lhr ≈ $15.55/mo
+  # (~$0.0000086/s × 2592000s + small RAM premium for 2gb vs 1gb).
+  size = "shared-cpu-2x"
+  memory = "2gb"
   cpu_kind = "shared"
-  cpus = 1
+  cpus = 2
