@@ -450,6 +450,10 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
 
       expect(res.status).toBe(201);
       expect(res.body.expiresAt).toBeTruthy();
+      // RunnerInstallDialog reads expiresInDays for the "Token expires in N days"
+      // copy. 90-day default TTL, allow 89-90 to absorb sub-second clock drift.
+      expect(res.body.expiresInDays).toBeGreaterThanOrEqual(89);
+      expect(res.body.expiresInDays).toBeLessThanOrEqual(90);
       const expiresAt = new Date(res.body.expiresAt);
       const expectedMs = Date.now() + 90 * 86_400_000;
       // Allow ±10s drift for test latency between handler clock + assertion clock.
@@ -550,6 +554,9 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       expect(rotated.body.rotatedFromTokenId).toBe(old.body.tokenId);
       expect(rotated.body.label).toBe("rotate-me"); // carried over
       expect(rotated.body.expiresAt).toBeTruthy();
+      // Same UI contract as issue: rotate response must surface expiresInDays.
+      expect(rotated.body.expiresInDays).toBeGreaterThanOrEqual(89);
+      expect(rotated.body.expiresInDays).toBeLessThanOrEqual(90);
 
       // DB chain + revocation invariants.
       const [oldRow] = await db
