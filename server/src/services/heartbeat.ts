@@ -154,6 +154,31 @@ import {
   withAgentStartLock,
 } from "./heartbeat-helpers.js";
 
+/**
+ * Actionable error message surfaced into the run output, activity log, and
+ * live-events feed when FOUNDEROS_AGENT_JWT_SECRET is missing for an adapter
+ * that requires local-JWT auth. Founders see this directly instead of a
+ * generic 401 from inside the spawned agent's output.
+ */
+export const AGENT_JWT_SECRET_MISSING_MESSAGE =
+  "Configuration error: FOUNDEROS_AGENT_JWT_SECRET is not set on the server. " +
+  "The agent cannot authenticate to FounderOS APIs. " +
+  "Run `pnpm founderos onboard` (or set FOUNDEROS_AGENT_JWT_SECRET in your environment) and restart the server. " +
+  "See: ~/.founderos/.env";
+
+/**
+ * Marker error thrown when an adapter declares `supportsLocalAgentJwt: true`
+ * but the server can't issue a JWT (FOUNDEROS_AGENT_JWT_SECRET unset). The
+ * heartbeat run-execution catch handler detects this and sets a dedicated
+ * errorCode + actionable error message instead of generic "adapter_failed".
+ */
+export class AgentJwtSecretMissingError extends Error {
+  constructor() {
+    super(AGENT_JWT_SECRET_MISSING_MESSAGE);
+    this.name = "AgentJwtSecretMissingError";
+  }
+}
+
 export function heartbeatService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
   const getCurrentUserRedactionOptions = async () => ({
@@ -2379,15 +2404,29 @@ export function heartbeatService(db: Db) {
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
         : null;
       if (adapter.supportsLocalAgentJwt && !authToken) {
-        logger.warn(
+        // P0 silent-degradation fix: when the local-agent JWT secret is
+        // missing/invalid, we previously logged a warn and proceeded with
+        // `authToken = null`. The spawned agent subprocess then ran without
+        // FOUNDEROS_API_KEY and every authenticated API call from the agent
+        // (e.g. /api/agents/me, issue assignment, comment, approval) returned
+        // 401 — surfacing as a generic 401 in the agent's output instead of a
+        // clear "your server is misconfigured" signal.
+        //
+        // Hard-fail at the heartbeat layer: refuse to invoke the adapter,
+        // throw a typed AgentJwtSecretMissingError carrying its own errorCode,
+        // and reuse the existing inner-catch failure pipeline. The catch
+        // handler below detects the marker and sets a dedicated errorCode +
+        // actionable error message instead of generic "adapter_failed".
+        logger.error(
           {
             companyId: agent.companyId,
             agentId: agent.id,
             runId: run.id,
             adapterType: agent.adapterType,
           },
-          "local agent jwt secret missing or invalid; running without injected FOUNDEROS_API_KEY",
+          "local agent jwt secret missing or invalid; refusing to spawn adapter without injected FOUNDEROS_API_KEY",
         );
+        throw new AgentJwtSecretMissingError();
       }
       const adapterResult = await adapter.execute({
         runId: run.id,
@@ -2619,8 +2658,17 @@ export function heartbeatService(db: Db) {
       }
       await finalizeAgentStatus(agent.id, outcome);
     } catch (err) {
+      // Surface the JWT-secret-missing case with an actionable message + a
+      // distinct errorCode so the founder sees "configuration error: set
+      // FOUNDEROS_AGENT_JWT_SECRET" instead of a generic "adapter failed".
+      const isJwtSecretMissing = err instanceof AgentJwtSecretMissingError;
+      const rawMessage = isJwtSecretMissing
+        ? AGENT_JWT_SECRET_MISSING_MESSAGE
+        : err instanceof Error
+          ? err.message
+          : "Unknown adapter failure";
       const message = redactCurrentUserText(
-        err instanceof Error ? err.message : "Unknown adapter failure",
+        rawMessage,
         await getCurrentUserRedactionOptions(),
       );
       logger.error({ err, runId }, "heartbeat execution failed");
@@ -2636,7 +2684,7 @@ export function heartbeatService(db: Db) {
 
       const failedRun = await setRunStatus(run.id, "failed", {
         error: message,
-        errorCode: "adapter_failed",
+        errorCode: isJwtSecretMissing ? "agent_jwt_secret_missing" : "adapter_failed",
         finishedAt: new Date(),
         stdoutExcerpt,
         stderrExcerpt,

@@ -24,6 +24,8 @@ beforeEach(() => {
     "SUPABASE_ANON_KEY",
     "EMAIL_UNSUBSCRIBE_SECRET",
     "FOUNDEROS_BYO_RUNNER_ENABLED",
+    "FOUNDEROS_AGENT_JWT_SECRET",
+    "FOUNDEROS_NONCE_SECRET",
   ]) {
     delete process.env[k];
   }
