@@ -600,7 +600,7 @@ export function agentRoutes(db: Db) {
       return ensureGatewayDeviceKey(adapterType, next);
     }
     // OpenCode requires explicit model selection — no default
-    if (adapterType === "cursor" && !asNonEmptyString(next.model)) {
+    if (adapterType === "cursor_local" && !asNonEmptyString(next.model)) {
       next.model = DEFAULT_CURSOR_LOCAL_MODEL;
     }
     return ensureGatewayDeviceKey(adapterType, next);
@@ -733,7 +733,7 @@ export function agentRoutes(db: Db) {
   }
 
   const ADAPTERS_REQUIRING_MATERIALIZED_RUNTIME_SKILLS = new Set([
-    "cursor",
+    "cursor_local",
     "gemini_local",
     "opencode_local",
     "pi_local",

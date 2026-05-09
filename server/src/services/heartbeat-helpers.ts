@@ -50,7 +50,7 @@ export const execFile = promisify(execFileCallback);
 export const SESSIONED_LOCAL_ADAPTERS = new Set([
   "claude_local",
   "codex_local",
-  "cursor",
+  "cursor_local",
   "gemini_local",
   "opencode_local",
   "pi_local",

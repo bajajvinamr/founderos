@@ -118,13 +118,13 @@ const codexLocalAdapter: ServerAdapterModule = {
 };
 
 const cursorLocalAdapter: ServerAdapterModule = {
-  type: "cursor",
+  type: "cursor_local",
   execute: cursorExecute,
   testEnvironment: cursorTestEnvironment,
   listSkills: listCursorSkills,
   syncSkills: syncCursorSkills,
   sessionCodec: cursorSessionCodec,
-  sessionManagement: getAdapterSessionManagement("cursor") ?? undefined,
+  sessionManagement: getAdapterSessionManagement("cursor_local") ?? undefined,
   models: cursorModels,
   listModels: listCursorModels,
   supportsLocalAgentJwt: true,

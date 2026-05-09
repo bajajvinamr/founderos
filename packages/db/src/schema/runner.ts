@@ -20,6 +20,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import type { AgentAdapterType } from "@founderos/shared";
 import {
   check,
   foreignKey,
@@ -171,6 +172,23 @@ export const runnerJobs = pgTable(
      */
     runtimeConfig: text("runtime_config").notNull(), // JSON-encoded; not jsonb to avoid Drizzle inference cost on hot path
 
+    /**
+     * S7.0.1 — Adapter type the runner should dispatch on. Mirrors
+     * `agents.adapter_type` and `AGENT_ADAPTER_TYPES` in
+     * `packages/shared/src/constants.ts`. CHECK constraint enforced at the
+     * DB layer per migration 0105 — adding a new value here MUST come with
+     * a follow-up migration that extends the CHECK list.
+     *
+     * Default `claude_local` preserves existing prod behavior (claude was
+     * the only spawned binary pre-S7). Pre-S7 enqueue path wrote
+     * `byo_runner` — those rows continue to work via legacy-fallback in
+     * the dispatcher.
+     */
+    adapterType: text("adapter_type")
+      .$type<AgentAdapterType>()
+      .notNull()
+      .default("claude_local"),
+
     status: text("status").notNull().default("queued").$type<RunnerJobStatus>(),
 
     // Claim machinery
@@ -206,6 +224,9 @@ export const runnerJobs = pgTable(
     ),
     // Dashboard: per-token job history.
     claimedByIdx: index("runner_jobs_claimed_by_idx").on(table.claimedByTokenId),
+    // S7.0.1 — operational query: "show me queued jobs by adapter type"
+    // (multi-CLI runner pool will need this post-S7).
+    adapterTypeIdx: index("runner_jobs_adapter_type_idx").on(table.adapterType),
     // Reverse lookup: heartbeat_runs → runner_jobs (rare but useful for audit UI).
     heartbeatRunIdx: index("runner_jobs_heartbeat_run_idx").on(table.heartbeatRunId),
     // Same-tenant invariant (composite FK) — migration 0085.

@@ -36,7 +36,7 @@ async function buildCursorSkillSnapshot(config: Record<string, unknown>): Promis
   const skillsHome = resolveCursorSkillsHome(config);
   const installed = await readInstalledSkillTargets(skillsHome);
   return buildPersistentSkillSnapshot({
-    adapterType: "cursor",
+    adapterType: "cursor_local",
     availableEntries,
     desiredSkills,
     installed,

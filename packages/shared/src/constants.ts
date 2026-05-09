@@ -34,6 +34,27 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+/**
+ * Canonical list of agent adapter types.
+ *
+ * Mirror to the CHECK constraint on `runner_jobs.adapter_type` in
+ * migration `0105_runner_jobs_adapter_type.sql`. When adding a new value
+ * here, ALSO add it to that CHECK constraint via a follow-up migration —
+ * per vinamr-invariants the TS union is a compile-time hint, the DB CHECK
+ * is the runtime backstop.
+ *
+ * `byo_runner` is retained as a deprecated value used by pre-S7 prod
+ * agents (where onboarding-bootstrap.ts:307 collapsed all CLI choices
+ * to this single value). New rows after S7.0.1 + S7.2 should write the
+ * actual CLI adapter type. Dispatcher legacy-fallback maps `byo_runner`
+ * to claude for backward compatibility.
+ *
+ * `hermes_local` is registered in
+ * `packages/adapter-utils/src/session-compaction.ts:80-85` and the
+ * UI display registry; the actual runtime is `hermes-paperclip-adapter`
+ * already in `server/package.json`. Per S7.0.3, the policy decision
+ * (keep paperclip vs externalize per AGENTS.md) is open.
+ */
 export const AGENT_ADAPTER_TYPES = [
   "process",
   "http",
@@ -46,10 +67,60 @@ export const AGENT_ADAPTER_TYPES = [
   "gemini_local",
   "opencode_local",
   "pi_local",
-  "cursor",
+  "cursor_local",
   "openclaw_gateway",
+  "hermes_local",
+  "byo_runner",
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number] | (string & {});
+
+/**
+ * Onboarding adapter choices — the values the founder can pick in the
+ * "Plug in your brain" wizard step. Wider than the historical
+ * Claude-only triplet as of S7.0.2 (2026-05-07).
+ *
+ * This list is the SHARED CONTRACT between:
+ *   - ui/src/components/onboarding/onboarding-types.ts (re-exports as `ADAPTER_CHOICES`)
+ *   - server/src/routes/onboarding.ts (Zod `adapterChoiceSchema`)
+ *   - server/src/services/adapter-resolver.ts (`mapOnboardingChoiceToAdapter`)
+ *
+ * The CLI choices (everything except `anthropic_api` and `skip`) map 1:1
+ * to entries in `AGENT_ADAPTER_TYPES`. `anthropic_api` is a sentinel
+ * meaning "use the founder's API key directly" and currently still
+ * collapses to `claude_local` at provisioning time (no Anthropic-API
+ * adapter exists; see onboarding-bootstrap.ts comment block). `skip`
+ * defers configuration entirely.
+ *
+ * IMPORTANT: when adding a new CLI here, also:
+ *   1. Confirm it exists in `AGENT_ADAPTER_TYPES` above + the
+ *      `runner_jobs.adapter_type` CHECK constraint (migration 0105).
+ *   2. Extend `mapOnboardingChoiceToAdapter` in adapter-resolver.ts.
+ *   3. Add a card to the wizard UI step (S7.4 territory).
+ */
+export const ONBOARDING_ADAPTER_CHOICES = [
+  "claude_local",
+  "codex_local",
+  "gemini_local",
+  "opencode_local",
+  "pi_local",
+  "cursor_local",
+  "hermes_local",
+  "anthropic_api",
+  "skip",
+] as const;
+export type OnboardingAdapterChoice = (typeof ONBOARDING_ADAPTER_CHOICES)[number];
+
+/** Subset of OnboardingAdapterChoice that spawn a local CLI binary. */
+export const ONBOARDING_CLI_CHOICES = [
+  "claude_local",
+  "codex_local",
+  "gemini_local",
+  "opencode_local",
+  "pi_local",
+  "cursor_local",
+  "hermes_local",
+] as const;
+export type OnboardingCliChoice = (typeof ONBOARDING_CLI_CHOICES)[number];
 
 export const AGENT_ROLES = [
   "ceo",
