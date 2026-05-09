@@ -78,7 +78,17 @@ function buildInitialDraft(): OnboardingDraft {
     team: "solo",
     cofounderName: "",
     cofounderEmail: "",
-    adapterChoice: "claude_local",
+    // S8 P0.1 Phase 1D — default to "Anthropic API key" because the
+    // canonical hosted FounderOS deployment runs server-side execution
+    // off the founder's pasted key (no laptop CLI required). The
+    // Claude Code CLI tile remains a live option for developers who
+    // already have the CLI installed locally; founders who don't have
+    // a key yet can still pick "Set up later" via Step4Plugin's tile
+    // grid below the chooser. Server-side flag detection
+    // (FOUNDEROS_HOSTED_AGENTS_ENABLED) lives in onboarding-bootstrap;
+    // routing it through to the UI default would require plumbing a
+    // new field through bootstrap-state — intentionally deferred.
+    adapterChoice: "anthropic_api",
     anthropicKey: "",
     integrations: { ...DEFAULT_INTEGRATION_STATE },
     nonCoreDepartments: [...DEFAULT_NON_CORE_DEPARTMENTS],

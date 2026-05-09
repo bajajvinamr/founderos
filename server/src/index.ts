@@ -854,6 +854,17 @@ export async function startServer(): Promise<StartedServer> {
     logger.info("[byo-runner] adapter registered (FOUNDEROS_BYO_RUNNER_ENABLED=1)");
   }
 
+  // Phase S8 P0.1 council R1 condition C6 — orphaned-workdir sweep.
+  // Boot-time + 6h interval cleanup of `/founderos/agents/<companyId>/<runId>/`
+  // dirs older than 24h. Forward-compatible: no-ops if the root doesn't exist
+  // (Phase 1C lands the per-job workdirs separately). Async, does not block boot.
+  {
+    const { scheduleOrphanedWorkdirSweep } = await import(
+      "./services/orphaned-workdir-sweep.js"
+    );
+    scheduleOrphanedWorkdirSweep();
+  }
+
   await new Promise<void>((resolveListen, rejectListen) => {
     const onError = (err: Error) => {
       server.off("error", onError);
