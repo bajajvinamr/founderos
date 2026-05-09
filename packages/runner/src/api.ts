@@ -72,13 +72,33 @@ export interface JobPayload {
   addDirs?: string[];
 }
 
+/**
+ * S7.1.b.1 — provider-neutral runner event kinds. Council R1+R2 finding
+ * (Codex P1 confirmed by Gemini): the prior Claude-specific names hardcoded
+ * Claude semantics into the runner API, server validator, and tests, so
+ * future Gemini/Codex/OpenAI/Google adapters would either lie as Claude
+ * events or lose structured streaming detail.
+ *
+ * Mapping from the legacy Claude-only names:
+ *   claude_message      → model_message    (assistant text from the model)
+ *   claude_tool_use     → tool_call        (model invokes a tool)
+ *   claude_tool_result  → tool_result      (tool returns to model)
+ *   claude_result       → run_complete     (run finishes; cost + session_id)
+ *
+ * The wire format the runner ingests (Claude stream-json, OpenAI SSE, etc.)
+ * stays adapter-shaped — it's the runner's INTERNAL kind that's neutralized.
+ * Adapter-specific fields ride on the existing per-event `payload` envelope.
+ *
+ * TODO(Phase 5+) — drop legacy kinds from the server validator once all
+ * adapters emit neutral kinds and v0.1.x runners are aged out.
+ */
 export type RunnerEventKind =
   | "stdout_line"
   | "stderr_line"
-  | "claude_message"
-  | "claude_tool_use"
-  | "claude_tool_result"
-  | "claude_result";
+  | "model_message"
+  | "tool_call"
+  | "tool_result"
+  | "run_complete";
 
 export interface RunnerEvent {
   eventId: string;

@@ -11,9 +11,10 @@
  *   fail JSON.parse are surfaced as `stdout_line` raw text events (so noisy
  *   stderr output from claude's setup phase is still visible to ops).
  *
- * Result extraction: the LAST `claude_result` event (kind `result` in
- * stream-json terms) carries the cost + sessionId. We snapshot it so the
- * caller can read it after the child exits.
+ * Result extraction: the LAST `run_complete` event (Claude wire-format
+ * `result` type) carries the cost + sessionId. We snapshot it so the
+ * caller can read it after the child exits. Kind name is provider-neutral
+ * as of S7.1.b.1 — same payload shape, agnostic identifier.
  *
  * S7.1.a refactor (pure code-motion): Claude-specific helpers
  * (`buildClaudeArgs`, `parseStreamJsonLine`, `materializeInstructions`,
@@ -135,7 +136,7 @@ export async function runClaude(
       stdoutBuf = stdoutBuf.slice(nl + 1);
       const evt = parseStreamJsonLine(line);
       if (!evt) continue;
-      if (evt.kind === "claude_result") {
+      if (evt.kind === "run_complete") {
         const snap = extractClaudeFinalResult(evt.payload);
         if (snap) finalResult = snap;
       }

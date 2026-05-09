@@ -485,13 +485,28 @@ components:
           description: Runner-generated UUID for idempotency
         kind:
           type: string
-          enum: [stdout_line, stderr_line, claude_message, claude_tool_use, claude_tool_result, claude_result]
+          # S7.1.b.1 — provider-neutral kinds preferred. Legacy claude_* kinds
+          # accepted by the server during the cutover window so in-flight
+          # v0.1.x runners don't 4xx. Drop legacy kinds in Phase 5+.
+          enum:
+            - stdout_line
+            - stderr_line
+            # Provider-neutral (preferred):
+            - model_message    # assistant text from the model
+            - tool_call        # model invokes a tool
+            - tool_result      # tool returns to model
+            - run_complete     # run finishes (cost, session_id)
+            # Legacy Claude-only (cutover window):
+            - claude_message
+            - claude_tool_use
+            - claude_tool_result
+            - claude_result
         ts:
           type: string
           format: date-time
         payload:
           oneOf:
-            - type: object   # claude_message / tool_use / etc — passes through stream-json
+            - type: object   # model_message / tool_call / etc — passes through stream-json
             - type: string   # stdout_line / stderr_line raw text
 
     RunnerJobCompletion:
