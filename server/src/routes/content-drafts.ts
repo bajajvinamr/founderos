@@ -55,6 +55,7 @@ import {
   getAttribution,
   generateAttributionUtm,
 } from "../services/content-attribution.js";
+import { instanceApiKeysService } from "../services/instance-api-keys.js";
 
 type ContentDraftRow = typeof contentDrafts.$inferSelect;
 
@@ -107,10 +108,14 @@ export function contentDraftRoutes(db: Db) {
       const body = req.body as GenerateContent;
       const actor = getActorInfo(req);
 
-      // API key resolution: DB-stored keys are bridged into process.env by
-      // instance-api-keys.ts at boot and on mutation, so ANTHROPIC_API_KEY in
-      // process.env is the authoritative single source for API callers.
-      const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+      // API key resolution: read directly from the encrypted vault on every
+      // call. The previous "bridge into process.env at boot" pattern was
+      // dropped in S8 P0.1 Phase 1B (council R1 C2: per-tenant collision +
+      // write race on the shared global). `getDecrypted` is the authoritative
+      // path; the plaintext flows only through this request scope.
+      const apiKeys = instanceApiKeysService(db);
+      const decrypted = await apiKeys.getDecrypted("anthropic", "api");
+      const apiKey = decrypted?.trim();
       if (!apiKey) {
         res.status(422).json({
           error:
