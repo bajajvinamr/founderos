@@ -1,16 +1,23 @@
 /**
- * Demo reset — wipes the three canonical demo companies (and the optional
- * Little Wins experimental row) by name, then the usual pipeline can re-run
+ * Demo reset — wipes demo companies, then the usual pipeline can re-run
  * seed-demo.ts → seed-demo-depth.ts → seed-demo-narrative.ts.
  *
- * Requires an explicit confirmation flag to avoid accidents:
+ * Targets:
+ *   - Any row with `companies.is_demo = true` (the structural backstop —
+ *     added in migration 0107 for P0 audit finding #5)
+ *   - Plus a few legacy names (pre-is_demo seeds, kept for cleanup of
+ *     existing dev databases that still hold the old portfolio names)
  *
- *   DATABASE_URL=…  SEED_DEMO_RESET_YES=1 \
+ * Requires BOTH env gates to avoid accidents:
+ *
+ *   FOUNDEROS_SEED_DEMO=1 SEED_DEMO_RESET_YES=1 \
+ *   DATABASE_URL=… \
  *     pnpm --filter @founderos/db exec tsx src/seed-demo-reset.ts
  *
- * Or interactively:
+ * Or interactively (still requires FOUNDEROS_SEED_DEMO=1):
  *
- *   DATABASE_URL=…  pnpm --filter @founderos/db exec tsx src/seed-demo-reset.ts
+ *   FOUNDEROS_SEED_DEMO=1 DATABASE_URL=… \
+ *     pnpm --filter @founderos/db exec tsx src/seed-demo-reset.ts
  *   (prompts: Type the company name to confirm)
  *
  * All cascading rows (agents, issues, goals, approvals, integrations, memory,
@@ -25,11 +32,30 @@ import { inArray, sql } from "drizzle-orm";
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
+if (process.env.FOUNDEROS_SEED_DEMO !== "1") {
+  console.error(
+    "[seed-demo-reset] Refusing to run: this script DELETES demo company " +
+      "rows from the configured DATABASE_URL. Set FOUNDEROS_SEED_DEMO=1 to " +
+      "confirm you are pointing at a development/test database, never " +
+      "production. See docs/runbooks/seed-demo.md for safe usage.",
+  );
+  process.exit(1);
+}
+
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
 const db = createDb(url);
 
-const DEMO_COMPANY_NAMES = [
+// Names to wipe in addition to anything matched by is_demo = true. Kept
+// narrow on purpose — only legacy demo names + the Little Wins experimental
+// row. Real customer rows must NEVER appear here; the is_demo column is the
+// structural primary check.
+const LEGACY_DEMO_COMPANY_NAMES = [
+  "Acme Robotics",
+  "Beta Labs",
+  "Demo Corp",
+  // Pre-rename portfolio names (P0 audit #5, 2026-05-09). Kept here so
+  // existing dev databases still hold these rows can be cleanly wiped.
   "agnost.ai",
   "Pred",
   "Gravton Labs",
@@ -41,8 +67,9 @@ const confirmed = process.env.SEED_DEMO_RESET_YES === "1";
 if (!confirmed) {
   const rl = readline.createInterface({ input, output });
   const answer = await rl.question(
-    `\n[seed-demo-reset] About to DELETE the following companies and ALL their data:\n` +
-      `    ${DEMO_COMPANY_NAMES.join(", ")}\n\n` +
+    `\n[seed-demo-reset] About to DELETE all rows where companies.is_demo = true,\n` +
+      `plus any rows whose name matches the legacy demo list:\n` +
+      `    ${LEGACY_DEMO_COMPANY_NAMES.join(", ")}\n\n` +
       `Type "yes delete demo" to continue, anything else to abort: `,
   );
   rl.close();
@@ -53,7 +80,9 @@ if (!confirmed) {
 }
 
 const existing = await db.select().from(companies);
-const toDelete = existing.filter((c) => DEMO_COMPANY_NAMES.includes(c.name));
+const toDelete = existing.filter(
+  (c) => c.isDemo === true || LEGACY_DEMO_COMPANY_NAMES.includes(c.name),
+);
 if (toDelete.length === 0) {
   console.log(
     "[seed-demo-reset] Nothing to delete — none of the demo companies exist.",
