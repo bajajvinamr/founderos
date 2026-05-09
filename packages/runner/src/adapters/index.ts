@@ -23,6 +23,7 @@ import type { RunnerAdapterType } from "../api.js";
 import type { AnyAdapter } from "../handlers/types.js";
 
 import { claudeLocalAdapter } from "./claude.js";
+import { codexLocalAdapter } from "./codex.js";
 import { geminiLocalAdapter } from "./gemini.js";
 
 /**
@@ -34,17 +35,23 @@ import { geminiLocalAdapter } from "./gemini.js";
  *                   `GEMINI_CLI_TRUST_WORKSPACE` (Invariant 1) and
  *                   `MODEL_CAPACITY_EXHAUSTED` (Invariant 2) gotchas
  *                   from `~/.claude/rules/vinamr-invariants.md`).
- *   - S7.C / future — codex_local, cursor_local, openai_api,
- *                     anthropic_api, google_api.
+ *   - S7.B.codex — `codex_local` (mirrors gemini_local; encodes the
+ *                  Codex Multi-CLI optional-param invariant from
+ *                  `~/.claude/rules/vinamr-invariants.md` — the default
+ *                  argv MUST NOT include `--approval-policy` / `--sandbox`
+ *                  or the CLI exits 2 with "unexpected argument '-a'").
+ *   - S7.C / future — cursor_local, openai_api, anthropic_api, google_api.
  *
- * Note: `gemini_local` is dormant under V1 (`FOUNDEROS_DISPATCHER_V2`
- * unset). It goes live when the dispatcher flag flips (separate ticket).
+ * Note: `gemini_local` and `codex_local` are dormant under V1
+ * (`FOUNDEROS_DISPATCHER_V2` unset). They go live when the dispatcher
+ * flag flips (separate ticket).
  *
  * Use `getAdapter(type)` for runtime lookups so the registry doesn't
  * leak to call sites that only need a single handler.
  */
 export const ADAPTER_HANDLERS = {
   claude_local: claudeLocalAdapter,
+  codex_local: codexLocalAdapter,
   gemini_local: geminiLocalAdapter,
 } as const satisfies Partial<Record<RunnerAdapterType, AnyAdapter>>;
 
