@@ -38,6 +38,8 @@ const BOARD_ROUTE_ROOTS = new Set([
   "work",
   "team",
   "library",
+  // audit P0.3 — Company Memory page (/:companyPrefix/memory)
+  "memory",
 ]);
 
 const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "docs", "instance", "landing", "legal"]);

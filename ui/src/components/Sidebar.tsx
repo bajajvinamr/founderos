@@ -10,6 +10,7 @@ import {
   Network,
   Boxes,
   CalendarClock,
+  Brain,
   Settings,
   LogOut,
   ShieldCheck,
@@ -162,6 +163,7 @@ export function Sidebar() {
 
         <SidebarSection label="Company">
           <SidebarNavItem to="/org" label="Org" icon={Network} />
+          <SidebarNavItem to="/memory" label="Memory" icon={Brain} />
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           <SidebarNavItem to="/integrations" label="Integrations" icon={Plug} />
           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
