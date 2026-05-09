@@ -220,14 +220,18 @@ describe("runRunnerLoop dispatcher path selection", () => {
     expect(completedWith).toHaveLength(1);
   });
 
-  it("emits the pre-S7.A.5 fallback warn when v2 is requested without an override spawnFn", async () => {
+  it("does NOT emit the pre-S7.1.c fallback warn — v2 now dispatches via runAdapter", async () => {
+    // S7.1.c (PR linked here) folded the dispatcher into `runOneJob` so the
+    // v2 path is no longer a stub. The startup-time "v2 path requested but
+    // not yet implemented" warn that S7.A.0 emitted is gone — its presence
+    // would have meant the dispatcher swap regressed back to the legacy
+    // fallback.
     vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "true");
 
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    // Same termination shape as the v1 test — 401 bails the loop after the
-    // startup info/warn fires.
+    // Terminate the loop early via 401 so we observe ONLY the startup logs.
     const { api } = stubApi({
       getNext: [{ throw: new ApiError(401, '{"error":"test_terminate"}') }],
       claim: [],
@@ -242,7 +246,7 @@ describe("runRunnerLoop dispatcher path selection", () => {
       logger: consoleLogger("error"),
       maxJobs: 1,
       apiClient: api,
-      // Intentionally omit spawnFn so the production fallback path runs.
+      // Intentionally omit spawnFn — production code path runs.
     });
     process.exitCode = priorExit;
 
@@ -252,6 +256,6 @@ describe("runRunnerLoop dispatcher path selection", () => {
     const warnCalls = warnSpy.mock.calls.map((c) => c.join(" "));
     expect(
       warnCalls.some((m) => m.includes("v2 path requested but not yet implemented")),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
