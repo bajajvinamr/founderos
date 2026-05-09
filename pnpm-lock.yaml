@@ -771,6 +771,9 @@ importers:
       tailwind-merge:
         specifier: ^3.4.1
         version: 3.5.0
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
     devDependencies:
       '@sentry/react':
         specifier: ^8.55.1
