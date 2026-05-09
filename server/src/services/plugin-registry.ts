@@ -34,12 +34,28 @@ import { conflict, notFound } from "../errors.js";
 /**
  * Detect if a Postgres error is a unique-constraint violation on the
  * `plugins_plugin_key_idx` unique index.
+ *
+ * Walks the `.cause` chain because Drizzle 0.44+ wraps every driver error in
+ * `DrizzleQueryError`, which does not carry the `code`/`constraint` fields —
+ * those live on the original `pg` error preserved at `error.cause`.
  */
 function isPluginKeyConflict(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const err = error as { code?: string; constraint?: string; constraint_name?: string };
-  const constraint = err.constraint ?? err.constraint_name;
-  return err.code === "23505" && constraint === "plugins_plugin_key_idx";
+  let current: unknown = error;
+  for (let i = 0; i < 8 && current; i++) {
+    if (typeof current !== "object" || current === null) return false;
+    const err = current as {
+      code?: string;
+      constraint?: string;
+      constraint_name?: string;
+      cause?: unknown;
+    };
+    const constraint = err.constraint ?? err.constraint_name;
+    if (err.code === "23505" && constraint === "plugins_plugin_key_idx") {
+      return true;
+    }
+    current = err.cause;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

@@ -74,9 +74,7 @@
       "fast-xml-builder": ">=1.1.7"
     },
     "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-gpj5-g38j-94v9"
-      ]
+      "ignoreGhsas": []
     }
   },
   "version": "0.10.4"

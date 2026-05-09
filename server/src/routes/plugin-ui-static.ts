@@ -258,11 +258,19 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
     try {
       plugin = await registry.getById(pluginId);
     } catch (error) {
-      const maybeCode =
-        typeof error === "object" && error !== null && "code" in error
-          ? (error as { code?: unknown }).code
-          : undefined;
-      if (maybeCode !== "22P02") {
+      // Drizzle 0.44+ wraps driver errors in DrizzleQueryError; original pg
+      // error (carrying `code`) lives at `error.cause`. Walk a shallow chain.
+      const isInvalidUuid = (() => {
+        let current: unknown = error;
+        for (let i = 0; i < 8 && current; i++) {
+          if (typeof current !== "object" || current === null) return false;
+          const c = current as { code?: unknown; cause?: unknown };
+          if (c.code === "22P02") return true;
+          current = c.cause;
+        }
+        return false;
+      })();
+      if (!isInvalidUuid) {
         throw error;
       }
     }

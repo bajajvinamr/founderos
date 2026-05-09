@@ -790,13 +790,28 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
             executionWorkspaceSettings: input.executionWorkspaceSettings ?? null,
           });
         } catch (error) {
-          const isOpenExecutionConflict =
-            !!error &&
-            typeof error === "object" &&
-            "code" in error &&
-            (error as { code?: string }).code === "23505" &&
-            "constraint" in error &&
-            (error as { constraint?: string }).constraint === "issues_open_routine_execution_uq";
+          // Drizzle 0.44+ wraps driver errors in DrizzleQueryError; the
+          // original pg error with code/constraint is at `error.cause`.
+          // Walk the chain so the unique-conflict path keeps working.
+          const isOpenExecutionConflict = (() => {
+            let current: unknown = error;
+            for (let i = 0; i < 8 && current; i++) {
+              if (typeof current !== "object" || current === null) return false;
+              const c = current as {
+                code?: string;
+                constraint?: string;
+                cause?: unknown;
+              };
+              if (
+                c.code === "23505" &&
+                c.constraint === "issues_open_routine_execution_uq"
+              ) {
+                return true;
+              }
+              current = c.cause;
+            }
+            return false;
+          })();
           if (!isOpenExecutionConflict || input.routine.concurrencyPolicy === "always_enqueue") {
             throw error;
           }
