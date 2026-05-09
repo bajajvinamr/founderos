@@ -37,7 +37,7 @@ Current deploys:
 
 - Work on feature branches off `main`. `dev` is legacy — do not base new work on it.
 - Conventional Commits required (`feat:`, `fix:`, `chore:`, `feat(wave-N):` for big sprints).
-- `main` triggers `release-main.yml` (bumps version, pushes container, deploys).
+- `main` triggers `deploy-prod.yml` (Fly-builder-based deploy; preflight → deploy-fly → smoke → post-deploy auth canary). See `DEPLOYMENT.md`.
 - **Never** commit to or target `master` — it doesn't exist. Any workflow referencing it is dead code.
 
 ## CI gates (required checks)
