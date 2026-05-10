@@ -45,31 +45,58 @@ type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 const TOTAL_STEPS = 8;
 
 /**
- * S7.C.1 — Bridge between the chooser's six-tile registry and the
- * legacy three-value `AdapterChoice` enum. The chooser surfaces
- * Claude Code (subscription) and Anthropic API (api_key) as live
- * tiles; both resolve to the existing adapter slots. Coming-soon
- * tiles never call this path — they're disabled at the tile level.
+ * S7.C.1 (fix: PR provider-routing) — Bridge between the chooser's six-tile
+ * registry and the canonical `OnboardingAdapterChoice` enum.
+ *
+ * Previously only `claude_code` and `anthropic_api` had non-null mappings;
+ * the four remaining live tiles (`gemini_cli`, `google_api`, `codex_cli`,
+ * `openai_api`) returned null, causing the click handler's early-return guard
+ * (`if (nextChoice === null) return;`) to silently swallow the selection.
+ * The draft retained its default `adapterChoice: "anthropic_api"` regardless
+ * of what the founder clicked — confirmed by three independent audits.
+ *
+ * This patch maps every live tile ID to its canonical adapter choice so
+ * `patchDraft` is called on all six tiles. Tile IDs match the `id` field in
+ * `ProviderChooser.PROVIDER_OPTIONS`; canonical choice values are the
+ * `ONBOARDING_ADAPTER_CHOICES` from `@founderos/shared`.
+ *
+ * Note: `google_api` is accepted here (tile is live) but throws a clear
+ * "not yet implemented" error on the server (S7 Phase 4). The founder
+ * sees a proper bootstrap error rather than a silent wrong-provider boot.
  */
-function mapProviderToAdapter(
+/** @internal Exported for unit testing — not part of the public component API. */
+export function mapProviderToAdapter(
   option: ProviderOption,
 ): OnboardingDraft["adapterChoice"] | null {
   if (option.status !== "live") return null;
-  if (option.id === "claude_code") return "claude_local";
-  if (option.id === "anthropic_api") return "anthropic_api";
-  return null;
+  switch (option.id) {
+    case "claude_code":   return "claude_local";
+    case "anthropic_api": return "anthropic_api";
+    case "gemini_cli":    return "gemini_local";
+    case "google_api":    return "google_api";
+    case "codex_cli":     return "codex_local";
+    case "openai_api":    return "openai_api";
+    default:              return null;
+  }
 }
 
-function mapAdapterToProviderId(
+/** @internal Exported for unit testing — not part of the public component API. */
+export function mapAdapterToProviderId(
   choice: OnboardingDraft["adapterChoice"],
   // anthropicKey is unused today but kept in the signature so a future
   // S7.C.3 patch can disambiguate `claude_local`-with-key from
   // `claude_local`-CLI without an API change.
   _anthropicKey: string,
 ): string | null {
-  if (choice === "claude_local") return "claude_code";
-  if (choice === "anthropic_api") return "anthropic_api";
-  return null;
+  switch (choice) {
+    case "claude_local":  return "claude_code";
+    case "anthropic_api": return "anthropic_api";
+    case "gemini_local":  return "gemini_cli";
+    case "google_api":    return "google_api";
+    case "codex_local":   return "codex_cli";
+    case "openai_api":    return "openai_api";
+    default:              return null;
+  }
 }
 
 function buildInitialDraft(): OnboardingDraft {
