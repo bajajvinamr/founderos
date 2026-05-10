@@ -163,6 +163,22 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  packages/adapters/gemini-api:
+    dependencies:
+      '@founderos/adapter-utils':
+        specifier: workspace:*
+        version: link:../../adapter-utils
+      '@google/generative-ai':
+        specifier: ^0.21.0
+        version: 0.21.0
+    devDependencies:
+      '@types/node':
+        specifier: ^24.6.0
+        version: 24.12.2
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   packages/adapters/gemini-local:
     dependencies:
       '@founderos/adapter-utils':
@@ -1946,6 +1962,10 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@google/generative-ai@0.21.0':
+    resolution: {integrity: sha512-7XhUbtnlkSEZK15kN3t+tzIMxsbKm/dSkKBFalj+20NvPKe1kBY7mR2P7vuijEn+f06z5+A8bVGKO0v39cr6Wg==}
+    engines: {node: '>=18.0.0'}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -8512,6 +8532,8 @@ snapshots:
       tabbable: 6.4.0
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@google/generative-ai@0.21.0': {}
 
   '@hono/node-server@1.19.14(hono@4.12.14)':
     dependencies:

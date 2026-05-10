@@ -13,6 +13,7 @@ export default defineConfig({
       "packages/db",
       "packages/adapters/claude-local",
       "packages/adapters/codex-local",
+      "packages/adapters/gemini-api",
       "packages/adapters/opencode-local",
       "packages/runner",
       "server",
