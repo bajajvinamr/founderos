@@ -46,6 +46,24 @@ P2 findings deferred to first cycle as SIGNOFFS items (activation-from-blocked-s
 
 ---
 
+## [CL-004] 2026-05-11T01:08:00Z — Autoloop activated via user-override (P2-1 escape hatch)
+
+**Decision**: Activate autoloop despite cascade not yet settled (4/7 merged; #163 #168 #169 still in flight). 8-hour timer starts at 2026-05-11T01:08:00Z; stop_at = 2026-05-11T09:08:00Z.
+**Source**: user-signoff
+**Reviewers**: user (explicit message "Converge into an 8 hour autonomous loop with all permissions granted")
+**Verdict**: APPROVED
+**Rationale**: PROTOCOL.md v2 §"Activation Trigger" (council P2-1 fix) requires either (a) all cascade PRs merged OR (b) explicit human "abandon stack and activate anyway" sign-off. User provided (b). Three of the four trigger conditions independently hold (COUNCIL.md exists, P0 findings merged into v2, STATE.md transitionable). The cascade's 3 in-flight PRs are tracked separately and will land in parallel with autoloop dispatch — they don't gate the new work because BL-001/BL-004 don't depend on #163/#168/#169.
+
+Permissions posture this run:
+- Tier-1: dispatch + auto-merge after path-based diff validation (fully autonomous)
+- Tier-2: dispatch + open PR without auto-merge; SIGNOFFS for visibility (fully autonomous on dispatch; merge requires user)
+- Tier-3: SIGNOFFS-only; never dispatch (path rules enforce; hard gate)
+
+The path-based diff validator is the safety primitive; human approval at Tier-2 dispatch is downgraded to informational. Tier-3 hard-gate is unchanged.
+**Artifacts**: STATE.md v3 (status=active), eng-queue.md (EQ-001, EQ-002), SIGNOFFS.md (SIG-001 through SIG-004 — Tier-3 items), dispatched agents (2 in parallel)
+
+---
+
 ## [CL-003] 2026-05-11T00:35:00Z — Shadow Council hook false-positive class noted
 
 **Decision**: Three additional shadow-council-hook fires on PROTOCOL.md v2 + SIGNOFFS.md + product-backlog.md (each on Write/Edit). Treated as false positives — these documents DESCRIBE auth/migration/billing as Tier-3 routed surfaces; they do not modify those surfaces.
