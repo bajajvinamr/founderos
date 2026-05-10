@@ -343,10 +343,15 @@ describe("onboarding bootstrap — adapterType is always claude_local", () => {
 });
 
 // ---------------------------------------------------------------------------
-// BYO-107 — flag-on path: every adapterChoice maps to byo_runner
+// QW1 — BYO runner flag: preserves provider choice, marks transport
+//
+// FOUNDEROS_BYO_RUNNER_ENABLED=1 must NOT collapse adapterChoice to
+// "byo_runner". The runner needs the concrete adapter type (codex_local,
+// gemini_local, claude_local, etc.) to dispatch to the right CLI at claim
+// time. Instead, adapter_config gains transport: "local_runner" as the signal.
 // ---------------------------------------------------------------------------
 
-describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_RUNNER_ENABLED=1", () => {
+describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 multi-provider)", () => {
   let savedFlag: string | undefined;
 
   beforeEach(() => {
@@ -361,7 +366,42 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
   });
 
-  it("maps adapterChoice=claude_local → byo_runner", async () => {
+  it("adapterChoice=codex_local + BYO flag → adapter_type=codex_local, NOT byo_runner", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("codex_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "codex_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      // transport: "local_runner" is set so the runner claims the job.
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("adapterChoice=gemini_local + BYO flag → adapter_type=gemini_local, NOT byo_runner", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("gemini_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "gemini_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("adapterChoice=claude_local + BYO flag → adapter_type=claude_local (regression baseline)", async () => {
+    // claude_local is the baseline: it should still be preserved (not
+    // collapsed to byo_runner) and gets transport: "local_runner" too.
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
@@ -371,11 +411,15 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
   });
 
-  it("maps adapterChoice=anthropic_api → byo_runner (key still stored as secret)", async () => {
+  it("adapterChoice=anthropic_api + BYO flag → adapter_type=claude_local (key still stored as secret)", async () => {
+    // anthropic_api collapses to claude_local via mapOnboardingChoiceToAdapter —
+    // the Anthropic key is still stored as a company secret upstream.
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
     mockSecretService.create.mockResolvedValue({ id: "secret-uuid-byo" });
@@ -390,11 +434,14 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      // anthropic_api → claude_local (mapOnboardingChoiceToAdapter) with transport
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
   });
 
-  it("maps adapterChoice=skip → byo_runner", async () => {
+  it("adapterChoice=skip + BYO flag → adapter_type=claude_local (skip defers to claude_local)", async () => {
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
@@ -404,7 +451,26 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("BYO flag OFF → no transport in adapterConfig (flag-off baseline)", async () => {
+    // Restore the BYO flag to OFF for this test only.
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("codex_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "codex_local" });
+      // No transport key when BYO is off — adapterConfig only has env.
+      expect(payload.adapterConfig).not.toHaveProperty("transport");
     }
   });
 });
@@ -646,7 +712,10 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     }
   });
 
-  it("hosted=OFF + BYO=ON → adapter_type=byo_runner (no regression)", async () => {
+  it("hosted=OFF + BYO=ON → adapter_type=claude_local with transport:local_runner (QW1 fix)", async () => {
+    // QW1 multi-provider fix: BYO flag preserves the provider choice instead
+    // of collapsing to byo_runner. anthropic_api → claude_local via
+    // mapOnboardingChoiceToAdapter, and transport: "local_runner" is set.
     process.env.FOUNDEROS_BYO_RUNNER_ENABLED = "1";
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
@@ -658,8 +727,10 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     expect(res.status).toBe(201);
     const calls = mockAgentService.create.mock.calls;
     for (const [, payload] of calls) {
-      // BYO path unchanged from the existing pre-S8 behavior.
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      // BYO path now preserves the provider (claude_local for anthropic_api).
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
   });
 
