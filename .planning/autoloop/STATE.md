@@ -14,18 +14,18 @@
 
 Autoloop activates only when ALL of these hold (no 60-min fallback; cannot activate over stuck stack):
 
-1. All 7 cascade PRs MERGED: #161 ✅ #164 ✅ #167 ✅ #163 ⏳ #165 ⏳ #168 ⏳ #169 ⏳
+1. All 7 cascade PRs MERGED: #161 ✅ #164 ✅ #165 ✅ #167 ✅ #163 ⏳ #168 ⏳ #169 ⏳
 2. `COUNCIL.md` exists in `.planning/autoloop/` ✅ (created 2026-05-11T00:00:00Z)
 3. COUNCIL.md P0 findings merged into PROTOCOL.md ✅ (v2 written 2026-05-11T00:30:00Z; revision history records the merge)
 4. STATE.md transitions to `status: active`, `activated_at = now`, `stop_at = activated_at + 8h`
 
-**Current gate**: condition 1 only. 4 PRs ⏳ rebased and CI running; expected to settle on next 1-2 wake cycles.
+**Current gate**: condition 1 only. 3 PRs ⏳ in-flight (#163, #168 fresh CI after cycle-5 rebase; #169 fresh CI after cycle-6 rebase). Expected to settle on next 1-2 wake cycles.
 
 ## Cycle Bookkeeping
 
-- **cycle**: 0
-- **last_cycle_at**: null
-- **next_wake_at**: 2026-05-11T22:02:00Z (existing cascade wake)
+- **cycle**: 6
+- **last_cycle_at**: 2026-05-11T01:02:00Z
+- **next_wake_at**: 2026-05-11T01:22:00Z
 
 ## Concurrency Tracking (REVISED post-council P1-1)
 
