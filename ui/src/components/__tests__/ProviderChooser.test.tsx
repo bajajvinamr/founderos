@@ -72,17 +72,21 @@ describe("ProviderChooser", () => {
     ]);
   });
 
-  it("registry exposes 2 live + 4 coming-soon options", () => {
+  it("registry exposes 6 live options with no coming-soon entries", () => {
     const live = PROVIDER_OPTIONS.filter((o) => o.status === "live");
     const comingSoon = PROVIDER_OPTIONS.filter(
       (o) => o.status === "coming-soon",
     );
-    expect(live.map((o) => o.id)).toEqual(["claude_code", "anthropic_api"]);
-    expect(comingSoon).toHaveLength(4);
-    // Every coming-soon entry must carry an etaPhase tooltip target.
-    for (const option of comingSoon) {
-      expect(option.etaPhase).toMatch(/^S7\.B\.\d+$/);
-    }
+    expect(live).toHaveLength(6);
+    expect(live.map((o) => o.id)).toEqual([
+      "claude_code",
+      "anthropic_api",
+      "gemini_cli",
+      "google_api",
+      "codex_cli",
+      "openai_api",
+    ]);
+    expect(comingSoon).toHaveLength(0);
   });
 
   it("clicking a live tile fires onSelect with the option", () => {
@@ -102,33 +106,19 @@ describe("ProviderChooser", () => {
     });
   });
 
-  it("clicking a disabled tile is a no-op", () => {
+  it("all tiles are now selectable (no disabled tiles)", () => {
     const handleSelect = vi.fn();
     render({ onSelect: handleSelect });
-    const disabled = container.querySelector(
-      '[data-testid="provider-tile-gemini_cli"]',
-    ) as HTMLButtonElement;
-    expect(disabled).toBeTruthy();
-    expect(disabled.getAttribute("aria-disabled")).toBe("true");
-    act(() => disabled.click());
-    expect(handleSelect).not.toHaveBeenCalled();
-  });
-
-  it("disabled tiles carry aria-disabled='true' and tabIndex=-1", () => {
-    render();
-    const comingSoonIds = PROVIDER_OPTIONS.filter(
-      (o) => o.status === "coming-soon",
-    ).map((o) => o.id);
-    for (const id of comingSoonIds) {
-      const tile = container.querySelector(
-        `[data-testid="provider-tile-${id}"]`,
-      ) as HTMLButtonElement;
-      expect(tile.getAttribute("aria-disabled")).toBe("true");
-      expect(tile.getAttribute("tabindex")).toBe("-1");
+    // All 6 tiles should be selectable — no coming-soon tiles
+    const tiles = container.querySelectorAll(
+      '[data-testid^="provider-tile-"]',
+    ) as NodeListOf<HTMLButtonElement>;
+    for (const tile of tiles) {
+      expect(tile.getAttribute("aria-disabled")).toBeNull();
     }
   });
 
-  it("live tiles are tab-reachable (tabIndex=0)", () => {
+  it("all live tiles are tab-reachable (tabIndex=0 or absent)", () => {
     render();
     const liveIds = PROVIDER_OPTIONS.filter((o) => o.status === "live").map(
       (o) => o.id,
@@ -137,16 +127,14 @@ describe("ProviderChooser", () => {
       const tile = container.querySelector(
         `[data-testid="provider-tile-${id}"]`,
       ) as HTMLButtonElement;
-      expect(tile.getAttribute("aria-disabled")).toBeNull();
-      // tabIndex={0} is the React default for a button — node attribute
-      // may be absent OR explicitly "0", both accept tab focus.
       const tabIndex = tile.getAttribute("tabindex");
       expect(tabIndex === null || tabIndex === "0").toBe(true);
     }
   });
 
-  it("tab nav order skips disabled tiles", () => {
-    // Sequential tab traversal landing only on tabIndex>=0 elements.
+
+  it("all 6 tiles are tab-reachable (no disabled skips)", () => {
+    // Sequential tab traversal now lands on all tiles.
     render();
     const tiles = Array.from(
       container.querySelectorAll('[data-testid^="provider-tile-"]'),
@@ -154,11 +142,7 @@ describe("ProviderChooser", () => {
     const tabReachable = tiles.filter(
       (el) => el.getAttribute("tabindex") !== "-1",
     );
-    expect(tabReachable).toHaveLength(2);
-    const reachableIds = tabReachable.map((el) =>
-      el.getAttribute("data-testid")?.replace("provider-tile-", ""),
-    );
-    expect(reachableIds).toEqual(["claude_code", "anthropic_api"]);
+    expect(tabReachable).toHaveLength(6);
   });
 
   it("renders the selection ring on the selected tile only", () => {
@@ -173,32 +157,27 @@ describe("ProviderChooser", () => {
     expect(unselected.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("disabled tiles surface the etaPhase in the title tooltip", () => {
+  it("all tiles now have no disabled tooltips", () => {
+    // All tiles are live, so no coming-soon tooltips.
     render();
-    for (const option of PROVIDER_OPTIONS) {
-      if (option.status !== "coming-soon") continue;
-      const tile = container.querySelector(
-        `[data-testid="provider-tile-${option.id}"]`,
-      ) as HTMLButtonElement;
-      expect(tile.getAttribute("title")).toContain(option.etaPhase ?? "");
-      expect(tile.getAttribute("title")).toContain(option.label);
+    const tiles = container.querySelectorAll(
+      '[data-testid^="provider-tile-"]',
+    ) as NodeListOf<HTMLButtonElement>;
+    for (const tile of tiles) {
+      // Live tiles have no title attribute (no tooltip needed)
+      expect(tile.getAttribute("title")).toBeNull();
     }
   });
 
-  it("coming-soon tiles show the badge with the eta-phase copy", () => {
+  it("no coming-soon badges are rendered (all tiles are live)", () => {
     render();
     const badges = container.querySelectorAll(
       '[data-testid="provider-badge-coming-soon"]',
     );
-    expect(badges).toHaveLength(4);
-    const labels = Array.from(badges).map((el) => el.textContent ?? "");
-    // Each badge should mention "Coming Soon" and the S7.B.x ETA.
-    for (const label of labels) {
-      expect(label).toMatch(/Coming Soon\s*·\s*S7\.B\.\d+/);
-    }
+    expect(badges).toHaveLength(0);
   });
 
-  it("subscription vs api-key badges render only on live tiles", () => {
+  it("subscription vs api-key badges render on all 6 live tiles", () => {
     render();
     const subscriptionBadges = container.querySelectorAll(
       '[data-testid="provider-badge-subscription"]',
@@ -206,9 +185,9 @@ describe("ProviderChooser", () => {
     const apiKeyBadges = container.querySelectorAll(
       '[data-testid="provider-badge-api-key"]',
     );
-    // Only the two live tiles carry these badges.
-    expect(subscriptionBadges).toHaveLength(1);
-    expect(apiKeyBadges).toHaveLength(1);
+    // All 6 live tiles now carry auth-mode badges: 3 subscription + 3 api-key.
+    expect(subscriptionBadges).toHaveLength(3);
+    expect(apiKeyBadges).toHaveLength(3);
   });
 
   // Audit P0.4 — every tile (live AND coming-soon) must surface a
@@ -238,22 +217,20 @@ describe("ProviderChooser", () => {
     }
   });
 
-  // Audit P0.4 — clicking a coming-soon tile MUST NOT change the
-  // selected adapter state. ProviderChooser is the upstream gate; this
-  // codifies the "submit-button cannot route to a not-wired adapter"
-  // guarantee at the chooser level.
-  it("coming-soon tiles never invoke onSelect (selection gate)", () => {
+  // Audit P0.4 — clicking any live tile invokes onSelect.
+  // Phase D unblocked all 6 tiles, so this test now verifies that all
+  // tiles are selectable (no coming-soon gating).
+  it("all 6 live tiles invoke onSelect when clicked", () => {
     const handleSelect = vi.fn();
     render({ onSelect: handleSelect });
-    const comingSoonOptions = PROVIDER_OPTIONS.filter(
-      (o) => o.status === "coming-soon",
-    );
-    for (const option of comingSoonOptions) {
+    const allOptions = PROVIDER_OPTIONS.filter((o) => o.status === "live");
+    expect(allOptions).toHaveLength(6);
+    for (const option of allOptions) {
       const tile = container.querySelector(
         `[data-testid="provider-tile-${option.id}"]`,
       ) as HTMLButtonElement;
       act(() => tile.click());
     }
-    expect(handleSelect).not.toHaveBeenCalled();
+    expect(handleSelect).toHaveBeenCalledTimes(6);
   });
 });
