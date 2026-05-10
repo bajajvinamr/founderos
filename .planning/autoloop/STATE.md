@@ -10,29 +10,40 @@
 - **stopped_at**: null
 - **halt_reason**: null
 
-## Trigger
+## Activation Trigger (REVISED — post-council P2-1)
 
-Autoloop activates only when:
-- All 7 cascade PRs are MERGED (#161 ✅ #164 ✅ #163 #165 #167 #168 #169)
-- Council review of PROTOCOL.md has produced COUNCIL.md (background agent in flight)
-- COUNCIL.md P0 findings have been merged into PROTOCOL.md (if any)
+Autoloop activates only when ALL of these hold (no 60-min fallback; cannot activate over stuck stack):
 
-Until all three trigger conditions are met, the existing cascade wake-loop runs unchanged.
+1. All 7 cascade PRs MERGED: #161 ✅ #164 ✅ #167 ✅ #163 ⏳ #165 ⏳ #168 ⏳ #169 ⏳
+2. `COUNCIL.md` exists in `.planning/autoloop/` ✅ (created 2026-05-11T00:00:00Z)
+3. COUNCIL.md P0 findings merged into PROTOCOL.md ✅ (v2 written 2026-05-11T00:30:00Z; revision history records the merge)
+4. STATE.md transitions to `status: active`, `activated_at = now`, `stop_at = activated_at + 8h`
+
+**Current gate**: condition 1 only. 4 PRs ⏳ rebased and CI running; expected to settle on next 1-2 wake cycles.
 
 ## Cycle Bookkeeping
 
 - **cycle**: 0
 - **last_cycle_at**: null
-- **next_wake_at**: 2026-05-10T21:39:00Z (existing cascade wake)
+- **next_wake_at**: 2026-05-11T22:02:00Z (existing cascade wake)
 
-## Concurrency Tracking
+## Concurrency Tracking (REVISED post-council P1-1)
 
 - **eng_dispatches_in_flight**: 0
-- **eng_dispatches_max**: 3
-- **open_prs**: 5  <!-- #163 #165 #167 #168 #169 — cascade in flight -->
-- **open_prs_max**: 5
+- **eng_dispatches_max**: 2  <!-- was 3 -->
+- **open_prs**: 4  <!-- #163 #165 #168 #169 — cascade in flight; #167 merged -->
+- **open_prs_max**: 2  <!-- was 5; cascade in flight so currently OVER quota until settled -->
 - **last_product_dispatch_at**: null
 - **product_dispatch_interval_min**: 90
+- **branch_refresh_strategy**: parallel  <!-- was single-file cascade; parallel rebase per cycle -->
+
+## Resource Tracking (NEW post-council P2-3)
+
+- **disk_free_gb**: unknown  <!-- check each cycle: `df -BG /Users/vinamr | tail -1 | awk '{print $4}'` -->
+- **disk_halt_threshold_gb**: 5
+- **active_worktrees**: 0  <!-- check via `git worktree list | wc -l` minus 1 (main) -->
+- **active_worktrees_max**: 5
+- **stale_worktree_cleanup_hours**: 6
 
 ## Cost Telemetry
 
@@ -42,11 +53,18 @@ Until all three trigger conditions are met, the existing cascade wake-loop runs 
 
 ## Outputs Counter
 
-- **prs_opened**: 0
+- **prs_opened**: 0  <!-- post-activation -->
 - **prs_merged**: 0
 - **signoffs_pending**: 0
-- **backlog_items_total**: 0
-- **backlog_items_remaining**: 0
+- **backlog_items_total**: 23
+- **backlog_items_remaining**: 23
+
+## Drift Detection State (NEW post-council P0-3)
+
+- **items_without_parent_plan**: 0  <!-- count from backlog; halt at 2 in single product dispatch -->
+- **prs_in_single_dir**: {}  <!-- map dir → count; halt at 5 same-dir without parent_plan_id progression -->
+- **prs_outside_active_phase**: 0  <!-- halt at 3+ -->
+- **active_phase_set**: ["B1", "B3", "P1"]  <!-- pre-activation; will shift to ["B2", "P2", "P3"] post-cascade -->
 
 ## Last Action Log
 
