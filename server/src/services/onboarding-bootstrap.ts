@@ -148,17 +148,25 @@ function clampAutonomy(raw: number): number {
   return rounded;
 }
 
-function buildAgentAdapterConfig(anthropicSecretId: string | null) {
-  if (!anthropicSecretId) return { env: {} };
-  return {
-    env: {
-      ANTHROPIC_API_KEY: {
-        type: "secret_ref" as const,
-        secretId: anthropicSecretId,
-        version: "latest" as const,
-      },
-    },
+function buildAgentAdapterConfig(
+  anthropicSecretId: string | null,
+  options?: { transport?: "local_runner" },
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    env: anthropicSecretId
+      ? {
+          ANTHROPIC_API_KEY: {
+            type: "secret_ref" as const,
+            secretId: anthropicSecretId,
+            version: "latest" as const,
+          },
+        }
+      : {},
   };
+  if (options?.transport) {
+    config.transport = options.transport;
+  }
+  return config;
 }
 
 /**
@@ -289,7 +297,6 @@ export async function bootstrapCompanyOnboarding(
       .catch(() => null);
 
     // 5. Provision four agents with charters.
-    const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
     // S8 P0.1 Phase 1D — hosted-aware tri-branch adapter resolution.
     //
     // Three precedence levels, evaluated top-down:
@@ -302,11 +309,14 @@ export async function bootstrapCompanyOnboarding(
     //      cloud executes their agents, no install required.
     //
     //   2. FOUNDEROS_BYO_RUNNER_ENABLED=1 (and hosted is OFF)
-    //      → 'byo_runner' (legacy laptop runner; ADR-011, S7 sprint). The
-    //      cloud enqueues `runner_jobs` rows; the founder's local
-    //      `@founderos/runner` picks them up and shells out to the local
-    //      `claude` CLI. Closes the original "agents can't run on Fly" gap
-    //      for founders who already pay for Claude Pro.
+    //      → preserve the user's chosen adapter type (codex_local,
+    //      gemini_local, claude_local, etc.) and mark the agent with
+    //      `transport: "local_runner"` in adapter_config. The cloud
+    //      enqueues `runner_jobs` rows; the founder's local
+    //      `@founderos/runner` picks them up and shells out to the
+    //      appropriate local CLI. This is QW1 of the multi-provider sprint:
+    //      do NOT collapse to 'byo_runner' — the runner needs the concrete
+    //      adapter type to dispatch to the right CLI at claim time.
     //
     //   3. Otherwise (both flags OFF — dev / local default)
     //      → mapOnboardingChoiceToAdapter(adapterChoice). Live providers
@@ -333,13 +343,24 @@ export async function bootstrapCompanyOnboarding(
     const HOSTED_ENABLED =
       process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
     let adapterType: AgentAdapterType;
+    let byoTransport = false;
     if (HOSTED_ENABLED && input.adapterChoice === "anthropic_api") {
       adapterType = "claude_local";
     } else if (isByoRunnerEnabled()) {
-      adapterType = "byo_runner";
+      // QW1: preserve provider, mark transport so the runner knows to claim
+      // this job and dispatch to the right CLI. Do NOT collapse to byo_runner.
+      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
+      byoTransport = true;
     } else {
       adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
     }
+    // Build adapter config after resolution so byoTransport is available.
+    // When BYO runner is active, add transport: "local_runner" so the runner
+    // package knows to claim this agent's jobs (QW1 multi-provider sprint).
+    const adapterConfig = buildAgentAdapterConfig(
+      secret?.id ?? null,
+      byoTransport ? { transport: "local_runner" } : undefined,
+    );
     const agentIdsBySlot: Record<AgentSlot, string> = {
       cos: "",
       growth: "",

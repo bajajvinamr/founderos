@@ -13,7 +13,6 @@ import { queryKeys } from "@/lib/queryKeys";
 import { Step1Vision } from "./steps/Step1Vision.js";
 import { Step2Bottleneck } from "./steps/Step2Bottleneck.js";
 import { Step3Team } from "./steps/Step3Team.js";
-import { Step4Plugin, type ValidationState } from "./steps/Step4Plugin.js";
 import { Step5Departments } from "./steps/Step5Departments.js";
 import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
 import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
@@ -27,6 +26,8 @@ import {
   DEFAULT_AUTONOMY_LEVEL,
   DEFAULT_INTEGRATION_STATE,
   DEFAULT_NON_CORE_DEPARTMENTS,
+  INTEGRATION_KEYS,
+  INTEGRATION_LABELS,
   type AutonomyLevel,
   type Bottleneck,
   type IntegrationKey,
@@ -113,7 +114,6 @@ export function FounderOnboardingWizard() {
 
   const [step, setStep] = useState<Step>(1);
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft());
-  const [validation, setValidation] = useState<ValidationState>({ status: "idle" });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -180,7 +180,6 @@ export function FounderOnboardingWizard() {
     if (!onboardingOpen) {
       setStep(1);
       setDraft(buildInitialDraft());
-      setValidation({ status: "idle" });
       setSubmitError(null);
       setSubmitting(false);
     }
@@ -194,15 +193,7 @@ export function FounderOnboardingWizard() {
     if (current === 1) return draft.vision.trim().length >= 10;
     if (current === 2) return draft.bottlenecks.length >= 1;
     if (current === 3) return true;
-    if (current === 4) {
-      // claude_local + skip don't require a validated key; only anthropic_api does.
-      if (draft.adapterChoice === "claude_local" || draft.adapterChoice === "skip") return true;
-      // Live debounced validation surfaces "valid" on a healthy key, or
-      // "skipped" when the user opts past a transport/rate-limit
-      // failure. Both unblock Next; bootstrap will re-validate at
-      // submit-time as belt-and-suspenders.
-      return validation.status === "valid" || validation.status === "skipped";
-    }
+    if (current === 4) return true; // Adapter + integrations selection — no further gate
     if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
     if (current === 7) return true;
@@ -372,19 +363,17 @@ export function FounderOnboardingWizard() {
               )}
               {step === 4 && (
                 <div className="space-y-8">
-                  {/*
-                    S7.C.1 — Multi-provider chooser inserted ahead of the
-                    legacy adapter list. Six tiles, two live; selection
-                    drives the same `adapterChoice` slot Step4Plugin
-                    already manages so existing key validation + bootstrap
-                    pipeline keeps working unchanged.
+                  <div>
+                    <h2 className="text-2xl font-semibold tracking-tight">
+                      Plug in your brain
+                    </h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      How should agents authenticate with Claude? Integrations are optional
+                      — you can connect them later.
+                    </p>
+                  </div>
 
-                    The `Step4Plugin` block below stays in place for now:
-                    its inline key field will be replaced by S7.C.2's
-                    drawer in the next ticket. The integrations toggles
-                    inside Step4Plugin remain in scope here (only the
-                    adapter selection migrates to the chooser).
-                  */}
+                  {/* Provider chooser — six tiles, two live */}
                   <ProviderChooser
                     selectedId={mapAdapterToProviderId(
                       draft.adapterChoice,
@@ -394,30 +383,53 @@ export function FounderOnboardingWizard() {
                       const nextChoice = mapProviderToAdapter(option);
                       if (nextChoice === null) return;
                       patchDraft({ adapterChoice: nextChoice });
-                      // Switching tile clears any in-flight key validation
-                      // so the founder re-enters credentials for the new
-                      // option. Mirrors Step4Plugin's existing behaviour.
-                      if (nextChoice !== "anthropic_api") {
-                        setValidation({ status: "idle" });
-                      }
                     }}
                   />
-                  <Step4Plugin
-                    adapterChoice={draft.adapterChoice}
-                    anthropicKey={draft.anthropicKey}
-                    integrations={draft.integrations}
-                    validation={validation}
-                    onAdapterChoiceChange={(choice) =>
-                      patchDraft({ adapterChoice: choice })
-                    }
-                    onAnthropicKeyChange={(key) =>
-                      patchDraft({ anthropicKey: key })
-                    }
-                    onIntegrationsChange={(
-                      next: Record<IntegrationKey, boolean>,
-                    ) => patchDraft({ integrations: next })}
-                    onValidationChange={setValidation}
-                  />
+
+                  {/* Integrations toggles */}
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                      Integrations (optional)
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {INTEGRATION_KEYS.map((key) => {
+                        const enabled = draft.integrations[key];
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              patchDraft({
+                                integrations: {
+                                  ...draft.integrations,
+                                  [key]: !draft.integrations[key],
+                                },
+                              });
+                            }}
+                            className={cn(
+                              "text-left rounded-md border px-3.5 py-3 transition-colors",
+                              enabled
+                                ? "border-foreground bg-accent"
+                                : "border-border hover:bg-accent/40",
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium">
+                                {INTEGRATION_LABELS[key]}
+                              </p>
+                              <span className="text-[10px] font-semibold text-muted-foreground">
+                                {enabled ? "CONNECT LATER" : "SKIP"}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Toggling marks the integration for setup on the Integrations page.
+                      Nothing is connected until you authenticate there.
+                    </p>
+                  </div>
                 </div>
               )}
               {step === 5 && (
