@@ -2,14 +2,13 @@
  * S7.C.1 — Multi-provider chooser tile grid for the onboarding wizard.
  *
  * Renders six provider tiles (Claude Code, Anthropic API, Gemini CLI,
- * Google API, Codex CLI, OpenAI API) in a responsive grid:
+ * Gemini API, Codex CLI, OpenAI API) in a responsive grid:
  *   desktop (>= md):  3 columns × 2 rows
  *   tablet  (>= sm):  2 columns × 3 rows
  *   mobile  (<  sm):  1 column  × 6 rows
  *
- * Two tiles are LIVE at S7.0 ship; four are COMING SOON with `S7.B.x`
- * ETAs surfaced via tooltip on hover/focus. Coming-soon tiles are
- * `aria-disabled="true"` and `tabIndex={-1}` so keyboard nav skips them.
+ * All six tiles are LIVE and selectable. The chooser is purely a selection
+ * surface; the wizard owns routing logic and downstream draft persistence.
  *
  * Out of scope for this ticket:
  *   - Inline key-entry drawer (S7.C.2 owns ProviderKeyDrawer)
@@ -50,7 +49,7 @@ export interface ProviderOption {
    */
   requirement: string;
   status: ProviderStatus;
-  /** Engineering-ticket reference (e.g., "S7.B.2") — only set when coming-soon. */
+  /** Engineering-ticket reference (e.g., "S7.B.2") — only set when coming-soon. Removed in Phase D. */
   etaPhase?: string;
   /** Internal adapter enum (4 values, NOT 6 — see PRD §1). */
   adapterType: ProviderAdapterType;
@@ -89,18 +88,16 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "Gemini CLI",
     description: "Use your Google AI subscription via the local CLI.",
     requirement: "Requires Google AI Studio account and Gemini CLI on your laptop.",
-    status: "coming-soon",
-    etaPhase: "S7.B.2",
+    status: "live",
     adapterType: "gemini_local",
     authMode: "subscription",
   },
   {
     id: "google_api",
-    label: "Google API",
-    description: "Bring your own Google AI API key for hosted deployments.",
-    requirement: "Requires a Google AI API key (aistudio.google.com/apikey).",
-    status: "coming-soon",
-    etaPhase: "S7.B.2",
+    label: "Gemini API",
+    description: "Bring your own Gemini API key for hosted deployments.",
+    requirement: "Requires a Gemini API key (aistudio.google.com/apikey).",
+    status: "live",
     adapterType: "gemini_local",
     authMode: "api_key",
   },
@@ -109,8 +106,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "Codex CLI",
     description: "Use your OpenAI subscription via the local Codex CLI.",
     requirement: "Requires GitHub Codex CLI installed on your laptop.",
-    status: "coming-soon",
-    etaPhase: "S7.B.1",
+    status: "live",
     adapterType: "codex_local",
     authMode: "subscription",
   },
@@ -119,8 +115,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "OpenAI API",
     description: "Bring your own OpenAI API key (GPT-4o / o3).",
     requirement: "Requires an OpenAI API key (platform.openai.com/api-keys).",
-    status: "coming-soon",
-    etaPhase: "S7.B.4",
+    status: "live",
     adapterType: "openai_api",
     authMode: "api_key",
   },
@@ -156,10 +151,9 @@ export function ProviderChooser({ selectedId, onSelect }: Props) {
           Pick your AI provider
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Two providers run agents today (Claude Code + Anthropic API). The
-          other four are coming soon — they're shown so you can plan, but
-          they can't be selected yet. Each tile lists exactly what it
-          requires.
+          Six AI providers are available: Claude Code, Anthropic API, Gemini CLI,
+          Gemini API, Codex CLI, and OpenAI API. Each tile lists exactly what it
+          requires so you can make an informed choice.
         </p>
       </div>
 
