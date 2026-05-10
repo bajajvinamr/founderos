@@ -8,6 +8,7 @@ import { BreadcrumbProvider } from "../context/BreadcrumbContext";
 import { CompanyProvider } from "../context/CompanyContext";
 import { ToastProvider } from "../context/ToastContext";
 import { Integrations } from "./Integrations";
+import { composioApi } from "../api/composio";
 
 // Mock API modules
 vi.mock("../api/integrations", () => ({
@@ -59,7 +60,6 @@ describe("<Integrations /> — Composio button visibility", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
-    const { composioApi } = require("../api/composio");
     vi.mocked(composioApi.status).mockResolvedValue({
       enabled: composioEnabled,
       configuredApps: [],
@@ -91,32 +91,34 @@ describe("<Integrations /> — Composio button visibility", () => {
     expect(headline?.textContent).toContain("Google Calendar");
   });
 
-  it("renders Composio primary button when enabled and disconnected", () => {
+  it("renders Composio primary button when enabled and disconnected", async () => {
     renderIntegrations(true);
 
-    // Find the primary Composio button by test ID
-    const primaryButton = container.querySelector(
-      '[data-testid="composio-connect-primary"]'
-    );
-    expect(primaryButton).not.toBeNull();
-    expect(primaryButton?.textContent).toContain("One-click connect");
+    // Page uses async useQuery; wait for IntegrationCard to materialize
+    await vi.waitFor(() => {
+      const primaryButton = container.querySelector(
+        '[data-testid="composio-connect-primary"]'
+      );
+      expect(primaryButton).not.toBeNull();
+      expect(primaryButton?.textContent).toContain("One-click connect");
+    });
   });
 
-  it("renders Composio disabled button with explainer when disabled", () => {
+  it("renders Composio disabled button with explainer when disabled", async () => {
     renderIntegrations(false);
 
-    // Find the disabled Composio button by test ID
-    const disabledButton = container.querySelector(
-      '[data-testid="composio-connect-disabled"]'
-    );
-    expect(disabledButton).not.toBeNull();
-    expect(disabledButton?.textContent).toContain("One-click connection unavailable");
-    expect((disabledButton as HTMLButtonElement | null)?.disabled).toBe(true);
+    await vi.waitFor(() => {
+      const disabledButton = container.querySelector(
+        '[data-testid="composio-connect-disabled"]'
+      );
+      expect(disabledButton).not.toBeNull();
+      expect(disabledButton?.textContent).toContain("One-click connection unavailable");
+      expect((disabledButton as HTMLButtonElement | null)?.disabled).toBe(true);
 
-    // Verify explainer text is present
-    const explainerText = container.textContent;
-    expect(explainerText).toContain("COMPOSIO_API_KEY");
-    expect(explainerText).toContain("How to enable");
+      const explainerText = container.textContent;
+      expect(explainerText).toContain("COMPOSIO_API_KEY");
+      expect(explainerText).toContain("How to enable");
+    });
   });
 
   it("shows API-key fallback under Advanced disclosure when enabled", () => {
