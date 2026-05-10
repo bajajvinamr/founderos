@@ -40,6 +40,10 @@ describe("<Integrations /> — Composio button visibility", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     vi.clearAllMocks();
+    // CompanyProvider initializes selectedCompanyId from localStorage on mount
+    // (see context/CompanyContext.tsx STORAGE_KEY). Pre-seed it so the
+    // Integrations page sees a selected company without a real API round-trip.
+    localStorage.setItem("founderos.selectedCompanyId", "test-company");
   });
 
   afterEach(() => {
@@ -47,6 +51,7 @@ describe("<Integrations /> — Composio button visibility", () => {
       root.unmount();
     });
     container.remove();
+    localStorage.clear();
   });
 
   function renderIntegrations(composioEnabled: boolean) {
@@ -64,7 +69,7 @@ describe("<Integrations /> — Composio button visibility", () => {
       root.render(
         <QueryClientProvider client={queryClient}>
           <BreadcrumbProvider>
-            <CompanyProvider initialCompanyId="test-company">
+            <CompanyProvider>
               <ToastProvider>
                 <Integrations />
               </ToastProvider>
