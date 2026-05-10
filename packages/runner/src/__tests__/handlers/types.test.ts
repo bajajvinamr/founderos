@@ -15,7 +15,7 @@
  *      (the council Gemini P2 — `~/.gemini/skills/` symlink + GEMINI_CLI_TRUST_WORKSPACE)
  *   3. `mockCodexLocal`     — SubprocessAdapter, codex exit codes
  *   4. `mockOpenaiApi`      — ApiAdapter, HTTP 429 retry-after, no buildArgs
- *   5. `mockGoogleApi`      — ApiAdapter, Google's quota-exhausted shape
+ *   5. `mockGeminiApi`      — ApiAdapter, Gemini's quota-exhausted shape
  *
  * Each mock is annotated as the concrete sub-interface (`SubprocessAdapter`
  * or `ApiAdapter`) — TypeScript will refuse compile if any required field
@@ -303,14 +303,14 @@ const mockOpenaiApi: ApiAdapter = {
 };
 
 // ---------------------------------------------------------------------------
-// Mock 5: google_api — ApiAdapter
+// Mock 5: gemini_api — ApiAdapter
 //
-// Google's quota-exhausted error returns 429 with an upstream-specific
+// Gemini's quota-exhausted error returns 429 with an upstream-specific
 // body shape (we ignore the body in the mock; real adapter would parse it).
 // ---------------------------------------------------------------------------
 
-const mockGoogleApi: ApiAdapter = {
-  type: "openclaw_gateway", // No `google_api` enum value yet (ticket S7.0.1 added enum entries; google_api lands later). Use the existing closest enum literal.
+const mockGeminiApi: ApiAdapter = {
+  type: "openclaw_gateway", // No `gemini_api` enum value yet (ticket S7.0.1 added enum entries; gemini_api lands later). Use the existing closest enum literal.
   transport: "api",
   defaultEndpoint:
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:streamGenerateContent",
@@ -378,7 +378,7 @@ const ALL_MOCKS: readonly AnyAdapter[] = [
   mockGeminiLocal,
   mockCodexLocal,
   mockOpenaiApi,
-  mockGoogleApi,
+  mockGeminiApi,
 ] as const;
 
 describe("AdapterHandler interface — implementability proof (S7.1.b.2)", () => {
@@ -391,7 +391,7 @@ describe("AdapterHandler interface — implementability proof (S7.1.b.2)", () =>
     expect(mockGeminiLocal.transport).toBe("subprocess");
     expect(mockCodexLocal.transport).toBe("subprocess");
     expect(mockOpenaiApi.transport).toBe("api");
-    expect(mockGoogleApi.transport).toBe("api");
+    expect(mockGeminiApi.transport).toBe("api");
   });
 
   it("subprocess mocks expose buildArgs + promptTransport; api mocks do not", () => {
@@ -413,7 +413,7 @@ describe("AdapterHandler interface — implementability proof (S7.1.b.2)", () =>
   });
 
   it("environmentChecks returns EnvironmentCheckResult for every adapter", async () => {
-    const env = { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true", OPENAI_API_KEY: "sk-test", GOOGLE_API_KEY: "g-test" };
+    const env = { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true", OPENAI_API_KEY: "sk-test", GEMINI_API_KEY: "g-test" };
     for (const a of ALL_MOCKS) {
       const result = await a.environmentChecks({ env });
       expect(typeof result.ok).toBe("boolean");
@@ -427,12 +427,12 @@ describe("AdapterHandler interface — implementability proof (S7.1.b.2)", () =>
     expect(openaiRl.retryable).toBe(true);
     expect(openaiRl.retryAfterMs).toBe(30_000);
 
-    const googleRl = mockGoogleApi.interpretFailure({
+    const geminiRl = mockGeminiApi.interpretFailure({
       httpStatus: 429,
       responseBody: { error: { status: "RESOURCE_EXHAUSTED" } },
     });
-    expect(googleRl.errorCode).toBe("rate_limit");
-    expect(googleRl.retryable).toBe(true);
+    expect(geminiRl.errorCode).toBe("rate_limit");
+    expect(geminiRl.retryable).toBe(true);
 
     // Subprocess timeout shape.
     const claudeTimeout = mockClaudeLocal.interpretFailure({ signal: "SIGKILL" });
