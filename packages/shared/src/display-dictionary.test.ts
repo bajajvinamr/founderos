@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DISPLAY_DICTIONARY, displayLabel, type DisplayKey } from './display-dictionary';
+import { DISPLAY_DICTIONARY, displayLabel, type DisplayKey } from './display-dictionary.js';
 
 describe('DISPLAY_DICTIONARY', () => {
   it('should have a snapshot of the full dictionary', () => {
