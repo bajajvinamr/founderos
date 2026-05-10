@@ -1,6 +1,4 @@
-// Scaffold for OpenAI API adapter — implementation in S7.B.4.
-// AdapterSpawnHandler interface ships in S7.A.1; do not implement here.
+// OpenAI API adapter — Phase C1 multi-provider implementation.
+// Uses openai@^4.x chat.completions streaming with the standard adapter event shape.
 
-export const OPENAI_API_ADAPTER_VERSION = "0.0.0-scaffold";
-
-// TODO(S7.B.4): export const openaiApiHandler: AdapterSpawnHandler = { ... }
+export { execute } from "./server/execute.js";
