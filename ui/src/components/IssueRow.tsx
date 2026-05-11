@@ -16,6 +16,15 @@ interface IssueRowProps {
   issue: Issue;
   issueLinkState?: unknown;
   selected?: boolean;
+  /**
+   * Roving-tabindex focus state for keyboard navigation. When `true`, the
+   * row's link is included in the tab order (`tabIndex=0`) and tagged with
+   * `data-focused="true"` so styles can fire. All other rows in the list
+   * receive `tabIndex=-1` so tabbing skips past them as a single stop.
+   * RV-007 HIGH #1 — spec §B.6 "Sheet preserves keyboard nav — j/k cycle
+   * through siblings in the list without closing".
+   */
+  focused?: boolean;
   mobileLeading?: ReactNode;
   desktopMetaLeading?: ReactNode;
   desktopLeadingSpacer?: boolean;
@@ -34,6 +43,7 @@ export function IssueRow({
   issue,
   issueLinkState,
   selected = false,
+  focused,
   mobileLeading,
   desktopMetaLeading,
   desktopLeadingSpacer = false,
@@ -47,6 +57,12 @@ export function IssueRow({
   archiveDisabled,
   className,
 }: IssueRowProps) {
+  // Roving-tabindex is only activated when the parent passes `focused`
+  // (true/false). When undefined, leave the link in its default tab order so
+  // surfaces that don't opt into keyboard nav (Inbox uses its own pattern)
+  // are unaffected. RV-007 HIGH #1.
+  const rovingTabIndex = focused === undefined ? undefined : focused ? 0 : -1;
+  const isFocused = focused === true;
   const issuePathId = issue.identifier ?? issue.id;
   const identifier = issue.identifier ?? issue.id.slice(0, 8);
   const showUnreadSlot = unreadState !== null;
@@ -60,10 +76,15 @@ export function IssueRow({
       state={detailState}
       disableIssueQuicklook
       data-inbox-issue-link
+      data-issue-row-id={issue.id}
+      data-focused={isFocused ? "true" : undefined}
+      tabIndex={rovingTabIndex}
       onClickCapture={() => rememberIssueDetailLocationState(issuePathId, detailState)}
       className={cn(
         "group flex items-start gap-2 border-b border-border py-2.5 pl-2 pr-3 text-sm no-underline text-inherit transition-colors last:border-b-0 sm:items-center sm:py-2 sm:pl-1",
         selected ? "hover:bg-transparent" : "hover:bg-accent/50",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        isFocused && "bg-accent/30",
         className,
       )}
     >

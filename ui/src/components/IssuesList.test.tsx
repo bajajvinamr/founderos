@@ -34,6 +34,31 @@ const mockInstanceSettingsApi = vi.hoisted(() => ({
   getExperimental: vi.fn(),
 }));
 
+// Mutable search-params state shared across tests; reset in beforeEach.
+const searchState = vi.hoisted(() => ({ value: "" }));
+const setSearchParamsMock = vi.hoisted(() =>
+  vi.fn((next: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams)) => {
+    if (typeof next === "function") {
+      const fn = next as (prev: URLSearchParams) => URLSearchParams;
+      searchState.value = fn(new URLSearchParams(searchState.value)).toString();
+    } else {
+      searchState.value = next.toString();
+    }
+  }),
+);
+
+vi.mock("@/lib/router", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/router")>("@/lib/router");
+  return {
+    ...actual,
+    useSearchParams: () => [new URLSearchParams(searchState.value), setSearchParamsMock],
+  };
+});
+
+vi.mock("../context/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({ keyboardShortcutsEnabled: true }),
+}));
+
 vi.mock("../context/CompanyContext", () => ({
   useCompany: () => companyState,
 }));
@@ -61,14 +86,21 @@ vi.mock("../api/instanceSettings", () => ({
 vi.mock("./IssueRow", () => ({
   IssueRow: ({
     issue,
+    focused,
     desktopMetaLeading,
     desktopTrailing,
   }: {
     issue: Issue;
+    focused?: boolean;
     desktopMetaLeading?: ReactNode;
     desktopTrailing?: ReactNode;
   }) => (
-    <div data-testid="issue-row">
+    <div
+      data-testid="issue-row"
+      data-issue-row-id={issue.id}
+      data-focused={focused ? "true" : undefined}
+      tabIndex={focused ? 0 : -1}
+    >
       <span>{issue.title}</span>
       {desktopMetaLeading}
       {desktopTrailing}
@@ -189,6 +221,8 @@ describe("IssuesList", () => {
     mockAuthApi.getSession.mockResolvedValue({ user: null, session: null });
     mockExecutionWorkspacesApi.list.mockResolvedValue([]);
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableIsolatedWorkspaces: false });
+    searchState.value = "";
+    setSearchParamsMock.mockClear();
     localStorage.clear();
   });
 
@@ -513,6 +547,201 @@ describe("IssuesList", () => {
     });
 
     expect(document.activeElement).not.toBe(input);
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  // RV-007 HIGH #1 — j/k cycle through rows; Enter opens the sheet by
+  // setting `?row=<identifier>` on the URL.
+  it("advances focused row on 'j' and opens the sheet on Enter", async () => {
+    const issueA = createIssue({ id: "issue-a", identifier: "PAP-100", title: "Row A" });
+    const issueB = createIssue({ id: "issue-b", identifier: "PAP-101", title: "Row B" });
+
+    const { root } = renderWithQueryClient(
+      <IssuesList
+        issues={[issueA, issueB]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="founderos:test-issues"
+        onUpdateIssue={() => undefined}
+      />,
+      container,
+    );
+
+    // Wait for rows to render.
+    await waitForAssertion(() => {
+      expect(container.querySelectorAll('[data-testid="issue-row"]').length).toBe(2);
+    });
+
+    // First 'j' should focus the first row (index -1 → 0).
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    });
+    await flush();
+
+    await waitForAssertion(() => {
+      const focused = container.querySelector('[data-focused="true"]');
+      expect(focused?.getAttribute("data-issue-row-id")).toBe("issue-a");
+    });
+
+    // Second 'j' advances to row B.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    });
+    await flush();
+
+    await waitForAssertion(() => {
+      const focused = container.querySelector('[data-focused="true"]');
+      expect(focused?.getAttribute("data-issue-row-id")).toBe("issue-b");
+    });
+
+    // 'k' goes back up.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
+    });
+    await flush();
+
+    await waitForAssertion(() => {
+      const focused = container.querySelector('[data-focused="true"]');
+      expect(focused?.getAttribute("data-issue-row-id")).toBe("issue-a");
+    });
+
+    // Enter opens the sheet by setting ?row=<identifier>.
+    setSearchParamsMock.mockClear();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await flush();
+
+    expect(setSearchParamsMock).toHaveBeenCalled();
+    // The argument is a function in the prev-state-updater style.
+    const updater = setSearchParamsMock.mock.calls[0]?.[0] as unknown as
+      | ((prev: URLSearchParams) => URLSearchParams)
+      | URLSearchParams;
+    const next = typeof updater === "function" ? updater(new URLSearchParams()) : updater;
+    expect(next.get("row")).toBe("PAP-100");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  // RV-007 HIGH #1 — j/k WHILE sheet open advances ?row= so the sheet
+  // content reflects the new row without closing.
+  it("advances ?row= when 'j' is pressed while the sheet is already open", async () => {
+    searchState.value = "row=PAP-100"; // Sheet open at row A.
+
+    const issueA = createIssue({ id: "issue-a", identifier: "PAP-100", title: "Row A" });
+    const issueB = createIssue({ id: "issue-b", identifier: "PAP-101", title: "Row B" });
+
+    const { root } = renderWithQueryClient(
+      <IssuesList
+        issues={[issueA, issueB]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="founderos:test-issues-jk-open"
+        onUpdateIssue={() => undefined}
+      />,
+      container,
+    );
+
+    await waitForAssertion(() => {
+      expect(container.querySelectorAll('[data-testid="issue-row"]').length).toBe(2);
+    });
+
+    // Two j-presses to move from default (-1) → 0 (row A, already shown by
+    // sheet) → 1 (row B). The second 'j' should set ?row=PAP-101.
+    setSearchParamsMock.mockClear();
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    });
+    await flush();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    });
+    await flush();
+
+    // At least one setSearchParams call should have set row to PAP-101.
+    const calls = setSearchParamsMock.mock.calls;
+    const sawPap101 = calls.some((call) => {
+      const updater = call[0];
+      const next =
+        typeof updater === "function"
+          ? (updater as (prev: URLSearchParams) => URLSearchParams)(
+              new URLSearchParams(searchState.value),
+            )
+          : updater;
+      return next.get("row") === "PAP-101";
+    });
+    expect(sawPap101).toBe(true);
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  // RV-007 MED — filter-changes-while-open: if the active row is no longer
+  // in the filtered list, the sheet auto-closes (drops ?row=).
+  it("drops ?row= when the active issue is no longer in the filtered list", async () => {
+    searchState.value = "row=PAP-100";
+
+    const issueA = createIssue({ id: "issue-a", identifier: "PAP-100", title: "Row A" });
+
+    const { root, rerender } = (() => {
+      const root = createRoot(container);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const render = (node: ReactNode) =>
+        act(() => {
+          root.render(
+            <QueryClientProvider client={queryClient}>
+              <TooltipProvider>{node}</TooltipProvider>
+            </QueryClientProvider>,
+          );
+        });
+      render(
+        <IssuesList
+          issues={[issueA]}
+          agents={[]}
+          projects={[]}
+          viewStateKey="founderos:test-issues-filterclose"
+          onUpdateIssue={() => undefined}
+        />,
+      );
+      return { root, rerender: render };
+    })();
+
+    await waitForAssertion(() => {
+      expect(container.querySelectorAll('[data-testid="issue-row"]').length).toBe(1);
+    });
+
+    setSearchParamsMock.mockClear();
+
+    // Now re-render with an empty issue list — issue-a (PAP-100) is no
+    // longer visible. The cleanup effect should drop ?row=.
+    rerender(
+      <IssuesList
+        issues={[]}
+        agents={[]}
+        projects={[]}
+        viewStateKey="founderos:test-issues-filterclose"
+        onUpdateIssue={() => undefined}
+      />,
+    );
+    await flush();
+
+    await waitForAssertion(() => {
+      expect(setSearchParamsMock).toHaveBeenCalled();
+      const lastCall = setSearchParamsMock.mock.calls.at(-1)?.[0];
+      const next = lastCall instanceof URLSearchParams
+        ? lastCall
+        : (lastCall as (prev: URLSearchParams) => URLSearchParams)(
+            new URLSearchParams(searchState.value),
+          );
+      expect(next.has("row")).toBe(false);
+    });
 
     act(() => {
       root.unmount();
