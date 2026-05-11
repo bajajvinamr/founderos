@@ -28,24 +28,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 13
-- **last_cycle_at**: 2026-05-11T11:59:00Z
-- **next_wake_at**: 2026-05-11T12:24:00Z  <!-- +1500s — #174 MERGED (6th ship), #177 rebased, EQ-010 dispatched for BL-013 (Tier-2 NO auto-merge) -->
+- **cycle**: 13.5
+- **last_cycle_at**: 2026-05-11T12:15:00Z
+- **next_wake_at**: 2026-05-11T12:24:00Z  <!-- cycle 14 wake already pending; this cycle is task-notification-fire (EQ-010 returned + #177 merged in same window) -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-010 just dispatched (BL-013 P4.b Tier-2 NO auto-merge) -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-010 returned with PR #178 -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 close-rec + #176 (Tier-2 SIG-008) + #177 (Tier-1 auto-merge enrolled, rebased post-#174) -->
-- **open_prs_max**: 2  <!-- temporarily over by 1 (#163 is cascade, not autoloop-counted) -->
-- **autoloop_prs_open**: 2  <!-- #176, #177 — at cap -->
-- **autoloop_prs_merged**: 6  <!-- #170, #171, #172, #173, #174, #175 -->
-- **autoloop_dispatches_completed**: 9
+- **open_prs**: 3  <!-- #163 close-rec + #176 (Tier-2 SIG-008) + #178 (Tier-2 SIG-009) -->
+- **open_prs_max**: 2  <!-- temporarily over by 1 (#163 is cascade, not autoloop-counted; both autoloop PRs are Tier-2 awaiting user) -->
+- **autoloop_prs_open**: 2  <!-- #176, #178 — both Tier-2 review queue -->
+- **autoloop_prs_merged**: 7  <!-- #170, #171, #172, #173, #174, #175, #177 -->
+- **autoloop_dispatches_completed**: 10
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 6  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175 -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (Tier-2 SIG-008), EQ-009/#177 (Tier-1 auto-merge enrolled, rebased) -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-010 (BL-013 Tier-2, NO auto-merge per posture) -->
-- **avg_round_trip_minutes**: ~8.9  <!-- + EQ-009: 7.9 -->
+- **autoloop_dispatches_shipped**: 7  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177 -->
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (Tier-2 SIG-008), EQ-010/#178 (Tier-2 SIG-009) -->
+- **autoloop_dispatches_active**: 0  <!-- HOLD — Tier-2 review queue holds capacity until user merges #176 or #178 -->
+- **avg_round_trip_minutes**: ~9.5  <!-- + EQ-010: 13.9 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -66,11 +66,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 8   <!-- #170, #171, #172, #173, #174, #175, #176, #177 -->
-- **prs_merged**: 6   <!-- #170, #171, #172, #173, #174, #175 -->
-- **signoffs_pending**: 8   <!-- SIG-001..008 -->
+- **prs_opened**: 9   <!-- #170-#178 (#176 + #178 still Tier-2 review) -->
+- **prs_merged**: 7   <!-- #170, #171, #172, #173, #174, #175, #177 -->
+- **signoffs_pending**: 10   <!-- SIG-001..010 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 10   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007 merged, 008 in PR (Tier-2 review), 009 in PR (auto-merge), 010 dispatched -->
+- **backlog_items_remaining**: 10   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007/009 merged, 008 in PR (Tier-2 review), 010 in PR (Tier-2 review); BL-014 blocked on #178 merge -->
 
 ## Drift Detection State
 
@@ -97,6 +97,8 @@
 | 12.5 | 11:45Z | **#175 MERGED at 11:27Z** (5th autoloop ship, BL-003 P2.b ProviderTile labels); **EQ-008 returned with PR #176** Tier-2 (BL-022 Haiku yesterday widget, 8 files +1112/-0 pure-additive, autoMergeRequest:null, SIG-008 logged); #174 rebased post-#175 (BEHIND→awaiting CI then auto-merge); **EQ-009 dispatched** (BL-005 P2.d Tile descriptions, Tier-1 auto-merge enrolled); worktree-leak invariant validated 4th time |
 | 12.7 | 11:50Z | **EQ-009 returned with PR #177** in 7.9min (BL-005 P2.d, 6 files +263/-7, 71 tests green, Tier-1 auto-merge SQUASH enrolled at 11:39:44Z); #174 BLOCKED only on `test (+ coverage)` IN_PROGRESS (no failures, auto-merge will fire on CI completion); **HOLD on new dispatch** — autoloop_prs_open=3 (over cap of 2); worktree-leak invariant validated **5th consecutive time** |
 | 13 | 11:59Z | **#174 MERGED at 11:43:40Z** (6th autoloop ship, BL-012 P4.a viewMode + Settings toggle); #177 rebased post-#174 (was BEHIND, auto-merge SQUASH still enrolled); **EQ-010 dispatched** (BL-013 P4.b transcript founder-mode render, **Tier-2 NO auto-merge** per posture); active_phase_set expanded to [B2, P2, P4, P8] |
+| 13.1 | 12:02Z | **Stale-wake-fire no-op** — duplicate cycle-13 wake fired ~3min after cycle 13 closed with cycle-12-era anticipated state; documented for protocol retro; no new dispatch, no new wake scheduled |
+| 13.5 | 12:15Z | **#177 MERGED at 11:58:59Z** (7th autoloop ship, BL-005 P2.d Tile descriptions) — **P2 phase visible-copy sweep STRUCTURALLY COMPLETE**; **EQ-010 returned with PR #178** in 13.9min (BL-013 P4.b transcript founder-mode, 3 files +309/-11 all in ui/src/components/transcript/*, Tier-2 autoMergeRequest:null, SIG-009 logged P1 priority); EQ-010 surfaced 3 pre-existing test failures unrelated to PR scope (SIG-010 triage logged); worktree-leak invariant validated **6th consecutive time**; **HOLD on dispatch** — both autoloop_prs_open slots occupied by Tier-2 review queue (#176 + #178) |
 
 ## Last Action Log
 
@@ -163,4 +165,10 @@
 13: 2026-05-11T12:00:00Z | dispatch  | EQ-010 to general-purpose agent (worktree, background) — id aeb13d4fbb494bd02 — **Tier-2: NO auto-merge enrollment**, opens PR for user review (will produce SIG-009)
 13: 2026-05-11T12:00:00Z | gh-api    | NOTE: GH API returned stale BLOCKED status for #174 at cycle 12.7 probe (~11:50Z) while #174 had actually merged at 11:43:40Z. The GH-CLI mergeStateStatus field can lag actual merge state by 5-10 min on freshly-merged PRs. Future probes: trust `mergedAt` over `mergeStateStatus`.
 13.1: 2026-05-11T12:02:00Z | stale-wake-fire | duplicate cycle-13 wake fired ~3min after cycle 13 closed (same anticipated-state prompt referencing EQ-008/#175 open from cycle-12-era). No state changes: #176 OPEN (Tier-2 SIG-008), #177 OPEN auto-merge enrolled with 4 checks IN_PROGRESS post-rebase, EQ-010 still in flight. No-op cycle. Possible wake-system duplication or two-source scheduling — flag for protocol retro. Did NOT schedule new wake (cycle 14 wake already pending from cycle 13 schedule call).
+13.5: 2026-05-11T11:58:59Z | pr-merge  | #177 (EQ-009 BL-005 P2.d Tile descriptions in founder-language) MERGED — autoloop's **7th ship** (Tier-1 auto-merge fired post-fresh-CI). **P2 phase visible-copy sweep structurally complete**: BL-002/003/004/005 all landed.
+13.5: 2026-05-11T12:15:00Z | agent-return | EQ-010 (aeb13d4fbb494bd02) COMPLETED in 13.9min round-trip; PR #178 opened OPEN MERGEABLE; autoMergeRequest=null (Tier-2 policy honored — confirmed); 3 files / +309 / -11 all in ui/src/components/transcript/* (RunTranscriptView.tsx +52/-3, RunTranscriptView.test.tsx +12/-8, NEW RunTranscriptView.founder.test.tsx +254); 21/21 transcript tests green (8 new BL-013 founder-mode); typecheck 21 packages green; worktree-leak invariant 6th consecutive validation (parent clean)
+13.5: 2026-05-11T12:15:30Z | validate  | PR #178 diff-validator PASS Tier-2 — 3 files all in ui/src/components/transcript/* — zero Tier-3 path touches; agent design choice: shouldRenderBlockInFounderMode gate + runFailed memo over same entries list (one source of truth)
+13.5: 2026-05-11T12:16:00Z | signoff   | SIG-009 logged for PR #178 Tier-2 review (P1 priority — P4 keystone, BL-014 blocked on this; expires 2026-05-18, recommended APPROVE-MERGE)
+13.5: 2026-05-11T12:16:30Z | signoff   | SIG-010 logged for triage of 3 pre-existing test failures surfaced by EQ-010's workspace test run (billing-gate.test.ts, heartbeat-jwt-secret-fail.test.ts, issues-execution-routes.test.ts) — P3 priority, NOT introduced by any autoloop dispatch, but autoloop validator needs to know whether these are flakes/bugs/regressions
+13.5: 2026-05-11T12:17:00Z | hold      | NO new dispatch — autoloop_prs_open=2 occupied by Tier-2 review queue (#176 SIG-008 + #178 SIG-009). BL-014 P4.c (Tier-1 tool action summarization) blocked on #178 user-merge. No other unblocked Tier-1 items in active_phase_set [B2, P2, P4, P8].
 ```

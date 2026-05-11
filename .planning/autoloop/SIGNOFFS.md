@@ -259,3 +259,51 @@ If `expires_at` passes with `status: pending`:
 - **status**: pending
 - **resolved_at**: null
 - **resolution_note**: null
+
+## [SIG-009] EQ-010 / PR #178 — BL-013 P4.b transcript founder-mode Tier-2 review
+
+- **type**: tier-2-review
+- **priority**: P1  <!-- P4 keystone — founders shouldn't see chain-of-thought; engineers must -->
+- **decision_required**: approve-merge
+- **blocking**: BL-014 (P4.c tool action summarization, Tier-1) — depends on this PR landing on main before its render-gate infrastructure can be consumed
+- **blast_radius**: 3 files, +309 / -11 in `ui/src/components/transcript/*` only. Tier-2 surface touched: `RunTranscriptView.tsx` render path (+52/-3 — adds `shouldRenderBlockInFounderMode` gate + `runFailed` memo). Tier-1: new `RunTranscriptView.founder.test.tsx` (254 lines, 8 jsdom tests), modified `RunTranscriptView.test.tsx` (+12/-8 — narrowed pre-existing SSR thinking-markdown test). NO touches to: migrations, packages/shared types, auth, billing-gate, stripe, router config, Dockerfile/workflows. NO edits to `normalizeTranscript`, raw mode, or block components — change is purely additive in the render path.
+- **ci_state**: opened 2026-05-11T~12:15Z (post-EQ-010 return); diff-validator PASS confirmed against Tier-2 path rules
+- **merge_state**: OPEN, MERGEABLE, autoMergeRequest=null (Tier-2 posture honored — confirmed via `gh pr view 178 --json autoMergeRequest`)
+- **source**: EQ-010 dispatch return (autoloop-cycle-13.5)
+- **recommended_action**: APPROVE-MERGE. Diff is clean (no Tier-3 paths), pure-additive in render path (existing block components untouched), 21/21 transcript tests pass (8 new BL-013 founder-mode + 3 BL-012 seam + 10 pre-existing), typecheck green across 21 packages, worktree-leak invariant 6th consecutive validation. Pattern review checklist: (a) gates 4 event types in founder mode — `thinking`, raw tool blocks (`tool`/`tool_group`/`command_group`), `init`, `stderr_group` (the last only on success — failure preserves stderr as signal) ✓ (b) `runFailed` computed via `useMemo` over same `entries` passed to `normalizeTranscript` so render + gate share one source of truth ✓ (c) engineer mode unchanged ✓ (d) consumes #174's viewMode hook via the established pattern ✓.
+- **expires_at**: 2026-05-18T00:00Z
+- **context**: BL-013 (P4.b "Founder transcript hides thinking/tool blocks") was the **P4 keystone** — founders shouldn't see chain-of-thought; engineers must. Tier-2 because it modifies `RunTranscriptView.tsx` (the run-results render contract). Agent (aeb13d4fbb494bd02) returned in ~13.9min round-trip with PR #178. Branch: `feat/bl-013-transcript-founder-mode` (self-named correctly).
+- **proposed**: User reviews via Vercel preview (toggle founder/engineer via Settings → confirm chain-of-thought hides + reappears, confirm failed runs preserve stderr in founder mode), then `gh pr merge 178 --squash`. Optional: enroll auto-merge AFTER review (`gh pr merge 178 --auto --squash`) if final CI is pending.
+- **alternatives**:
+  - **(a)** Auto-merge enroll right now — compromises Tier-2 review intent for a render-contract change.
+  - **(b)** Add a third "developer-debug" mode beyond founder/engineer (defer to a separate PR; no scope creep here).
+- **artifacts**: PR https://github.com/bajajvinamr/founderos/pull/178, agent transcript aeb13d4fbb494bd02, worktree-leak invariant 6th confirmation
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
+
+## [SIG-010] Pre-existing test failures surfaced by EQ-010 workspace-wide test run
+
+- **type**: flake-or-known-bug
+- **priority**: P3
+- **decision_required**: triage  <!-- determine: pre-existing flakes, known bugs, or new regressions -->
+- **blocking**: none — pre-existing, not introduced by any autoloop dispatch
+- **blast_radius**: 3 server-side test files in `server/src/__tests__/` — `billing-gate.test.ts`, `heartbeat-jwt-secret-fail.test.ts`, `issues-execution-routes.test.ts`. These will appear as CI failures on every PR (including autoloop PRs) until triaged.
+- **ci_state**: surfaced by EQ-010 during the BL-013 workspace test run; not introduced by PR #178 (transcript scope only).
+- **merge_state**: n/a
+- **source**: EQ-010 agent summary (autoloop-cycle-13.5)
+- **recommended_action**: TRIAGE. Run the three failing tests in isolation locally → determine if (a) genuine bugs that need fixing, (b) flaky tests to quarantine in `docs/CI-KNOWN-FLAKES.md`, or (c) tests that broke after a recent main commit and need bisecting. If (a), file as a Tier-3 SIGNOFFS bundle (these touch auth/billing/issues — protected surfaces); if (b), add to flake taxonomy + quarantine. Until triaged, autoloop dispatches must continue ignoring these in CI signal interpretation (the validator should already be path-scoped, but adding to known-flakes makes the signal explicit).
+- **expires_at**: 2026-05-25T00:00Z  <!-- longer window: triage need not gate active dispatches -->
+- **context**: When EQ-010 ran the full workspace test suite to validate BL-013, three server-side tests failed that have NOTHING to do with the transcript scope:
+  - `billing-gate.test.ts` — last touched 2026-05-03 council Phase 0; gate is currently OFF by default in prod
+  - `heartbeat-jwt-secret-fail.test.ts` — likely flake related to JWT env-leak (known flake class #2 in PROTOCOL.md taxonomy)
+  - `issues-execution-routes.test.ts` — unknown class
+  These existed BEFORE the autoloop started; not autoloop's bug. But future dispatches need clarity on whether CI failures on these files are "pre-existing — proceed" or "new regression — STOP."
+- **proposed**: 30-min triage session with `pnpm --filter @founderos/server test` on a clean main checkout. Categorize each: real bug | known flake | env-dependent | data-dependent. Update `docs/CI-KNOWN-FLAKES.md` and PROTOCOL.md flake taxonomy accordingly.
+- **alternatives**:
+  - **(a)** Leave un-triaged; autoloop continues filtering by path-scoped diff (the validator already ignores `server/__tests__/*` failures for UI-only PRs). Risk: a real regression hides in the noise.
+  - **(b)** Quarantine all three immediately as "unknown flake" with 30d expiry; force triage at expiry.
+- **artifacts**: EQ-010 agent summary text, `docs/CI-KNOWN-FLAKES.md` (target update), PROTOCOL.md §"Flake Taxonomy" (target update)
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
