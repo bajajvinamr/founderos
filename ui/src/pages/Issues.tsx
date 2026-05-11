@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from "react";
+import { useEffect, useMemo, useCallback, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useLocation, useSearchParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,12 @@ export function Issues() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
+  // Track the row that opened the sheet so we can restore focus when it
+  // closes (RV-007 HIGH #2 — spec §6.2 "Focus returns to the row that was
+  // selected"). Without this, Radix Sheet has no element to return focus to
+  // and focus drops onto document.body.
+  const lastFocusedRowRef = useRef<HTMLElement | null>(null);
+
   // Per `docs/design/founderos-frontend-plan/03-work-surfaces.md` §B.6: row
   // click opens the detail sheet in-place (URL reflects `?row=<id>`) instead
   // of full-page navigation. We layer this on top of the existing IssueRow
@@ -41,10 +47,22 @@ export function Issues() {
     if (!match) return;
     event.preventDefault();
     event.stopPropagation();
+    // Remember the row element so focus returns here on close.
+    lastFocusedRowRef.current = link;
     const next = new URLSearchParams(searchParams);
     next.set(ISSUE_DETAIL_SHEET_PARAM, decodeURIComponent(match[1]));
     setSearchParams(next, { replace: false });
   }, [searchParams, setSearchParams]);
+
+  const handleSheetClose = useCallback(() => {
+    // Defer focus restoration to the next frame so Radix completes its own
+    // focus-trap teardown first — otherwise it can steal focus right back.
+    const target = lastFocusedRowRef.current;
+    if (!target || !target.isConnected) return;
+    requestAnimationFrame(() => {
+      if (target.isConnected) target.focus();
+    });
+  }, []);
 
   const initialSearch = searchParams.get("q") ?? "";
   const participantAgentId = searchParams.get("participantAgentId") ?? undefined;
@@ -146,7 +164,7 @@ export function Issues() {
         onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
         searchFilters={participantAgentId ? { participantAgentId } : undefined}
       />
-      <IssueDetailSheet />
+      <IssueDetailSheet onClose={handleSheetClose} />
     </div>
   );
 }

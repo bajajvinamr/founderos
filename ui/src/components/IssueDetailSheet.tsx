@@ -36,8 +36,10 @@ interface IssueDetailSheetProps {
    */
   issueId?: string;
   /**
-   * Optional callback invoked when the sheet closes. Default behavior is to
-   * drop the `?row=` search param.
+   * Optional callback invoked AFTER the sheet closes and the `?row=` param
+   * has been dropped from the URL. Used by the parent to restore focus to
+   * the row that opened the sheet (RV-007 HIGH #2 — spec §6.2 "Focus
+   * returns to the row that was selected").
    */
   onClose?: () => void;
 }
@@ -59,13 +61,13 @@ export function IssueDetailSheet({ issueId, onClose }: IssueDetailSheetProps = {
   const isOpen = activeIssueId !== null;
 
   const handleClose = useCallback(() => {
-    if (onClose) {
-      onClose();
-      return;
-    }
     const next = new URLSearchParams(searchParams);
     next.delete(ISSUE_DETAIL_SHEET_PARAM);
     setSearchParams(next, { replace: true });
+    // Notify parent after the param is dropped so it can restore focus to the
+    // originating row (RV-007 HIGH #2). Callback is additive — the URL is
+    // still the source of truth for sheet open/close state.
+    onClose?.();
   }, [onClose, searchParams, setSearchParams]);
 
   const { data: issue, isLoading, error } = useQuery({

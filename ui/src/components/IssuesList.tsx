@@ -1,16 +1,22 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
+import { useGeneralSettings } from "../context/GeneralSettingsContext";
 import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { issuesApi } from "../api/issues";
 import { authApi } from "../api/auth";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { queryKeys } from "../lib/queryKeys";
 import {
+  hasBlockingShortcutDialog,
+  isKeyboardShortcutTextInputTarget,
   shouldBlurPageSearchOnEnter,
   shouldBlurPageSearchOnEscape,
 } from "../lib/keyboardShortcuts";
+import { getInboxKeyboardSelectionIndex } from "../lib/inbox";
+import { ISSUE_DETAIL_SHEET_PARAM } from "./IssueDetailSheet";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import { groupBy } from "../lib/groupBy";
 import {
@@ -245,6 +251,13 @@ export function IssuesList({
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [issueSearch, setIssueSearch] = useState(initialSearch ?? "");
   const [visibleIssueColumns, setVisibleIssueColumns] = useState<InboxIssueColumn[]>(loadInboxIssueColumns);
+  // Roving-focus index for j/k keyboard nav. Tracks the row currently
+  // selected via keyboard so Enter can open the sheet for it. -1 means no
+  // row is keyboard-focused (mouse-only interaction so far this session).
+  // RV-007 HIGH #1 — spec §B.6.
+  const [focusedIssueId, setFocusedIssueId] = useState<string | null>(null);
+  const { keyboardShortcutsEnabled } = useGeneralSettings();
+  const [searchParams, setSearchParams] = useSearchParams();
   const deferredIssueSearch = useDeferredValue(issueSearch);
   const normalizedIssueSearch = deferredIssueSearch.trim().toLowerCase();
 
@@ -482,6 +495,183 @@ export function IssuesList({
       items: groups[key]!,
     }));
   }, [filtered, viewState.groupBy, agents, agentName, currentUserId, workspaceNameMap, issueTitleMap]);
+
+  // Flat list of currently-visible issue IDs in render order, respecting
+  // collapsed groups (whole group hidden) and collapsed parents (sub-tasks
+  // hidden). Powers j/k keyboard navigation. RV-007 HIGH #1.
+  const flatIssueIds = useMemo(() => {
+    if (viewState.viewMode !== "list") return [] as string[];
+    const collapsedGroupSet = new Set(viewState.collapsedGroups);
+    const collapsedParentSet = new Set(viewState.collapsedParents);
+    const ids: string[] = [];
+    for (const group of groupedContent) {
+      // When the group has a label and is collapsed, skip its items.
+      if (group.label !== null && collapsedGroupSet.has(group.key)) continue;
+      const { roots, childMap } = buildIssueTree(group.items);
+      const walk = (issue: Issue) => {
+        ids.push(issue.id);
+        const children = childMap.get(issue.id) ?? [];
+        if (children.length > 0 && !collapsedParentSet.has(issue.id)) {
+          for (const child of children) walk(child);
+        }
+      };
+      for (const root of roots) walk(root);
+    }
+    return ids;
+  }, [groupedContent, viewState.viewMode, viewState.collapsedGroups, viewState.collapsedParents]);
+
+  // Keep the focused row valid as the list changes (filter/sort/group/search
+  // mutations). If the focused row dropped out of the list, clear focus so
+  // the next 'j' starts at the top.
+  useEffect(() => {
+    if (focusedIssueId === null) return;
+    if (!flatIssueIds.includes(focusedIssueId)) {
+      setFocusedIssueId(null);
+    }
+  }, [flatIssueIds, focusedIssueId]);
+
+  // Auto-close the sheet if the active row dropped out of the filtered list
+  // (e.g. user changed search filter while sheet is open). The URL keeps
+  // `?row=` as the source of truth, so dropping the param closes the sheet.
+  // RV-007 MED — spec is silent; close-sheet is the simpler choice.
+  const activeRowParam = searchParams.get(ISSUE_DETAIL_SHEET_PARAM);
+  useEffect(() => {
+    if (!activeRowParam) return;
+    // The row param is either an identifier (e.g. PAP-117) or an internal id.
+    // Match against both shapes to avoid false-positive closes.
+    const stillVisible = filtered.some(
+      (issue) => issue.id === activeRowParam || issue.identifier === activeRowParam,
+    );
+    if (!stillVisible) {
+      const next = new URLSearchParams(searchParams);
+      next.delete(ISSUE_DETAIL_SHEET_PARAM);
+      setSearchParams(next, { replace: true });
+    }
+  }, [activeRowParam, filtered, searchParams, setSearchParams]);
+
+  // j/k + Enter keyboard nav. Mirrors the Inbox pattern (refs to avoid stale
+  // closures) but scoped to the issues list — no archive/mark-read shortcuts
+  // since this list doesn't own those affordances. RV-007 HIGH #1.
+  const kbStateRef = useRef({
+    flatIssueIds,
+    focusedIssueId,
+    issueById,
+    activeRowParam,
+  });
+  kbStateRef.current = {
+    flatIssueIds,
+    focusedIssueId,
+    issueById,
+    activeRowParam,
+  };
+
+  useEffect(() => {
+    if (!keyboardShortcutsEnabled) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isKeyboardShortcutTextInputTarget(event.target)) return;
+      if (hasBlockingShortcutDialog(document)) return;
+
+      const st = kbStateRef.current;
+      const count = st.flatIssueIds.length;
+      if (count === 0) return;
+
+      const currentIndex = st.focusedIssueId ? st.flatIssueIds.indexOf(st.focusedIssueId) : -1;
+
+      // When the sheet is open, j/k both moves focus AND advances ?row= so
+      // the sheet content reflects the new row (spec §B.6 "Sheet preserves
+      // keyboard nav — j/k cycle through siblings in the list without
+      // closing"). When the sheet is closed, j/k only moves focus; Enter
+      // opens the sheet for the focused row.
+      const sheetIsOpen = st.activeRowParam !== null && st.activeRowParam !== "";
+
+      const advanceTo = (idx: number) => {
+        const id = st.flatIssueIds[idx];
+        if (!id) return;
+        setFocusedIssueId(id);
+        if (sheetIsOpen) {
+          const issue = st.issueById.get(id);
+          if (!issue) return;
+          const rowKey = issue.identifier ?? issue.id;
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.set(ISSUE_DETAIL_SHEET_PARAM, rowKey);
+              return next;
+            },
+            { replace: true },
+          );
+        }
+      };
+
+      switch (event.key) {
+        case "j":
+        case "ArrowDown": {
+          event.preventDefault();
+          const nextIdx = getInboxKeyboardSelectionIndex(currentIndex, count, "next");
+          if (nextIdx >= 0) advanceTo(nextIdx);
+          break;
+        }
+        case "k":
+        case "ArrowUp": {
+          event.preventDefault();
+          const prevIdx = getInboxKeyboardSelectionIndex(currentIndex, count, "previous");
+          if (prevIdx >= 0) advanceTo(prevIdx);
+          break;
+        }
+        case "Enter": {
+          if (currentIndex < 0) return;
+          const issueId = st.flatIssueIds[currentIndex];
+          if (!issueId) return;
+          const issue = st.issueById.get(issueId);
+          if (!issue) return;
+          event.preventDefault();
+          const rowKey = issue.identifier ?? issue.id;
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.set(ISSUE_DETAIL_SHEET_PARAM, rowKey);
+              return next;
+            },
+            { replace: false },
+          );
+          break;
+        }
+        default:
+          return;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [keyboardShortcutsEnabled, setSearchParams]);
+
+  // When the focused row changes via keyboard, move actual DOM focus to it so
+  // screen readers announce the change and `:focus-visible` fires. Also
+  // scrolls it into view for long lists.
+  useEffect(() => {
+    if (!focusedIssueId) return;
+    // Defer to next frame to let React commit the data-focused attribute
+    // before we query the DOM.
+    const raf = requestAnimationFrame(() => {
+      // CSS.escape isn't available in jsdom; fall back to a safe manual
+      // escape (issue IDs are UUIDs in practice, so this is belt-and-suspenders).
+      const escaped =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(focusedIssueId)
+          : focusedIssueId.replace(/["\\]/g, "\\$&");
+      const el = document.querySelector<HTMLElement>(
+        `[data-issue-row-id="${escaped}"]`,
+      );
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      // jsdom doesn't implement scrollIntoView; tolerate its absence.
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "nearest" });
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [focusedIssueId]);
 
   const newIssueDefaults = useCallback((groupKey?: string) => {
     const defaults: Record<string, string> = {};
@@ -739,6 +929,7 @@ export function IssuesList({
                       <IssueRow
                         issue={issue}
                         issueLinkState={issueLinkState}
+                        focused={focusedIssueId === issue.id}
                         titleSuffix={hasChildren && !isExpanded ? (
                           <span className="ml-1.5 text-xs text-muted-foreground">
                             ({totalDescendants} sub-task{totalDescendants !== 1 ? "s" : ""})
