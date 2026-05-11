@@ -32,7 +32,12 @@ describe("RunTranscriptView", () => {
     });
   });
 
-  it("renders assistant and thinking content as markdown in compact mode", () => {
+  it("renders assistant content as markdown in compact mode", () => {
+    // BL-013 (P4.b) — thinking blocks are now hidden in the founder-mode
+    // default (which is what SSR falls back to without `window.localStorage`).
+    // Engineer-mode thinking-render parity is covered in
+    // RunTranscriptView.founder.test.tsx. This test stays as the SSR-safe
+    // assertion that assistant markdown renders correctly in compact mode.
     const html = renderToStaticMarkup(
       <ThemeProvider>
         <RunTranscriptView
@@ -41,12 +46,7 @@ describe("RunTranscriptView", () => {
             {
               kind: "assistant",
               ts: "2026-03-12T00:00:00.000Z",
-              text: "Hello **world**",
-            },
-            {
-              kind: "thinking",
-              ts: "2026-03-12T00:00:01.000Z",
-              text: "- first\n- second",
+              text: "Hello **world**\n\n- first\n- second",
             },
           ]}
         />
