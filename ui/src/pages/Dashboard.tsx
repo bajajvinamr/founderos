@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
 import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
-import { projectsApi } from "../api/projects";
 import { heartbeatsApi } from "../api/heartbeats";
 import { authApi } from "../api/auth";
 import { useCompany } from "../context/CompanyContext";
@@ -23,18 +22,18 @@ import { FounderBriefing } from "../components/FounderBriefing";
 import { FirstRunProgressCard } from "../components/FirstRunProgressCard";
 import { DepartmentStatusGrid } from "../components/DepartmentStatusGrid";
 import { CapitalAllocationCard } from "../components/CapitalAllocationCard";
+import { TopBlockersWidget } from "../components/dashboard/TopBlockersWidget";
+import { QuickWinsWidget } from "../components/dashboard/QuickWinsWidget";
+import { YesterdayWidget } from "../components/dashboard/YesterdayWidget";
 import { DecisionsInbox } from "./DecisionsInbox";
 import { StatusIcon } from "../components/StatusIcon";
-import { PermissionCoachCard } from "../components/PermissionCoachCard";
 
-import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { AgentRunStatus } from "../components/AgentRunStatus";
 import { timeAgo } from "../lib/timeAgo";
-import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, CircleDot, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
+import { ChartCard, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { ProductTour } from "../components/ProductTour";
 import type { Agent, Issue } from "@founderos/shared";
@@ -49,10 +48,6 @@ export function Dashboard() {
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const [animatedActivityIds, setAnimatedActivityIds] = useState<Set<string>>(new Set());
-  const seenActivityIdsRef = useRef<Set<string>>(new Set());
-  const hydratedActivityRef = useRef(false);
-  const activityAnimationTimersRef = useRef<number[]>([]);
 
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
@@ -76,6 +71,9 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
+  // P8.a (BL-021): activity API is still needed by <FounderBriefing> for the
+  // morning-brief narrative. The visible Recent Activity feed was removed
+  // but this query has to stay or the briefing loses its inputs.
   const { data: activity } = useQuery({
     queryKey: queryKeys.activity(selectedCompanyId!),
     queryFn: () => activityApi.list(selectedCompanyId!),
@@ -88,12 +86,6 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
-  const { data: projects } = useQuery({
-    queryKey: queryKeys.projects.list(selectedCompanyId!),
-    queryFn: () => projectsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
-
   const { data: runs } = useQuery({
     queryKey: queryKeys.heartbeats(selectedCompanyId!),
     queryFn: () => heartbeatsApi.list(selectedCompanyId!),
@@ -101,82 +93,12 @@ export function Dashboard() {
   });
 
   const recentIssues = issues ? getRecentIssues(issues) : [];
-  const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
-
-  useEffect(() => {
-    for (const timer of activityAnimationTimersRef.current) {
-      window.clearTimeout(timer);
-    }
-    activityAnimationTimersRef.current = [];
-    seenActivityIdsRef.current = new Set();
-    hydratedActivityRef.current = false;
-    setAnimatedActivityIds(new Set());
-  }, [selectedCompanyId]);
-
-  useEffect(() => {
-    if (recentActivity.length === 0) return;
-
-    const seen = seenActivityIdsRef.current;
-    const currentIds = recentActivity.map((event) => event.id);
-
-    if (!hydratedActivityRef.current) {
-      for (const id of currentIds) seen.add(id);
-      hydratedActivityRef.current = true;
-      return;
-    }
-
-    const newIds = currentIds.filter((id) => !seen.has(id));
-    if (newIds.length === 0) {
-      for (const id of currentIds) seen.add(id);
-      return;
-    }
-
-    setAnimatedActivityIds((prev) => {
-      const next = new Set(prev);
-      for (const id of newIds) next.add(id);
-      return next;
-    });
-
-    for (const id of newIds) seen.add(id);
-
-    const timer = window.setTimeout(() => {
-      setAnimatedActivityIds((prev) => {
-        const next = new Set(prev);
-        for (const id of newIds) next.delete(id);
-        return next;
-      });
-      activityAnimationTimersRef.current = activityAnimationTimersRef.current.filter((t) => t !== timer);
-    }, 980);
-    activityAnimationTimersRef.current.push(timer);
-  }, [recentActivity]);
-
-  useEffect(() => {
-    return () => {
-      for (const timer of activityAnimationTimersRef.current) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, []);
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>();
     for (const a of agents ?? []) map.set(a.id, a);
     return map;
   }, [agents]);
-
-  const entityNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
-    for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
-    for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
-    return map;
-  }, [issues, agents, projects]);
-
-  const entityTitleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.title);
-    return map;
-  }, [issues]);
 
   const agentName = (id: string | null) => {
     if (!id || !agents) return null;
@@ -231,6 +153,26 @@ export function Dashboard() {
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
       {selectedCompanyId && <PendingOutcomesBanner companyId={selectedCompanyId} />}
 
+      {/* P8.c (BL-023): Top Blockers + Quick Wins fill the dashboard slot
+          cleared by BL-021 (#171). Both are founder-language, scan-in-5s
+          surfaces. Top Blockers aggregates pending approvals + errored
+          agents (the two existing "needs you" signals); Quick Wins ships
+          static for now — see QuickWinsWidget for the BL-022 follow-up. */}
+      {selectedCompanyId && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <TopBlockersWidget companyId={selectedCompanyId} />
+          <QuickWinsWidget companyId={selectedCompanyId} />
+        </div>
+      )}
+
+      {/* P8.b (BL-022): "What we shipped yesterday" — Haiku-generated founder-
+          language summary of the last 24h's task completions. Renders below
+          the TopBlockers/QuickWins row so the three P8 widgets read top-to-
+          bottom as: "what needs you / what you could ask / what already
+          shipped". Empty state is reassuring; LLM failure silently falls
+          back to raw titles server-side. */}
+      {selectedCompanyId && <YesterdayWidget companyId={selectedCompanyId} />}
+
       {/* S1.6 — Decision Inbox (compact) — pending approvals visible without
           a click. Full inbox lives at /approvals. */}
       <DecisionsInbox compact />
@@ -245,7 +187,13 @@ export function Dashboard() {
           sync and S3.8 channel-recommender runs. */}
       <CapitalAllocationCard />
 
-      <PermissionCoachCard companyId={selectedCompanyId} />
+      {/* TODO(BL-021 follow-up): relocate Permission Coach to a Setup-area page.
+          Removed from dashboard in P8.a (autoloop cycle 8) to clear noise
+          before P8.b/P8.c land. Registering a Setup → PermissionCoach route
+          touches `ui/src/lib/company-routes.ts` (Tier-3 nav structure) and
+          `Sidebar.tsx`, both forbidden under the autoloop's Tier-1 boundary —
+          escalate to SIGNOFFS to land the relocation. Component file
+          `components/PermissionCoachCard.tsx` is preserved. */}
       <div data-tour="memory">
         <CompanyMemoryCard companyId={selectedCompanyId} />
       </div>
@@ -293,7 +241,10 @@ export function Dashboard() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          {/* P8.a (BL-021): removed "Month spend" MetricCard (raw cost widget)
+              from the dashboard. Full cost detail lives at /costs and is
+              still reachable from the active-budget-incident banner above. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             <MetricCard
               icon={Bot}
               value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
@@ -317,19 +268,6 @@ export function Dashboard() {
               }
             />
             <MetricCard
-              icon={DollarSign}
-              value={formatCents(data.costs.monthSpendCents)}
-              label="Month spend"
-              to="/costs"
-              description={
-                <span>
-                  {data.costs.monthBudgetCents > 0
-                    ? `${data.costs.monthUtilizationPercent}% of ${formatCents(data.costs.monthBudgetCents)} budget`
-                    : "Unlimited budget"}
-                </span>
-              }
-            />
-            <MetricCard
               icon={ShieldCheck}
               value={data.pendingApprovals + data.budgets.pendingApprovals}
               label="Pending approvals"
@@ -344,10 +282,11 @@ export function Dashboard() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <ChartCard title="Work sessions" subtitle="Last 14 days">
-              <RunActivityChart runs={runs ?? []} />
-            </ChartCard>
+          {/* P8.a (BL-021): removed "Work sessions" RunActivityChart to clear
+              dashboard noise. Run-level breakdown is available on
+              /agents/:id/runs and the recent-runs strip below still surfaces
+              the latest 8 sessions inline. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <ChartCard title="Work by priority" subtitle="Last 14 days">
               <PriorityChart issues={issues ?? []} />
             </ChartCard>
@@ -397,79 +336,58 @@ export function Dashboard() {
             </div>
           )}
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Recent Activity */}
-            {recentActivity.length > 0 && (
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  Recent Activity
-                </h3>
-                <div className="border border-border divide-y divide-border overflow-hidden">
-                  {recentActivity.map((event) => (
-                    <ActivityRow
-                      key={event.id}
-                      event={event}
-                      agentMap={agentMap}
-                      entityNameMap={entityNameMap}
-                      entityTitleMap={entityTitleMap}
-                      className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
-                    />
-                  ))}
-                </div>
+          {/* P8.a (BL-021): removed Recent Activity feed (dashboard noise).
+              Full activity log lives at /activity. Recent Tasks stays as the
+              single below-the-fold list. */}
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Recent Tasks
+            </h3>
+            {recentIssues.length === 0 ? (
+              <div className="border border-border p-4">
+                <p className="text-sm text-muted-foreground">No tasks yet.</p>
+              </div>
+            ) : (
+              <div className="border border-border divide-y divide-border overflow-hidden">
+                {recentIssues.slice(0, 10).map((issue) => (
+                  <Link
+                    key={issue.id}
+                    to={`/issues/${issue.identifier ?? issue.id}`}
+                    className="px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit block"
+                  >
+                    <div className="flex items-start gap-2 sm:items-center sm:gap-3">
+                      {/* Status icon - left column on mobile */}
+                      <span className="shrink-0 sm:hidden">
+                        <StatusIcon status={issue.status} />
+                      </span>
+
+                      {/* Right column on mobile: title + metadata stacked */}
+                      <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
+                        <span className="line-clamp-2 text-sm sm:order-2 sm:flex-1 sm:min-w-0 sm:line-clamp-none sm:truncate">
+                          {issue.title}
+                        </span>
+                        <span className="flex items-center gap-2 sm:order-1 sm:shrink-0">
+                          <span className="hidden sm:inline-flex"><StatusIcon status={issue.status} /></span>
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {issue.identifier ?? issue.id.slice(0, 8)}
+                          </span>
+                          {issue.assigneeAgentId && (() => {
+                            const name = agentName(issue.assigneeAgentId);
+                            return name
+                              ? <span className="hidden sm:inline-flex"><Identity name={name} size="sm" /></span>
+                              : null;
+                          })()}
+                          <span className="text-xs text-muted-foreground sm:hidden">&middot;</span>
+                          <span className="text-xs text-muted-foreground shrink-0 sm:order-last">
+                            {timeAgo(issue.updatedAt)}
+                          </span>
+                        </span>
+                      </span>
+                    </div>
+                  </Link>
+                ))}
               </div>
             )}
-
-            {/* Recent Tasks */}
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Recent Tasks
-              </h3>
-              {recentIssues.length === 0 ? (
-                <div className="border border-border p-4">
-                  <p className="text-sm text-muted-foreground">No tasks yet.</p>
-                </div>
-              ) : (
-                <div className="border border-border divide-y divide-border overflow-hidden">
-                  {recentIssues.slice(0, 10).map((issue) => (
-                    <Link
-                      key={issue.id}
-                      to={`/issues/${issue.identifier ?? issue.id}`}
-                      className="px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit block"
-                    >
-                      <div className="flex items-start gap-2 sm:items-center sm:gap-3">
-                        {/* Status icon - left column on mobile */}
-                        <span className="shrink-0 sm:hidden">
-                          <StatusIcon status={issue.status} />
-                        </span>
-
-                        {/* Right column on mobile: title + metadata stacked */}
-                        <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
-                          <span className="line-clamp-2 text-sm sm:order-2 sm:flex-1 sm:min-w-0 sm:line-clamp-none sm:truncate">
-                            {issue.title}
-                          </span>
-                          <span className="flex items-center gap-2 sm:order-1 sm:shrink-0">
-                            <span className="hidden sm:inline-flex"><StatusIcon status={issue.status} /></span>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {issue.identifier ?? issue.id.slice(0, 8)}
-                            </span>
-                            {issue.assigneeAgentId && (() => {
-                              const name = agentName(issue.assigneeAgentId);
-                              return name
-                                ? <span className="hidden sm:inline-flex"><Identity name={name} size="sm" /></span>
-                                : null;
-                            })()}
-                            <span className="text-xs text-muted-foreground sm:hidden">&middot;</span>
-                            <span className="text-xs text-muted-foreground shrink-0 sm:order-last">
-                              {timeAgo(issue.updatedAt)}
-                            </span>
-                          </span>
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
         </>
