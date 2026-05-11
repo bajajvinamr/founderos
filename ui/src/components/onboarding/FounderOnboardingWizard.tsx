@@ -88,6 +88,9 @@ export function mapAdapterToProviderId(
   // `claude_local`-CLI without an API change.
   _anthropicKey: string,
 ): string | null {
+  // BL-004 — `choice` is null on first paint of Step 4 (no tile selected
+  // yet). ProviderChooser renders no aria-pressed tile in that state.
+  if (choice === null) return null;
   switch (choice) {
     case "claude_local":  return "claude_code";
     case "anthropic_api": return "anthropic_api";
@@ -106,17 +109,12 @@ function buildInitialDraft(): OnboardingDraft {
     team: "solo",
     cofounderName: "",
     cofounderEmail: "",
-    // S8 P0.1 Phase 1D — default to "Anthropic API key" because the
-    // canonical hosted FounderOS deployment runs server-side execution
-    // off the founder's pasted key (no laptop CLI required). The
-    // Claude Code CLI tile remains a live option for developers who
-    // already have the CLI installed locally; founders who don't have
-    // a key yet can still pick "Set up later" via Step4Plugin's tile
-    // grid below the chooser. Server-side flag detection
-    // (FOUNDEROS_HOSTED_AGENTS_ENABLED) lives in onboarding-bootstrap;
-    // routing it through to the UI default would require plumbing a
-    // new field through bootstrap-state — intentionally deferred.
-    adapterChoice: "anthropic_api",
+    // BL-004 (P2.c, audit finding) — null until the founder explicitly
+    // clicks a tile. The prior default of "anthropic_api" biased analytics
+    // ("most founders pick Anthropic" — they didn't, the tile was just
+    // pre-selected). Removing the default forces an honest choice; Step 4's
+    // Continue button is gated on `canAdvance(4)` rejecting null below.
+    adapterChoice: null,
     anthropicKey: "",
     integrations: { ...DEFAULT_INTEGRATION_STATE },
     nonCoreDepartments: [...DEFAULT_NON_CORE_DEPARTMENTS],
@@ -220,7 +218,9 @@ export function FounderOnboardingWizard() {
     if (current === 1) return draft.vision.trim().length >= 10;
     if (current === 2) return draft.bottlenecks.length >= 1;
     if (current === 3) return true;
-    if (current === 4) return true; // Adapter + integrations selection — no further gate
+    // BL-004 — Step 4 (provider chooser) requires an explicit tile click.
+    // Default is null; Continue stays disabled until the founder picks.
+    if (current === 4) return draft.adapterChoice !== null;
     if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
     if (current === 7) return true;
@@ -231,6 +231,16 @@ export function FounderOnboardingWizard() {
   async function handleFinish() {
     setSubmitting(true);
     setSubmitError(null);
+    // BL-004 — Step 4's `canAdvance` gate enforces non-null adapterChoice
+    // before the wizard reaches Step 8. This is a defense-in-depth check:
+    // if the user somehow lands here with no choice, fail fast rather than
+    // POST null to the server's Zod validator (which would 400 anyway).
+    if (draft.adapterChoice === null) {
+      setSubmitError("Please choose an AI provider on Step 4 before launching.");
+      setSubmitting(false);
+      return;
+    }
+    const adapterChoice = draft.adapterChoice;
     try {
       const payload = {
         vision: draft.vision.trim(),
@@ -243,8 +253,8 @@ export function FounderOnboardingWizard() {
                 email: draft.cofounderEmail.trim() || null,
               }
             : null,
-        adapterChoice: draft.adapterChoice,
-        anthropicKey: draft.adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
+        adapterChoice,
+        anthropicKey: adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
         integrations: draft.integrations,
         nonCoreDepartments: draft.nonCoreDepartments,
         autonomyLevel: draft.autonomyLevel,
