@@ -29,23 +29,23 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 15
-- **last_cycle_at**: 2026-05-11T12:30:00Z
-- **next_wake_at**: 2026-05-11T12:42:00Z  <!-- +720s = 12min — tight wake to catch #176 + #178 auto-merge completion + dispatch BL-014 immediately -->
+- **cycle**: 16
+- **last_cycle_at**: 2026-05-11T13:15:00Z
+- **next_wake_at**: 2026-05-11T13:40:00Z  <!-- +1500s — check EQ-011 return + #176 CI rerun outcome -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0
+- **eng_dispatches_in_flight**: 1  <!-- EQ-011 dispatched (BL-014 P4.c Tier-1 summarizeTool helper) -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 close-rec + #176 (auto-merge ENROLLED post-rebase) + #178 (auto-merge ENROLLED post-rebase) -->
+- **open_prs**: 2  <!-- #163 close-rec + #176 (auto-merge enrolled, CI rerun pending, SIG-011 investigation) -->
 - **open_prs_max**: 2
-- **autoloop_prs_open**: 2  <!-- #176, #178 — both auto-merge enrolled, will land on CI completion -->
-- **autoloop_prs_merged**: 7  <!-- #170, #171, #172, #173, #174, #175, #177 -->
+- **autoloop_prs_open**: 1  <!-- #176 only — #178 merged 13:05:40Z -->
+- **autoloop_prs_merged**: 8  <!-- #170, #171, #172, #173, #174, #175, #177, #178 -->
 - **autoloop_dispatches_completed**: 10
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 7  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177 -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 + EQ-010/#178 — Tier-2 review queue cleared, both auto-merge enrolled -->
-- **autoloop_dispatches_active**: 0  <!-- BL-014 dispatch held pending #178 actual merge to avoid worktree-base drift -->
+- **autoloop_dispatches_shipped**: 8  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177, EQ-010/178 -->
+- **autoloop_dispatches_in_pr**: 1  <!-- EQ-008/#176 (CI rerun pending — SIG-011 if rerun fails) -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-011 (BL-014 Tier-1 summarizeTool helper) -->
 - **avg_round_trip_minutes**: ~9.5
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
@@ -67,11 +67,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 9   <!-- #170-#178 (#176 + #178 still Tier-2 review) -->
-- **prs_merged**: 7   <!-- #170, #171, #172, #173, #174, #175, #177 -->
-- **signoffs_pending**: 10   <!-- SIG-001..010 -->
+- **prs_opened**: 9   <!-- #170-#178 -->
+- **prs_merged**: 8   <!-- #170, #171, #172, #173, #174, #175, #177, #178 -->
+- **signoffs_pending**: 10   <!-- SIG-001..007 + SIG-008 + SIG-010 + SIG-011 (SIG-009 resolved-merged at 13:05:40Z) -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 10   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007/009 merged, 008 in PR (Tier-2 review), 010 in PR (Tier-2 review); BL-014 blocked on #178 merge -->
+- **backlog_items_remaining**: 9   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007/009/010 merged, 008 in PR (CI rerun SIG-011), 011 dispatched -->
 
 ## Drift Detection State
 
@@ -102,6 +102,7 @@
 | 13.5 | 12:15Z | **#177 MERGED at 11:58:59Z** (7th autoloop ship, BL-005 P2.d Tile descriptions) — **P2 phase visible-copy sweep STRUCTURALLY COMPLETE**; **EQ-010 returned with PR #178** in 13.9min (BL-013 P4.b transcript founder-mode, 3 files +309/-11 all in ui/src/components/transcript/*, Tier-2 autoMergeRequest:null, SIG-009 logged P1 priority); EQ-010 surfaced 3 pre-existing test failures unrelated to PR scope (SIG-010 triage logged); worktree-leak invariant validated **6th consecutive time**; **HOLD on dispatch** — both autoloop_prs_open slots occupied by Tier-2 review queue (#176 + #178) |
 | 14 | 12:24Z | **Tier-2 review queue HOLD continues** — no user merges since cycle 13.5 (5min ago). Dep-chain audit: ZERO unblocked Tier-1 items remain (BL-014 needs #178, BL-018 needs BL-016 unstarted, BL-011 needs BL-010 chain). Only unblocked-but-Tier-2 candidate is BL-016 P5.a (no auto-merge, would push autoloop_prs_open to 3 over cap). **No dispatch**; extending wake interval to 60min (3600s) since only user-merge events can advance state. Wake-prompt's "BL-014 unblocks when #177 merged" assertion was structurally wrong (BL-014 deps BL-013/#178, not BL-005/#177). |
 | 15 | 12:30Z | **AUTOLOOP RELAUNCHED** — user reviewed 7-ship summary + Tier-2 review queue, executed merge on #176 + #178; both rebased + auto-merge SQUASH enrolled (will land on CI completion ~5-10min). New 8h timer: activated_at=12:30Z, stop_at=20:30Z. SIG-008 + SIG-009 marked auto-merge-enrolled (status will flip to merged at next wake). HOLD on BL-014 dispatch until #178 actually lands (worktree-base drift risk). Tight wake +720s to catch merges + dispatch. |
+| 16 | 13:15Z | **#178 MERGED at 13:05:40Z** (8th autoloop ship, P4.b transcript founder-mode — P4 keystone LIVE in prod); SIG-009 flipped to resolved-merged. **#176 CI FAILED** with `db.select is not a function` at onboarding-bootstrap.ts:437 — NOT pre-existing (identical-base #178 passed same job); #176-introduced regression. CI rerun triggered (flake-or-real-bug discrimination); SIG-011 logged P1 with investigation playbook. **EQ-011 dispatched** (BL-014 P4.c summarizeTool helper, Tier-1 auto-merge) — fills the founder-mode gap left by #178 hiding raw tool blocks. |
 
 ## Last Action Log
 
@@ -183,4 +184,11 @@
 15: 2026-05-11T12:31:00Z | auto-merge-enroll | gh pr merge --auto --squash on #178 + #176 — SQUASH enrolled; will fire on CI completion (~5-10min for fresh post-rebase CI)
 15: 2026-05-11T12:31:00Z | activation | **AUTOLOOP RELAUNCH** — Activation 2; activated_at=12:30Z, stop_at=20:30Z (+8h); permissions posture unchanged (Tier-1 auto, Tier-2 open-PR, Tier-3 SIGNOFFS)
 15: 2026-05-11T12:31:30Z | hold      | BL-014 dispatch held: dep BL-013/#178 auto-merge-enrolled but not YET merged. Dispatching now would have agent's worktree base off main without BL-013 infrastructure → consume-target absent. Wake at +720s catches the merges + dispatches BL-014.
+16: 2026-05-11T13:05:40Z | pr-merge  | #178 (EQ-010 BL-013 P4.b transcript founder-mode) MERGED — autoloop's **8th ship** (P4 keystone live in prod: transcripts hide thinking/tool/init blocks in founder mode, engineer mode unchanged); SIG-009 resolved-merged
+16: 2026-05-11T13:07:03Z | ci-fail   | #176 (EQ-008 BL-022 Haiku widget) auto-merge BLOCKED — `test (+ coverage)` + `ci (all checks)` FAILED with TypeError: db.select is not a function at onboarding-bootstrap.ts:437 in maybeTriggerFirstRun
+16: 2026-05-11T13:13:00Z | diagnose  | failure is #176-introduced regression (NOT pre-existing) — #178 passed identical test job on same post-#177 base; only divergence is #176's new yesterday-summary service + test file. Stack trace points to onboarding-bootstrap (unchanged code) — pattern matches vinamr-invariants "Event-ingest singleton initialization in tests" cross-file module-cache contamination
+16: 2026-05-11T13:14:00Z | ci-rerun  | triggered rerun of failed checks on run 25671388070 (flake-vs-real-bug discrimination); rerun outcome pending — checked at cycle 17 wake
+16: 2026-05-11T13:14:30Z | signoff   | SIG-011 logged P1 (regression-from-autoloop-ship) for #176 CI failure — playbook: if rerun passes → flake taxonomy entry; if fails → re-dispatch EQ-008 with isolation fix context
+16: 2026-05-11T13:15:00Z | promote   | BL-014 → EQ-011 (Tier-1, P4.c summarizeTool helper — fills founder-mode gap left by #178 hiding raw tool blocks; consume target shouldRenderBlockInFounderMode is on main post-#178; dep BL-013 met)
+16: 2026-05-11T13:15:00Z | dispatch  | EQ-011 to general-purpose agent (worktree, background) — id a6965cedcf1198e9a — Tier-1 auto-merge enrolled SQUASH per posture; explicit branch feat/bl-014-summarize-tool-helper
 ```

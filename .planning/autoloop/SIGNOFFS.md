@@ -278,9 +278,9 @@ If `expires_at` passes with `status: pending`:
   - **(a)** Auto-merge enroll right now — compromises Tier-2 review intent for a render-contract change.
   - **(b)** Add a third "developer-debug" mode beyond founder/engineer (defer to a separate PR; no scope creep here).
 - **artifacts**: PR https://github.com/bajajvinamr/founderos/pull/178, agent transcript aeb13d4fbb494bd02, worktree-leak invariant 6th confirmation
-- **status**: pending
-- **resolved_at**: null
-- **resolution_note**: null
+- **status**: **resolved-merged**
+- **resolved_at**: 2026-05-11T13:05:40Z
+- **resolution_note**: User explicit-merge at cycle 15 ("Go ahead merge and launch a new autonomous loop like the last one"); auto-merge SQUASH fired after CI passed. #178 is now on main at commit `533c78e`. P4 keystone shipped — founder-mode transcripts hide thinking/tool/init blocks; engineer mode unchanged. BL-014 (P4.c summarizeTool helper) dispatched as EQ-011 at cycle 16 to consume this gate.
 
 ## [SIG-010] Pre-existing test failures surfaced by EQ-010 workspace-wide test run
 
@@ -305,5 +305,28 @@ If `expires_at` passes with `status: pending`:
   - **(b)** Quarantine all three immediately as "unknown flake" with 30d expiry; force triage at expiry.
 - **artifacts**: EQ-010 agent summary text, `docs/CI-KNOWN-FLAKES.md` (target update), PROTOCOL.md §"Flake Taxonomy" (target update)
 - **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
+
+## [SIG-011] PR #176 CI failure — `db.select is not a function` in onboarding-bootstrap.ts (NEW REGRESSION)
+
+- **type**: regression-from-autoloop-ship
+- **priority**: P1
+- **decision_required**: investigate
+- **blocking**: #176 (BL-022 Haiku yesterday widget) cannot auto-merge until CI green. Currently sitting auto-merge-enrolled but red CI.
+- **blast_radius**: CI-only impact (no production impact yet — PR not merged). Failure surfaces in `test (+ coverage)` job: TypeError at `server/src/services/onboarding-bootstrap.ts:437` inside `maybeTriggerFirstRun` calling `db.select(...)`. The failing CODE is unchanged on main (#178 passed the same job successfully on identical base). **#176's diff is the only variable**. The diff is constrained to: `server/src/services/yesterday-summary.ts` (NEW), `server/src/__tests__/yesterday-summary.test.ts` (NEW), `server/src/routes/dashboard.ts` (extended with /yesterday endpoint). UI files don't run in server test suite.
+- **ci_state**: `test (+ coverage)` + `ci (all checks)` both FAILED at 2026-05-11T13:07:03Z; all other gates green (typecheck, lint, audit, bundle-size, schema-drift, migration-check, CodeQL, gitleaks, file-size, Vercel preview). CI rerun triggered at cycle 16 (2026-05-11T~13:15Z) — outcome pending.
+- **merge_state**: OPEN, autoMergeRequest=SQUASH (enrolled, will fire IF CI rerun passes; otherwise stays blocked)
+- **source**: cycle 16 wake — diagnostic on why auto-merge didn't fire after enrollment
+- **recommended_action**: WAIT for CI rerun. If RERUN PASSES → mark "flake — module-load-order race in vitest workers" and add to PROTOCOL.md flake taxonomy as class #11 + auto-merge proceeds. If RERUN FAILS WITH SAME ERROR → re-dispatch EQ-008 with this failure context to fix test isolation in `yesterday-summary.test.ts` (likely `vi.mock` or module-level side effect bleeding to other vitest workers). The repeated rapid-fire failures across many tests at line 437 strongly suggest a module-cache contamination, not a logic bug.
+- **expires_at**: 2026-05-13T00:00Z  <!-- 2-day window: must resolve before #176 goes stale -->
+- **context**: PR #178 (transcript founder-mode) passed the same `test (+ coverage)` job on the same post-#177 base. PR #176's only divergence is the new yesterday-summary service + its test file + dashboard.ts route extension. The TypeError fires in onboarding-bootstrap.ts (file unchanged by #176) at the `db.select` call inside `maybeTriggerFirstRun`. Pattern matches vinamr-invariants "Event-ingest singleton initialization in tests" — but inverted: the new test file may have a partial `db` mock or `vi.mock('@founderos/db')` that bleeds into the vitest worker's module cache and contaminates downstream tests that share that worker. **Local 21/21 passed** because vitest typically isolates within a single file; cross-file contamination only shows in parallel workspace runs.
+- **proposed**: (a) Trigger CI rerun (DONE at cycle 16). (b) If rerun fails identically → read `server/src/__tests__/yesterday-summary.test.ts` for `vi.mock` statements; if found, scope them to local tests via `vi.unmock` in `afterAll`, or convert to pure DI (the mockDb is already DI-injectable). (c) If rerun PASSES → file it as flake #11 in PROTOCOL.md taxonomy, add a `vi.resetModules()` guard in the test's beforeEach to harden against re-occurrence.
+- **alternatives**:
+  - **(a)** Force-merge #176 with `--admin` flag bypassing CI. **REJECTED** — this is the unsafe shortcut the protocol explicitly forbids; #176 might be shipping a real test isolation bug into main where it'd contaminate every future PR's CI.
+  - **(b)** Close #176 and re-dispatch BL-022 from scratch. Lossy — agent already built 8 files of working code; the bug is likely a 1-line fix in the test file.
+  - **(c)** Wait for SIG-010 triage first to determine if there's overlap. Defers the question without solving it.
+- **artifacts**: PR #176, failed CI run https://github.com/bajajvinamr/founderos/actions/runs/25671388070, agent transcript a3960fd3433787f46, vinamr-invariants pattern "Event-ingest singleton initialization in tests"
+- **status**: pending  <!-- will flip to resolved-flake if rerun passes, or to in-progress if re-dispatch needed -->
 - **resolved_at**: null
 - **resolution_note**: null
