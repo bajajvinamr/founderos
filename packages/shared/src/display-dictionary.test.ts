@@ -58,4 +58,19 @@ describe('DISPLAY_DICTIONARY', () => {
     expect(displayLabel('integrations', 'founder')).toBe('Connections');
     expect(displayLabel('providers', 'engineer')).toBe('Providers');
   });
+
+  it('should handle onboarding Step 4 keys correctly (BL-002)', () => {
+    expect(displayLabel('onboarding.step4.headline', 'founder')).toBe(
+      'How should FounderOS use AI?',
+    );
+    expect(displayLabel('onboarding.step4.headline', 'engineer')).toBe(
+      'Adapter configuration',
+    );
+    expect(displayLabel('onboarding.step4.subtitle', 'founder')).toBe(
+      'Pick where the AI for your team should run',
+    );
+    expect(displayLabel('onboarding.step4.subtitle', 'engineer')).toBe(
+      'Select adapter family + provider',
+    );
+  });
 });

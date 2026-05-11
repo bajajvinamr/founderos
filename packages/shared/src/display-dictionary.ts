@@ -40,6 +40,16 @@ export const DISPLAY_DICTIONARY = {
   providers:     { founder: "AI services",    engineer: "Providers" },
   decisions:     { founder: "Decisions",      engineer: "Decisions" },
   inbox:         { founder: "Inbox",          engineer: "Inbox" },
+
+  // Onboarding — Step 4 (BL-002, P2.a founder-language sweep)
+  "onboarding.step4.headline": {
+    founder:  "How should FounderOS use AI?",
+    engineer: "Adapter configuration",
+  },
+  "onboarding.step4.subtitle": {
+    founder:  "Pick where the AI for your team should run",
+    engineer: "Select adapter family + provider",
+  },
 } as const;
 
 export type DisplayKey = keyof typeof DISPLAY_DICTIONARY;

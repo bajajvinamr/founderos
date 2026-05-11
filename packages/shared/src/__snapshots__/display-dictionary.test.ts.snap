@@ -78,6 +78,14 @@ exports[`DISPLAY_DICTIONARY > should have a snapshot of the full dictionary 1`] 
     "engineer": "New Issue",
     "founder": "Ask FounderOS",
   },
+  "onboarding.step4.headline": {
+    "engineer": "Adapter configuration",
+    "founder": "How should FounderOS use AI?",
+  },
+  "onboarding.step4.subtitle": {
+    "engineer": "Select adapter family + provider",
+    "founder": "Pick where the AI for your team should run",
+  },
   "openai_api": {
     "engineer": "OpenAI API",
     "founder": "ChatGPT (pay-per-use)",
