@@ -36,99 +36,94 @@ describe("cursor environment diagnostics", () => {
   });
 
   it("creates a missing working directory when cwd is absolute", async () => {
-    const cwd = path.join(
-      os.tmpdir(),
-      `founderos-cursor-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      "workspace",
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-cursor-local-cwd-"));
+    const cwd = path.join(root, "workspace");
 
-    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
+    try {
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "cursor_local",
+        config: {
+          command: process.execPath,
+          cwd,
+        },
+      });
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "cursor_local",
-      config: {
-        command: process.execPath,
-        cwd,
-      },
-    });
-
-    expect(result.checks.some((check) => check.code === "cursor_cwd_valid")).toBe(true);
-    expect(result.checks.some((check) => check.level === "error")).toBe(false);
-    const stats = await fs.stat(cwd);
-    expect(stats.isDirectory()).toBe(true);
-    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
+      expect(result.checks.some((check) => check.code === "cursor_cwd_valid")).toBe(true);
+      expect(result.checks.some((check) => check.level === "error")).toBe(false);
+      const stats = await fs.stat(cwd);
+      expect(stats.isDirectory()).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("adds --yolo to hello probe args by default", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-cursor-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-    const binDir = path.join(root, "bin");
-    const cwd = path.join(root, "workspace");
-    const argsCapturePath = path.join(root, "args.json");
-    await fs.mkdir(binDir, { recursive: true });
-    await writeFakeAgentCommand(binDir, argsCapturePath);
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-cursor-local-probe-"));
+    try {
+      const binDir = path.join(root, "bin");
+      const cwd = path.join(root, "workspace");
+      const argsCapturePath = path.join(root, "args.json");
+      await fs.mkdir(binDir, { recursive: true });
+      await writeFakeAgentCommand(binDir, argsCapturePath);
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "cursor_local",
-      config: {
-        command: "agent",
-        cwd,
-        env: {
-          CURSOR_API_KEY: "test-key",
-          FOUNDEROS_TEST_ARGS_PATH: argsCapturePath,
-          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "cursor_local",
+        config: {
+          command: "agent",
+          cwd,
+          env: {
+            CURSOR_API_KEY: "test-key",
+            FOUNDEROS_TEST_ARGS_PATH: argsCapturePath,
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
         },
-      },
-    });
+      });
 
-    expect(result.status).toBe("pass");
-    const args = JSON.parse(await fs.readFile(argsCapturePath, "utf8")) as string[];
-    expect(args).toContain("--yolo");
-    await fs.rm(root, { recursive: true, force: true });
+      expect(result.status).toBe("pass");
+      const args = JSON.parse(await fs.readFile(argsCapturePath, "utf8")) as string[];
+      expect(args).toContain("--yolo");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("does not auto-add --yolo when extraArgs already bypass trust", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-cursor-local-probe-extra-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-    const binDir = path.join(root, "bin");
-    const cwd = path.join(root, "workspace");
-    const argsCapturePath = path.join(root, "args.json");
-    await fs.mkdir(binDir, { recursive: true });
-    await writeFakeAgentCommand(binDir, argsCapturePath);
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-cursor-local-probe-extra-"));
+    try {
+      const binDir = path.join(root, "bin");
+      const cwd = path.join(root, "workspace");
+      const argsCapturePath = path.join(root, "args.json");
+      await fs.mkdir(binDir, { recursive: true });
+      await writeFakeAgentCommand(binDir, argsCapturePath);
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "cursor_local",
-      config: {
-        command: "agent",
-        cwd,
-        extraArgs: ["--yolo"],
-        env: {
-          CURSOR_API_KEY: "test-key",
-          FOUNDEROS_TEST_ARGS_PATH: argsCapturePath,
-          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "cursor_local",
+        config: {
+          command: "agent",
+          cwd,
+          extraArgs: ["--yolo"],
+          env: {
+            CURSOR_API_KEY: "test-key",
+            FOUNDEROS_TEST_ARGS_PATH: argsCapturePath,
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
         },
-      },
-    });
+      });
 
-    expect(result.status).toBe("pass");
-    const args = JSON.parse(await fs.readFile(argsCapturePath, "utf8")) as string[];
-    expect(args).toContain("--yolo");
-    expect(args).not.toContain("--trust");
-    await fs.rm(root, { recursive: true, force: true });
+      expect(result.status).toBe("pass");
+      const args = JSON.parse(await fs.readFile(argsCapturePath, "utf8")) as string[];
+      expect(args).toContain("--yolo");
+      expect(args).not.toContain("--trust");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("emits cursor_native_auth_present when cli-config.json has authInfo and CURSOR_API_KEY is unset", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-cursor-auth-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-cursor-auth-"));
     const cursorHome = path.join(root, ".cursor");
     const cwd = path.join(root, "workspace");
 
@@ -165,10 +160,7 @@ describe("cursor environment diagnostics", () => {
   });
 
   it("emits cursor_api_key_missing when neither env var nor native auth exists", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-cursor-noauth-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-cursor-noauth-"));
     const cursorHome = path.join(root, ".cursor");
     const cwd = path.join(root, "workspace");
 

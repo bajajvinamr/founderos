@@ -40,62 +40,62 @@ process.exit(1);
 
 describe("pi_local environment diagnostics", () => {
   it("passes a hello probe when model discovery and execution succeed", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-pi-local-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-    const binDir = path.join(root, "bin");
-    const cwd = path.join(root, "workspace");
-    await fs.mkdir(binDir, { recursive: true });
-    await fs.mkdir(cwd, { recursive: true });
-    await writeFakePiCommand(binDir, "success");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-pi-local-probe-"));
+    try {
+      const binDir = path.join(root, "bin");
+      const cwd = path.join(root, "workspace");
+      await fs.mkdir(binDir, { recursive: true });
+      await fs.mkdir(cwd, { recursive: true });
+      await writeFakePiCommand(binDir, "success");
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "pi_local",
-      config: {
-        command: "pi",
-        cwd,
-        model: "openai/gpt-4.1-mini",
-        env: {
-          OPENAI_API_KEY: "test-key",
-          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "pi_local",
+        config: {
+          command: "pi",
+          cwd,
+          model: "openai/gpt-4.1-mini",
+          env: {
+            OPENAI_API_KEY: "test-key",
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
         },
-      },
-    });
+      });
 
-    expect(result.status).toBe("pass");
-    expect(result.checks.some((check) => check.code === "pi_models_discovered")).toBe(true);
-    expect(result.checks.some((check) => check.code === "pi_hello_probe_passed")).toBe(true);
-    await fs.rm(root, { recursive: true, force: true });
+      expect(result.status).toBe("pass");
+      expect(result.checks.some((check) => check.code === "pi_models_discovered")).toBe(true);
+      expect(result.checks.some((check) => check.code === "pi_hello_probe_passed")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("surfaces stale configured package installs with a targeted hint", async () => {
-    const root = path.join(
-      os.tmpdir(),
-      `founderos-pi-local-stale-package-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-    const binDir = path.join(root, "bin");
-    const cwd = path.join(root, "workspace");
-    await fs.mkdir(binDir, { recursive: true });
-    await fs.mkdir(cwd, { recursive: true });
-    await writeFakePiCommand(binDir, "stale-package");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "founderos-pi-local-stale-package-"));
+    try {
+      const binDir = path.join(root, "bin");
+      const cwd = path.join(root, "workspace");
+      await fs.mkdir(binDir, { recursive: true });
+      await fs.mkdir(cwd, { recursive: true });
+      await writeFakePiCommand(binDir, "stale-package");
 
-    const result = await testEnvironment({
-      companyId: "company-1",
-      adapterType: "pi_local",
-      config: {
-        command: "pi",
-        cwd,
-        env: {
-          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "pi_local",
+        config: {
+          command: "pi",
+          cwd,
+          env: {
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          },
         },
-      },
-    });
+      });
 
-    const stalePackageCheck = result.checks.find((check) => check.code === "pi_package_install_failed");
-    expect(stalePackageCheck?.level).toBe("warn");
-    expect(stalePackageCheck?.hint).toContain("Remove `npm:pi-driver`");
-    await fs.rm(root, { recursive: true, force: true });
+      const stalePackageCheck = result.checks.find((check) => check.code === "pi_package_install_failed");
+      expect(stalePackageCheck?.level).toBe("warn");
+      expect(stalePackageCheck?.hint).toContain("Remove `npm:pi-driver`");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });
