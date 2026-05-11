@@ -330,3 +330,25 @@ If `expires_at` passes with `status: pending`:
 - **status**: **resolved-flake** (CI rerun passed all checks)
 - **resolved_at**: 2026-05-11T13:40:00Z
 - **resolution_note**: CI rerun at cycle 16 came back ALL GREEN (`test (+ coverage)` flipped from FAIL → SUCCESS). Confirmed flake-class: **vitest cross-worker module-cache race** — when a test file (yesterday-summary.test.ts) defines a partial `db` mock that bleeds across vitest workers via singleton import-time effects, downstream tests sharing the worker can see a contaminated `db` object missing methods like `.select`. First-run hit the race; rerun didn't. To be added to PROTOCOL.md flake taxonomy as class #11 with retry policy: 1 automatic retry per test job; expire after 30d if not encountered again. Defensive code change (NOT required to merge #176): add `vi.resetModules()` in `yesterday-summary.test.ts` beforeEach. #176 will auto-merge after its post-#178 rebase clears CI.
+
+## [SIG-012] PR #181 — AI Connections page scaffold (Tier-2 review)
+
+- **type**: tier-2-review
+- **priority**: P2
+- **decision_required**: approve
+- **blocking**: unblocks BL-018 (P5.c provider catalog) when merged
+- **blast_radius**: ui-only — 5 files in `ui/src/*` (pages/, api/, components/InstanceSidebar.tsx, App.tsx route reg). +663/-1. NO touches to `ui/src/lib/company-routes.ts` (Tier-3 forbidden) or `ui/src/components/layout/Sidebar.tsx` (different file from InstanceSidebar.tsx). Route landed at `/instance/settings/ai-connections` (appended to existing instance/settings Layout) — pragmatic-option pattern per EQ-006/BL-012 precedent.
+- **ci_state**: pending (just opened 14:01Z)
+- **merge_state**: UNKNOWN (UNKNOWN is transient on fresh PRs; CI starting)
+- **source**: EQ-013 (autoloop-cycle-18) — first PR landed by autoloop's sample-N reviewer-agent protocol (RV-002 dispatched in parallel; review event will post before user merge decision)
+- **recommended_action**: AWAIT RV-002 review event. If RV-002 APPROVES + CI green → user can merge. If RV-002 raises blockers → triage via this SIG. Tier-2 honors user-merge-only policy regardless of RV verdict; RV is signal, not authority.
+- **expires_at**: 2026-05-18T00:00Z
+- **context**: Agent's pragmatic-option choice was forced by BOARD_ROUTE_ROOTS being a closed set. `setup` is not a registered route root; adding it would be a Tier-3 edit to `ui/src/lib/company-routes.ts`. Mirroring cycle-11.5's BL-012 precedent (Settings appended to existing experimental page), agent landed AI Connections inside `/instance/settings/*`. Future BL-018/P5.b/P5.c may want a top-level `/setup/*` shell — that's a Tier-3 SIG for whoever picks it up, not blocked on this merge.
+- **proposed**: Approve + merge after RV-002 + CI signals. Use the page as-is for P5.a wireframe completion; P5.b will wire up persistence + per-department usage server endpoints; P5.c adds the provider catalog (BL-018 unblock).
+- **alternatives**:
+  - **(a)** Reject + force a Tier-3 route registration. Costs a council cycle for what's already a usable page; loses the pragmatic-option pattern value.
+  - **(b)** Approve + open a follow-up SIG for top-level `/setup/*` shell as a planned Tier-3 in P7 (IA collapse, SIG-004). Recommended — captures the future evolution without blocking now.
+- **artifacts**: PR #181 https://github.com/bajajvinamr/founderos/pull/181, branch `feat/bl-016-ai-connections-page` (commit `6c1141a` on origin), 5 files in ui/, 8 vitest tests passing, agent return summary in cycle 18 task output `aba8cc786a6044597`
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null

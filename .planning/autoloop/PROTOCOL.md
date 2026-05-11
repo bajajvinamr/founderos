@@ -153,7 +153,13 @@ Replaces the v1 flat list. Each row: symptom class, owning subsystem, detection 
 
 **Unknown flake**: halt fast. Do not retry blindly. Write SIGNOFFS as `flake-unknown` with the failing job URL + first 50 lines of error output + a `next_step: identify_symptom_class` field.
 
-**Branch HEAD leak (new invariant class)**: Agent({isolation: "worktree"}) dispatches can flip the parent checkout's HEAD to the agent's intended branch (the worktree itself gets auto-renamed to `worktree-agent-<id>`). Detection: `git branch --show-current` returns something other than the autoloop-scaffold branch when the autoloop runner expects to be on it. Defense: every Edit/Write to .planning/autoloop/* must be preceded by `git branch --show-current` check; recover via `git checkout chore/autoloop-scaffold`. Observed twice in cycle 16.2-16.5 — class is recurring, not one-time. (Not technically a flake; it's an agent-harness leak. Documented here because the defensive primitive belongs in the same retry/recovery taxonomy.)
+**Branch HEAD leak (new invariant class, REFINED cycle 18)**: Agent({isolation: "worktree"}) dispatches can flip the parent checkout's HEAD to the agent's intended branch. Two distinct mechanisms now confirmed:
+  - **Mechanism A** (cycles 16.2, 16.5, 18-staging): worktree harness creates the named branch in the parent ref-store and the parent's HEAD follows, while the worktree itself gets auto-renamed to `worktree-agent-<id>`. Agent's worktree branch is correct; parent's branch silently flips.
+  - **Mechanism B** (cycle 18, EQ-013): dispatched agent runs `cd /Users/vinamr/Projects/founderos && <bash>` for every command, putting workdir IN the parent checkout. All `git checkout -b`, `git add`, `git commit` operations land on the parent, not the isolated worktree. The agent's `.claude/worktrees/agent-<id>/` worktree stays pristine; the parent branches and commits as if the agent had checked out locally.
+  Detection: `git branch --show-current` returns something other than the autoloop-scaffold branch when the autoloop runner expects to be on it. Defense:
+  1. Every Edit/Write to .planning/autoloop/* MUST be preceded by `git branch --show-current` check (autoloop side).
+  2. Every dispatched agent's brief MUST explicitly forbid `cd /Users/vinamr/Projects/founderos && ...` patterns and require the agent work from its worktree's pwd (agent side).
+  Recovery: `git stash push --include-untracked -m "..." -- <files>` → `git checkout chore/autoloop-scaffold` → `git stash pop`. Observed 4 times across cycles 16.2, 16.5, 18-staging, 18-EQ-013-return — class is recurring AND has multiple root-cause mechanisms, not one-time and not single-cause. (Not technically a flake; it's an agent-harness leak. Documented here because the defensive primitive belongs in the same retry/recovery taxonomy.)
 
 ## Halt Conditions (REVISED post-council — augments v1)
 
@@ -282,3 +288,36 @@ When the diff-validator catches a Tier-3 file in a declared Tier-1 PR mid-flight
 4. Close the offending PR if pre-merge (don't leave dangling). Branch is preserved.
 5. Mark the source backlog item with `tier_misclassification_count++`. If 2+, that item is permanently re-tiered to Tier-3.
 6. Brief next product-team dispatch about the misclassification pattern.
+
+## Sample-N Reviewer-Agent Protocol (added cycle 18 per user decision — Option A)
+
+**Origin**: User observation 2026-05-11 cycle 18 — "my github shows how there's 0% activity on code reviews we need to improve this." Autoloop's Tier-1 auto-merge speed creates a structural review-event gap on GitHub's Insights surface. Option A (Sample-N on every PR) selected over path-set-only or self-approve-event.
+
+**Rule**: Every autoloop-shipped PR (Tier-1 + Tier-2) gets a `code-reviewer` subagent dispatched in parallel with CI. The reviewer posts a real GitHub review event (`gh pr review <N> --approve` or `--request-changes`) with a 10-20 line substantive comment.
+
+**Mechanics**:
+- Dispatch via `Agent({subagent_type: "code-reviewer", isolation: "worktree", run_in_background: true})` with brief: PR # + branch + tier + file list + review-focus list specific to the change surface (LLM/Anthropic SDK / auth / DB / accessibility / etc.).
+- Reviewer agent ID: **RV-NNN** (separate sequence from EQ-NNN dispatches).
+- Reviewer is **read-only** — no code modifications. Briefs explicitly forbid destructive git operations.
+- For Tier-1 PRs: review event posts as `--approve` if no blockers; CI + review form a 2-of-2 gate before auto-merge fires (auto-merge already requires CI green; review APPROVE is a soft signal that surfaces on GitHub but does not gate the auto-merge enrollment).
+- For Tier-2 PRs: review event posts before the user's merge decision, giving the human reviewer a substantive starting point rather than a blank PR.
+- If reviewer raises `--request-changes`: open SIGNOFFS as `tier-1-review-blocker` (P1) or `tier-2-review-blocker` (P2). Auto-merge stays enrolled; the autoloop runner removes it if the reviewer finding is substantive (not nit-class).
+
+**Review focus templates** (per surface):
+- **Server services / routes**: secret management, error handling, auth surface, cache/dedup keys, LLM SDK params (max_tokens, retry on 529)
+- **UI pages / components**: founder-language copy, accessibility (aria, keyboard nav), lazy-loading boundaries, disabled-state UX
+- **Shared types / API contracts**: zod validation at boundaries, breaking-change detection vs. existing consumers
+- **Tests**: real assertions vs. smoke checks, mock isolation (esp. vitest cross-worker race per class #11), coverage of error states
+- **Migrations / schema** (Tier-3 only): never reaches reviewer — SIGNOFFS council instead
+
+**Failure modes (anticipated)**:
+- Reviewer agent runs the same Bash `cd <parent>` pattern that caused EQ-013's branch-HEAD leak. Defense: brief explicitly forbids; agent works in its own worktree pwd.
+- Reviewer's review event posts after PR merges (race on Tier-1 fast-CI flows). Defense: fall back to `gh pr comment <N>` instead of `gh pr review <N>`. Comment still counts toward GitHub activity surface; just not an "approve" badge.
+- Reviewer finds 0 issues every time → review noise without signal. Mitigation: rotate review focus per-surface; if signal-to-noise stays low across 10 dispatches, downgrade to path-set-only (Option B fallback).
+
+**Telemetry**:
+- Reviewer findings logged in STATE.md cycle row.
+- If reviewer + CI disagree (CI green but reviewer requests changes): flag as `review-vs-ci-divergence` in STATE.md — these are the highest-signal events.
+- After 10 RV dispatches, retrospect: how many --approve, how many --request-changes, how many SIGNOFFS opened, how many real issues caught vs. nits.
+
+**First activation**: cycle 18 — RV-001 on #176 (BL-022 Haiku widget, Tier-2), RV-002 on #181 (BL-016 AI Connections, Tier-2). Both dispatched 14:02Z in parallel.

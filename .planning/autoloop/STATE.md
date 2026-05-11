@@ -29,24 +29,27 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 18
-- **last_cycle_at**: 2026-05-11T14:01:00Z
-- **next_wake_at**: 2026-05-11T14:26:00Z  <!-- +1500s — 2 PRs auto-merge enrolled pending CI: #176 (test+coverage IN_PROGRESS post-rebase), #180 (test+coverage IN_PROGRESS post-fresh-rebase); EQ-013 in flight expected to return → #181 -->
+- **cycle**: 18.5
+- **last_cycle_at**: 2026-05-11T14:05:00Z
+- **next_wake_at**: 2026-05-11T14:26:00Z  <!-- cycle 19 wake already scheduled from cycle 18 — catches #176 merge + tally on RV-001/RV-002 effects + next-dispatch decision -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-013 (BL-016 AI Connections page Tier-2) — id aba8cc786a6044597 -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-013 returned with #181; RV-001 + RV-002 also completed -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 close-rec + #176 (rebased, test+coverage IN_PROGRESS) + #180 (rebased post-#179, test+coverage IN_PROGRESS) -->
-- **open_prs_max**: 2  <!-- temporarily over by 1 (#163 long-standing close-rec); 2 autoloop PRs both auto-merge enrolled -->
-- **autoloop_prs_open**: 2  <!-- #176, #180 — both auto-merge SQUASH enrolled, both pending test+coverage -->
-- **autoloop_prs_merged**: 9  <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179 -->
-- **autoloop_dispatches_completed**: 12  <!-- EQ-013 not yet returned -->
+- **open_prs**: 3  <!-- #163 long-standing close-rec + #176 (test+coverage still IN_PROGRESS or just-cleared, RV-001 APPROVED) + #181 (Tier-2 RV-002 REQUEST_CHANGES, awaiting user) -->
+- **open_prs_max**: 2  <!-- still over by 1 (#163); 2 autoloop PRs -->
+- **autoloop_prs_open**: 2  <!-- #176 (auto-merge SQUASH enrolled), #181 (Tier-2 no-auto-merge) -->
+- **autoloop_prs_merged**: 10  <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179, #180 — #180 landed 14:14:43Z -->
+- **autoloop_dispatches_completed**: 13  <!-- +EQ-013 -->
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 9  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177, EQ-010/178, EQ-012/179 -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (test+coverage IN_PROGRESS post-rebase, SIG-011 resolved-flake from previous rerun), EQ-011/#180 (test+coverage IN_PROGRESS post-fresh-rebase) -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-013 in flight -->
-- **avg_round_trip_minutes**: ~9.4  <!-- 9 ships / round-trip narrows as practices-doc EQ-012 was short -->
+- **autoloop_dispatches_shipped**: 10  <!-- +EQ-011/180 — EQ-013/181 not yet merged so not counted as "shipped" -->
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (RV-001 APPROVED, auto-merge enrolled, pending CI), EQ-013/#181 (Tier-2 RV-002 REQUEST_CHANGES — user reviews) -->
+- **autoloop_dispatches_active**: 0  <!-- 0 active eng dispatches; 2 reviewer dispatches completed -->
+- **autoloop_reviewer_dispatches**: 2  <!-- RV-001 on #176 → APPROVE+2 LOW findings; RV-002 on #181 → REQUEST_CHANGES+1 HIGH+1 MED+1 LOW -->
+- **autoloop_reviewer_review_request_changes**: 1  <!-- RV-002 on #181 -->
+- **autoloop_reviewer_findings_real_bugs_caught**: 1  <!-- RV-002 MEDIUM: fallback-order seeding race becomes silent data-loss bug at P5.b persistence -->
+- **avg_round_trip_minutes**: ~9.3  <!-- 10 ships / EQ-011: 12.1, EQ-013: 13.2 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -67,11 +70,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 11   <!-- #170-#180 (incl. practices doc #179) -->
-- **prs_merged**: 9   <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179 -->
-- **signoffs_pending**: 9   <!-- SIG-001..008 + SIG-010 (SIG-009 + SIG-011 resolved) -->
+- **prs_opened**: 12   <!-- #170-#181 -->
+- **prs_merged**: 10   <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179, #180 -->
+- **signoffs_pending**: 10   <!-- SIG-001..008 + SIG-010 + SIG-012 (SIG-009 + SIG-011 resolved) -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 8   <!-- minus EQ-001 escalated, 9 merged, EQ-008/EQ-011 in PR, EQ-013 in flight -->
+- **backlog_items_remaining**: 7   <!-- minus EQ-001 escalated, 10 merged, EQ-008/EQ-013 in PR -->
 
 ## Drift Detection State
 
@@ -106,6 +109,7 @@
 | 16.2-16.5 | 13:24-13:31Z | **Branch-HEAD leak NEW invariant class detected + recovered TWICE** (cycle 16.2 initial, cycle 16.5 recurrence post-EQ-012 cherry-pick); EQ-012 returned with PR #179 (practices doc, 2 files +492/-0 base=main); EQ-012 also independently detected + self-recovered from same leak class. Meta: doc validates itself by surviving its documented failure mode. |
 | 17 | 13:45Z | **EQ-011 returned with PR #180** in 12.1min (BL-014 P4.c summarizeTool, 4 files +590/-13, **15 tool slugs cataloged**, 690 UI tests pass); design choice: added optional `rawName` field to block types for adapter-slug routing without breaking displayToolName humanization. **SIG-011 RESOLVED-FLAKE**: #176 CI rerun ALL GREEN — confirmed vitest cross-worker module-cache race, not a real bug. #176 rebased post-#178 → auto-merge waiting on one more CI cycle. **3 PRs in flight** (#176, #179, #180) all Tier-1 auto-merge enrolled; expect 3 ships in next 15-20min. Worktree-leak file-diff class **streak: 7 consecutive** (branch-HEAD class recurring but recoverable). |
 | 18 | 14:01Z | **#179 MERGED at 13:34:15Z** (9th autoloop ship — practices doc live; docs/code-review-practices.md + CLAUDE.md index line); **#180 flake-class #11 recurred briefly** then auto-recovered (19/20 SUCCESS observed mid-cycle); **PROTOCOL.md updated**: flake class #11 (vitest cross-worker module-cache race) added to taxonomy + Branch-HEAD leak NEW invariant class documented with defensive primitive (`git branch --show-current` before every .planning/autoloop/* edit); #180 rebased post-#179 (BEHIND→cleared, fresh `test+coverage` IN_PROGRESS), #176 still waiting on its own `test+coverage` post-earlier rebase; **EQ-013 dispatched** for BL-016 P5.a AI Connections page (**Tier-2**, no auto-merge) — agent id aba8cc786a6044597, brief explicit on routing constraint (Tier-3 forbidden: company-routes.ts + Sidebar.tsx) and pragmatic-option pattern (find existing /setup/* host route OR escalate as Tier-3). Worktree-leak file-diff class **streak: 8 consecutive**. |
+| 18.5 | 14:05Z | **EQ-013 returned with PR #181** in ~13.2min — BL-016 AI Connections page, 5 files +663/-1 all in ui/* (NEW AiConnections.tsx 383, AiConnections.test.tsx 197/8 tests, ai-connections.ts 79, App.tsx +2 route reg inside existing instance/settings Layout, InstanceSidebar.tsx +1 nav item with Plug icon). Agent took **pragmatic-option pattern**: landed `/instance/settings/ai-connections` instead of `/setup/ai-connections` because `setup` not in BOARD_ROUTE_ROOTS and `company-routes.ts` is Tier-3 forbidden. autoMergeRequest=null ✓ Tier-2. SIG-012 logged. **#180 MERGED at 14:14:43Z** (10th autoloop ship — summarizeTool helper). **Branch-HEAD leak Mechanism B confirmed** (NEW root cause): EQ-013 used `cd /Users/vinamr/Projects/founderos && ...` for every Bash command → all work landed in PARENT checkout, not agent worktree. PROTOCOL.md updated with Mechanism A (harness) vs Mechanism B (agent `cd` pattern) distinction. Defense extended: agent briefs must explicitly forbid `cd <parent>` patterns. **Sample-N Reviewer-Agent Protocol ACTIVATED** (per user Option A): **RV-001** on #176 returned APPROVE+2 LOW (529-overload caching gap + inline type duplication); **RV-002** on #181 returned REQUEST_CHANGES+1 HIGH (disabled radio has no visual affordance + no test) + 1 MED (fallback-order seeding race → silent data-loss bug at P5.b) + 1 LOW (raw `<a>` should be NavLink). **First-dispatch validation**: RV protocol paid for itself on first run — RV-002 caught a real HIGH UX gap + a MED that becomes data-loss when P5.b wires persistence. PROTOCOL.md `Sample-N Reviewer-Agent Protocol` section appended. |
 
 ## Last Action Log
 
@@ -218,4 +222,19 @@
 18: 2026-05-11T14:01:30Z | tally     | autoloop_prs_open=2 (#176 + #180, both auto-merge enrolled, both pending test+coverage), autoloop_dispatches_active=1 (EQ-013), shipped=9, ratio: dispatches-shipped/dispatches-completed = 9/12 = 75% (matches v2 expectation; EQ-001 escalation accounts for the gap)
 18: 2026-05-11T14:01:30Z | observability | A/B/C question to user on GitHub review activity (raised post-EQ-012) STILL PENDING; PR #179 merged without code-review event compounds the gap. Re-surface after wake schedule.
 18: 2026-05-11T14:02:00Z | INVARIANT-RECURRENCE | **Branch-HEAD leak RECURRED for the 3rd time this session** — parent HEAD flipped to `feat/bl-016-ai-connections-page` (EQ-013's intended branch) after dispatch + during staging of cycle 18 commits. **Defensive primitive caught it**: `git branch --show-current` between Edit and `git add` surfaced the mismatch BEFORE staged changes contaminated the wrong branch. Recovery: `git stash push --include-untracked` (preserved staged edits including untracked) → `git checkout chore/autoloop-scaffold` → `git stash pop` → re-stage. **Meta validation**: PROTOCOL.md Branch-HEAD leak section's defensive primitive worked exactly as designed on its FIRST exposure post-documentation. The rule is now empirical, not theoretical.
+18.5: 2026-05-11T14:00:00Z | agent-return | EQ-013 (aba8cc786a6044597) COMPLETED in ~13.2min; PR #181 opened OPEN UNKNOWN (just opened); autoMergeRequest=null (Tier-2 policy honored); 5 files / +663/-1; 8/8 vitest tests passing; agent chose pragmatic-option pattern (`/instance/settings/ai-connections` inside existing Layout) because `setup` not in BOARD_ROUTE_ROOTS and `company-routes.ts` is Tier-3 forbidden.
+18.5: 2026-05-11T14:00:30Z | INVARIANT-MECHANISM-B | **Branch-HEAD leak NEW ROOT CAUSE** identified from EQ-013's return summary: agent ran `cd /Users/vinamr/Projects/founderos && <bash>` for every command → all work landed in PARENT checkout, NOT agent's `.claude/worktrees/agent-aba8cc786a6044597/`. Agent's worktree stayed clean & untouched; parent silently flipped branch + committed + pushed agent's work. This is DISTINCT from Mechanism A (harness creates branch in parent ref-store). PROTOCOL.md updated with both mechanisms + extended defense: agent briefs must explicitly forbid `cd <parent>` Bash patterns.
+18.5: 2026-05-11T14:00:45Z | INVARIANT-NEAR-MISS | EQ-013 ALSO ran `git reset --hard origin/main` during recovery from accidentally branching off chore/autoloop-scaffold instead of main (worktree's branch had 27 polluting autoloop-scaffold commits). Agent self-flagged the CLAUDE.md destructive-command advisory in return summary; operation was safe (work preserved in stash) but should have flagged intent first. PROTOCOL.md note: future dispatch briefs should require pre-emptive flag for any destructive git op even when "safe."
+18.5: 2026-05-11T14:01:00Z | branch-recover | `git checkout chore/autoloop-scaffold` after detecting parent stuck on `feat/bl-016-ai-connections-page` (4th leak this session); working tree clean (agent had committed + pushed before leaking).
+18.5: 2026-05-11T14:01:30Z | validate | PR #181 diff-validator PASS Tier-2 — 5 files in ui/* — zero Tier-3 path touches (App.tsx is NOT in forbidden list; only company-routes.ts and components/layout/Sidebar.tsx are; agent edited components/InstanceSidebar.tsx which is a different file)
+18.5: 2026-05-11T14:01:45Z | signoff | SIG-012 logged for PR #181 Tier-2 review (P2, expires 2026-05-18, recommended APPROVE + open follow-up SIG for top-level `/setup/*` shell as planned Tier-3 in P7 SIG-004)
+18.5: 2026-05-11T14:02:00Z | user-decision | User picked **Option A** on review activity gap: "Sample-N reviewer-agent on every PR" — autoloop dispatches a code-reviewer subagent on every shipped PR to post a real GH review event with substantive comment. Operationalized immediately.
+18.5: 2026-05-11T14:02:30Z | protocol | PROTOCOL.md `Sample-N Reviewer-Agent Protocol` section appended — defines mechanics, review focus templates per surface, anticipated failure modes, telemetry. Reviewer dispatch IDs use new sequence RV-NNN.
+18.5: 2026-05-11T14:02:45Z | dispatch | **RV-001 dispatched** to code-reviewer (worktree, background) — id a39f4c67617892827 — review focus on PR #176 (Tier-2, Haiku widget). Brief explicitly forbids `cd <parent>` patterns + destructive git commands. Read-only review.
+18.5: 2026-05-11T14:02:50Z | dispatch | **RV-002 dispatched** to code-reviewer (worktree, background) — id ad9c19a5b4aeba750 — review focus on PR #181 (Tier-2, AI Connections). Same operational rules.
+18.5: 2026-05-11T14:04:00Z | rv-return | **RV-001 → APPROVE on #176** (~2min); 2 findings: [LOW] 529 transient-overload responses cached as day-long fallback in `defaultCallAnthropic` (transient errors treated like permanent failures — fix: skip `cacheSet` for status 429/529); [LOW] inline type duplication in `ui/src/api/dashboard.ts` (YesterdayOutcome should import from `@founderos/shared`, not re-declare). Review posted as PR comment (own-PR self-review restriction). Practices-doc note: `isTransientAnthropicError(status)` shared helper applies to daily-founder-brief + weekly-wrap-generator too — autoloop backlog candidate.
+18.5: 2026-05-11T14:05:00Z | rv-return | **RV-002 → REQUEST_CHANGES on #181** (~2min); 3 findings: [HIGH] Disabled radio labels in DefaultForNewWorkSection lack `opacity-60 cursor-not-allowed` — founders click and get zero feedback; also NO test asserts `input.disabled === true`. [MEDIUM] Fallback-order seeding effect guarded by `fallbackOrder.length === 0`; on stale-while-revalidate cycles re-fires and resets user reordering — harmless in P5.a (local-only) but **silent data-loss bug at P5.b when persistence wires up**. Fix: replace length-guard with useRef(false) seeded flag. [LOW] Empty-state Workstations link uses raw `<a>` instead of NavLink (causes full-page reload). Practices-doc note: escalate Tier-2 to Tier-3 ONLY when intended route must appear in BOARD_ROUTE_ROOTS for company-prefix parsing; pure settings sub-paths can always use pragmatic-option safely.
+18.5: 2026-05-11T14:14:43Z | pr-merge | **#180 (EQ-011 BL-014 P4.c summarizeTool) MERGED** — autoloop's **10th ship**; auto-merge fired on test+coverage completion post-rebase. P4 founder-mode chain now complete: P4.a viewMode (#174) → P4.b transcript founder-mode (#178) → P4.c summarizeTool helper for tool-action summaries (#180).
+18.5: 2026-05-11T14:15:30Z | rv-validation | **Sample-N Reviewer protocol FIRST-RUN VALIDATION**: RV-002's HIGH finding (disabled radio) + MED finding (fallback-order race becomes P5.b silent data-loss) are real bugs that human review might have missed. Protocol pays for itself on dispatch #1. Telemetry: 2 RV dispatches, 1 APPROVE, 1 REQUEST_CHANGES, 1 real-bug-caught, ~2min each (acceptable overhead).
+18.5: 2026-05-11T14:16:00Z | hold | NO new eng dispatch — autoloop_prs_open=2 (#176 + #181) at cap. #176 will auto-merge on CI completion → frees slot. #181 awaits user merge decision on RV-002 REQUEST_CHANGES findings → frees slot when merged or when user pivots to fix-first-then-merge flow.
 ```
