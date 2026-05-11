@@ -33,8 +33,43 @@ import {
 import { resolveClaudeDesiredSkillNames } from "./skills.js";
 import { isBedrockModelId } from "./models.js";
 import { prepareClaudePromptBundle } from "./prompt-cache.js";
+import { buildJobWorkdir, type JobWorkdir } from "./workdir.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Hosted execution flag — when set, multi-tenant safety hardening kicks in:
+ *   - per-job HOME / CLAUDE_CONFIG_DIR / CLAUDE_PROMPT_CACHE_DIR
+ *   - explicit ANTHROPIC_API_KEY resolution from the per-instance vault
+ *     (no fallback to inherited process.env)
+ *   - --dangerously-skip-permissions defaults to false
+ *   - workdir cleanup on every exit path
+ *
+ * Default off — local-dev path (single-tenant laptop runner) keeps the
+ * legacy ergonomics including dangerouslySkipPermissions=true.
+ */
+function isHostedAgentsEnabled(): boolean {
+  return process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
+}
+
+/**
+ * Resolver shape supplied via `config.apiKeyResolver` for hosted runs. Phase
+ * 1B (PR #151 sibling) refactors `instance-api-keys.ts` to expose a
+ * `getDecrypted(family, mode)` function with this signature; the server's
+ * adapter registry wiring will set `config.apiKeyResolver` to the bound
+ * function before dispatching execute(). Defining the type alias here means
+ * this branch typechecks before Phase 1B lands; once both PRs merge the
+ * server registry can pass the live resolver without further edits here.
+ *
+ * TODO(s8-p01-phase1b): when Phase 1B exposes `getDecrypted` on the server
+ * service, swap to a direct typed import from a shared package boundary
+ * (likely a small `@founderos/key-resolver` interface package, since the
+ * adapter must not depend on `server/`).
+ */
+type AnthropicKeyResolver = (
+  family: "anthropic",
+  executionMode: "api",
+) => Promise<string | null>;
 
 interface ClaudeExecutionInput {
   runId: string;
@@ -56,6 +91,11 @@ interface ClaudeRuntimeConfig {
   timeoutSec: number;
   graceSec: number;
   extraArgs: string[];
+  /**
+   * Allocated only for hosted multi-tenant runs (FOUNDEROS_HOSTED_AGENTS_ENABLED=1).
+   * Caller is responsible for cleaning up `workdir.root` after execute() returns.
+   */
+  workdir: JobWorkdir | null;
 }
 
 function buildLoginResult(input: {
@@ -92,6 +132,24 @@ function resolveClaudeBillingType(env: Record<string, string>): "api" | "subscri
 
 async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<ClaudeRuntimeConfig> {
   const { runId, agent, config, context, authToken } = input;
+  const hosted = isHostedAgentsEnabled();
+
+  // Per-job workdir (C1 + C5 hardening). Allocated ONLY when hosted-agents
+  // mode is on so single-tenant laptop runs keep their existing HOME and
+  // session caches. The workdir's `cwd` is used as the spawn cwd only when
+  // no workspace cwd is configured below.
+  let workdir: JobWorkdir | null = null;
+  if (hosted) {
+    const companyIdValue = typeof agent.companyId === "string" ? agent.companyId.trim() : "";
+    const safeCompanyId = companyIdValue.length > 0 ? companyIdValue : "unknown-company";
+    const safeRunId = runId.trim().length > 0 ? runId.trim() : "unknown-run";
+    const rootDirOverride = asString(config.workdirRoot, "").trim();
+    workdir = await buildJobWorkdir({
+      companyId: safeCompanyId,
+      runId: safeRunId,
+      ...(rootDirOverride.length > 0 ? { rootDir: rootDirOverride } : {}),
+    });
+  }
 
   const command = asString(config.command, "claude");
   const workspaceContext = parseObject(context.founderosWorkspace);
@@ -123,7 +181,11 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   const configuredCwd = asString(config.cwd, "");
   const useConfiguredInsteadOfAgentHome = workspaceSource === "agent_home" && configuredCwd.length > 0;
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
-  const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
+  // Hosted runs: prefer the per-job workdir.cwd over process.cwd() so the
+  // claude CLI's default file scope can't escape into the server's container
+  // FS when no workspace cwd is configured.
+  const fallbackCwd = workdir ? workdir.cwd : process.cwd();
+  const cwd = effectiveWorkspaceCwd || configuredCwd || fallbackCwd;
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
 
   const envConfig = parseObject(config.env);
@@ -226,12 +288,25 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     env.FOUNDEROS_API_KEY = authToken;
   }
 
+  // Hosted multi-tenant overrides — applied AFTER envConfig so the user's
+  // per-agent env block cannot accidentally re-leak the parent process's
+  // shared HOME. These are the C1 isolation guarantees:
+  //   HOME                     -> per-job dir; claude CLI session state
+  //   CLAUDE_CONFIG_DIR        -> per-job ~/.claude; auth tokens, settings
+  //   CLAUDE_PROMPT_CACHE_DIR  -> per-job prompt cache; cross-tenant cache
+  //                               poisoning surface
+  if (workdir) {
+    env.HOME = workdir.home;
+    env.CLAUDE_CONFIG_DIR = path.join(workdir.home, ".claude");
+    env.CLAUDE_PROMPT_CACHE_DIR = workdir.cache;
+  }
+
   const runtimeEnv = ensurePathInEnv({ ...process.env, ...env });
   await ensureCommandResolvable(command, cwd, runtimeEnv);
   const resolvedCommand = await resolveCommandForLogs(command, cwd, runtimeEnv);
   const loggedEnv = buildInvocationEnvForLogs(env, {
     runtimeEnv,
-    includeRuntimeKeys: ["HOME", "CLAUDE_CONFIG_DIR"],
+    includeRuntimeKeys: ["HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_PROMPT_CACHE_DIR"],
     resolvedCommand,
   });
 
@@ -255,6 +330,7 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     timeoutSec,
     graceSec,
     extraArgs,
+    workdir,
   };
 }
 
@@ -275,24 +351,33 @@ export async function runClaudeLogin(input: {
     authToken: input.authToken,
   });
 
-  const proc = await runChildProcess(input.runId, runtime.command, ["login"], {
-    cwd: runtime.cwd,
-    env: runtime.env,
-    timeoutSec: runtime.timeoutSec,
-    graceSec: runtime.graceSec,
-    onLog,
-  });
+  try {
+    const proc = await runChildProcess(input.runId, runtime.command, ["login"], {
+      cwd: runtime.cwd,
+      env: runtime.env,
+      timeoutSec: runtime.timeoutSec,
+      graceSec: runtime.graceSec,
+      onLog,
+    });
 
-  const loginMeta = detectClaudeLoginRequired({
-    parsed: null,
-    stdout: proc.stdout,
-    stderr: proc.stderr,
-  });
+    const loginMeta = detectClaudeLoginRequired({
+      parsed: null,
+      stdout: proc.stdout,
+      stderr: proc.stderr,
+    });
 
-  return buildLoginResult({
-    proc,
-    loginUrl: loginMeta.loginUrl,
-  });
+    return buildLoginResult({
+      proc,
+      loginUrl: loginMeta.loginUrl,
+    });
+  } finally {
+    // C5 cleanup — best-effort; orphans handled by Phase 2A boot sweep.
+    if (runtime.workdir) {
+      await fs
+        .rm(runtime.workdir.root, { recursive: true, force: true })
+        .catch(() => {});
+    }
+  }
 }
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
@@ -306,7 +391,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const effort = asString(config.effort, "");
   const chrome = asBoolean(config.chrome, false);
   const maxTurns = asNumber(config.maxTurnsPerRun, 0);
-  const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, true);
+  // C7 — hosted multi-tenant runs default to FALSE for permissions skip;
+  // single-tenant local-dev runs preserve the legacy TRUE default. Explicit
+  // `config.dangerouslySkipPermissions` always wins (e.g., a debugging
+  // override) regardless of mode.
+  const dangerouslySkipPermissions = asBoolean(
+    config.dangerouslySkipPermissions,
+    !isHostedAgentsEnabled(),
+  );
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
   const instructionsFileDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
   const runtimeConfig = await buildClaudeRuntimeConfig({
@@ -328,7 +420,42 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     timeoutSec,
     graceSec,
     extraArgs,
+    workdir,
   } = runtimeConfig;
+
+  // C2 — hosted runs MUST resolve the Anthropic API key from the per-instance
+  // vault (Phase 1B's getDecrypted). Caller wires the resolver via
+  // `config.apiKeyResolver` at the registry layer. We never fall back to the
+  // parent process.env because Phase 1B drops the global env-mutation surface.
+  // Fail-fast with a structured error rather than spawning a doomed subprocess.
+  if (workdir) {
+    const apiKeyResolver = config.apiKeyResolver as AnthropicKeyResolver | undefined;
+    let resolvedKey: string | null = null;
+    if (typeof apiKeyResolver === "function") {
+      try {
+        resolvedKey = await apiKeyResolver("anthropic", "api");
+      } catch {
+        resolvedKey = null;
+      }
+    }
+    if (!resolvedKey || resolvedKey.trim().length === 0) {
+      // Best-effort cleanup — the workdir was created in buildClaudeRuntimeConfig
+      // but no subprocess was spawned, so we discard it before the early return.
+      await fs.rm(workdir.root, { recursive: true, force: true }).catch(() => {});
+      return {
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        errorCode: "no_api_key",
+        errorMessage: "Anthropic API key not configured for this instance",
+      };
+    }
+    // Inject the decrypted value into the spawn env ONLY — never the parent
+    // process.env. The override applies AFTER user envConfig so that buggy
+    // per-agent config can't shadow it.
+    env.ANTHROPIC_API_KEY = resolvedKey;
+  }
+
   const effectiveEnv = Object.fromEntries(
     Object.entries({ ...process.env, ...env }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -584,6 +711,21 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : null;
     const clearSessionForMaxTurns = isClaudeMaxTurnsResult(parsed);
 
+    // Council R1 Gemini P3 — claude's stream-json sometimes emits no
+    // `result.cost_usd` field on errored runs; treat any access failure as
+    // null instead of throwing or coercing undefined to 0.
+    let costUsd: number | null = null;
+    try {
+      if (typeof parsedStream.costUsd === "number" && Number.isFinite(parsedStream.costUsd)) {
+        costUsd = parsedStream.costUsd;
+      } else {
+        const fromTotal = asNumber(parsed.total_cost_usd, Number.NaN);
+        costUsd = Number.isFinite(fromTotal) ? fromTotal : null;
+      }
+    } catch {
+      costUsd = null;
+    }
+
     return {
       exitCode: proc.exitCode,
       signal: proc.signal,
@@ -602,28 +744,39 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
       model: parsedStream.model || asString(parsed.model, model),
       billingType,
-      costUsd: parsedStream.costUsd ?? asNumber(parsed.total_cost_usd, 0),
+      costUsd,
       resultJson: parsed,
       summary: parsedStream.summary || asString(parsed.result, ""),
       clearSession: clearSessionForMaxTurns || Boolean(opts.clearSessionOnMissingSession && !resolvedSessionId),
     };
   };
 
-  const initial = await runAttempt(sessionId ?? null);
-  if (
-    sessionId &&
-    !initial.proc.timedOut &&
-    (initial.proc.exitCode ?? 0) !== 0 &&
-    initial.parsed &&
-    isClaudeUnknownSessionError(initial.parsed)
-  ) {
-    await onLog(
-      "stdout",
-      `[founderos] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
-    );
-    const retry = await runAttempt(null);
-    return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
-  }
+  // C5 — wrap the entire spawn lifecycle in try/finally so the per-job
+  // workdir is always cleaned up on the way out, regardless of subprocess
+  // exit status, errors during result parsing, or the resume-fallback retry
+  // path. Best-effort: failures during cleanup are swallowed (orphans are
+  // collected by Phase 2A's boot-time sweep).
+  try {
+    const initial = await runAttempt(sessionId ?? null);
+    if (
+      sessionId &&
+      !initial.proc.timedOut &&
+      (initial.proc.exitCode ?? 0) !== 0 &&
+      initial.parsed &&
+      isClaudeUnknownSessionError(initial.parsed)
+    ) {
+      await onLog(
+        "stdout",
+        `[founderos] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      );
+      const retry = await runAttempt(null);
+      return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
+    }
 
-  return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
+    return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
+  } finally {
+    if (workdir) {
+      await fs.rm(workdir.root, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 }

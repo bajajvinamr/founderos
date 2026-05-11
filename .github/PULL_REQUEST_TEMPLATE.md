@@ -1,76 +1,72 @@
-## What Changed
+<!-- Template source: docs/code-review-practices.md §3 — keep aligned -->
+<!-- AI sample-N reviewer-agent posts a separate review event regardless of human checklist completion -->
 
-<!-- 1-2 sentences: What was modified and why -->
+## Summary
 
-## Why
+<!-- One-paragraph "what + why" of this PR. Combine context (the existing problem or feature gap) with the change (what this PR does). -->
 
-<!-- Motivation: What problem does this solve? Why was it needed? -->
+## Tier classification
 
-## How to Test
+- [ ] **Tier 1** — copy/label/test/doc-only; auto-merge eligible per `.planning/autoloop/PROTOCOL.md` §"Path-based tier rules"
+- [ ] **Tier 2** — new surface (services, routes, pages, top-level components); user-merge required
+- [ ] **Tier 3** — schema/migration/auth/billing/nav/cross-service contract; council-required, never auto-dispatched
 
-<!-- Commands or step-by-step manual verification. Include expected results. -->
+**Why this tier:** <!-- 1-sentence justification. If your diff touches any Tier-3 path (see PROTOCOL.md), this is Tier 3 regardless of size. -->
 
-## Routes Changed
+## Surface affected
 
-<!-- List all NEW or MODIFIED API routes and UI paths. Format:
-- POST /api/companies/:id/handoffs (new endpoint)
-- GET /api/health/deep (new endpoint, returns deep health check)
-- PATCH /decisions/:id (modified response shape)
-- /departments (modified path prefix)
-Leave blank if no route changes. -->
+<!-- Bullet list of files/services/routes/UI surfaces touched. -->
 
-## Migrations
+### Routes changed (if applicable)
 
-<!-- List all new migration files and safety status. Format:
-- 20260421_add_audit_logs.sql (safe to rollback)
-- 20260421_rename_column.sql (ONE-WAY — cannot rollback)
-Leave blank if no migrations. -->
+<!-- e.g., GET /api/foo, POST /api/foo/:id, new route mounted on instance/settings/* -->
 
-## Breaking Changes
+### Migrations (if applicable)
 
-<!-- List any breaking changes to APIs, env vars, or response shapes. Format:
-- REMOVED env var: OLD_VAR (use NEW_VAR instead)
-- CHANGED response shape: /api/handoffs now returns { success, data { id, title } } instead of { id, title }
-Leave blank if none. -->
+<!-- Schema changes. List migration files. Note any non-additive operations (DROP, ALTER TYPE, etc.). -->
 
-## Test Evidence
+### Breaking changes (if applicable)
 
-<!-- Provide links to test results, screenshots of E2E tests, or Loom recordings. Format:
-- Unit tests: links to test files in this PR + test output
-- E2E tests: link to Playwright run or screenshot
-- Manual QA: Loom video or screenshot of clicking through the change
-Must include at least one piece of evidence. Explain if none available. -->
+<!-- Anything that changes a public contract: API shape, env var name, exported type, plugin interface. -->
 
-## Linked PRD
+### Screenshots (UI changes only)
 
-<!-- REQUIRED for new pages, endpoints, or material workflow changes. Format:
-- PRD-NNN (file: docs/prds/PRD-NNN-*.md)
-For bug fixes, copy, style, refactor, or chore: "No PRD — <reason>" -->
+<!-- Attach 375px mobile + 1440px desktop screenshots for any visible UI change. -->
 
-## Linked ADR
+## Test plan
 
-<!-- Optional: link to Architecture Decision Record if this PR implements an ADR.
-Format: docs/adr/023-feature-name.md -->
+<!-- How was this verified? Include actual `pnpm` commands run, what assertions matter, what coverage looks like. -->
 
-## Screenshots
+```bash
+# Example
+pnpm --filter @founderos/ui typecheck
+pnpm --filter @founderos/ui test -- AiConnections
+pnpm --filter @founderos/server test -- yesterday-summary
+```
 
-<!-- For UI-only changes. Before and after if applicable. -->
+## Review checklist
 
-## Risk
+- [ ] **Founder-language copy** — no engineer jargon in UI strings (per P2 phase; consult `packages/shared/src/display-dictionary.ts`)
+- [ ] **Accessibility** — keyboard nav, aria-labels, disabled-state visual affordance (`opacity-60 cursor-not-allowed`), color contrast
+- [ ] **Error handling** — fail loudly in dev, gracefully in prod; no silent catches; surface `requestId` in user-facing error messages
+- [ ] **Secret management** — env vars only; no hardcoded keys or tokens; startup validation for any new required env
+- [ ] **Tier-3 path check** — `git diff --name-only main...HEAD` does NOT touch forbidden surfaces (see PROTOCOL.md §"Path-based tier rules")
+- [ ] **Test coverage** — real assertions for new code paths; mocks scoped per-test to avoid vitest cross-worker race (PROTOCOL.md flake taxonomy #11); use `vi.resetModules()` in `beforeEach` for mock-heavy suites
+- [ ] **Single-origin guarantee** — does NOT re-introduce Vercel-split or cross-origin auth (per CLAUDE.md 2026-05-03 council)
 
-<!-- Low / Medium / High — describe blast radius and what could break -->
+## Rollback plan
 
-## Rollback Plan
+<!-- How would we undo this if it breaks prod?
+- Additive code: "revert this PR" is sufficient
+- Schema changes: link the down-migration or document the manual reversal SQL
+- Feature-flagged changes: name the kill-switch (e.g., `VITE_FOUNDEROS_FEATURE_X=0`)
+- Stripe / billing / one-way doors: explicit step-by-step procedure
+-->
 
-<!-- How to safely revert this change if needed. Include manual steps if migrations require reversal. -->
+## Related
 
-## Checklist
-
-- [ ] Tests pass locally (`pnpm test:run`)
-- [ ] Typecheck passes (`pnpm -r typecheck`)
-- [ ] No console errors in browser/logs
-- [ ] Changes are documented (code comments + relevant docs/)
-- [ ] All routes/migrations/breaking changes listed above
-- [ ] Test evidence provided (unit/E2E/manual QA)
-- [ ] Conventional Commit message used in commit (`feat:`, `fix:`, etc.)
-- [ ] No new hardcoded secrets or env vars in code
+- Backlog: <!-- BL-NNN -->
+- SIGNOFFS: <!-- SIG-NNN (if Tier-2 review queue, Tier-3 council, or scope-expansion) -->
+- Linked PRD: <!-- docs/prds/<file>.md -->
+- Linked ADR: <!-- docs/adr/<file>.md -->
+- Sister PR / dependency: <!-- #NNN -->

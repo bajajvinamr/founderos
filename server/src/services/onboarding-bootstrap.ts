@@ -22,7 +22,11 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { integrations, workspaceDepartments } from "@founderos/db";
-import type { AgentRole, OnboardingAdapterChoice } from "@founderos/shared";
+import type {
+  AgentAdapterType,
+  AgentRole,
+  OnboardingAdapterChoice,
+} from "@founderos/shared";
 import {
   accessService,
   agentService,
@@ -144,17 +148,25 @@ function clampAutonomy(raw: number): number {
   return rounded;
 }
 
-function buildAgentAdapterConfig(anthropicSecretId: string | null) {
-  if (!anthropicSecretId) return { env: {} };
-  return {
-    env: {
-      ANTHROPIC_API_KEY: {
-        type: "secret_ref" as const,
-        secretId: anthropicSecretId,
-        version: "latest" as const,
-      },
-    },
+function buildAgentAdapterConfig(
+  anthropicSecretId: string | null,
+  options?: { transport?: "local_runner" },
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    env: anthropicSecretId
+      ? {
+          ANTHROPIC_API_KEY: {
+            type: "secret_ref" as const,
+            secretId: anthropicSecretId,
+            version: "latest" as const,
+          },
+        }
+      : {},
   };
+  if (options?.transport) {
+    config.transport = options.transport;
+  }
+  return config;
 }
 
 /**
@@ -285,26 +297,70 @@ export async function bootstrapCompanyOnboarding(
       .catch(() => null);
 
     // 5. Provision four agents with charters.
-    const adapterConfig = buildAgentAdapterConfig(secret?.id ?? null);
-    // BYO-107 (ADR-011) — flag-aware adapter selection.
+    // S8 P0.1 Phase 1D — hosted-aware tri-branch adapter resolution.
     //
-    // Pre-flag: hardcoded "claude_local" for ALL choices. The 2026-04 P1 fix
-    //   intentionally collapsed "anthropic_api" → "claude_local" because no
-    //   "claude_api" adapter is registered (would produce broken agents). On
-    //   Fly this still doesn't actually execute (no claude CLI in container),
-    //   but at least the row shape is valid and local-dev installs work.
+    // Three precedence levels, evaluated top-down:
     //
-    // Post-flag (FOUNDEROS_BYO_RUNNER_ENABLED=1): map ALL choices to
-    //   "byo_runner". The cloud enqueues runner_jobs rows and the founder's
-    //   local @founderos/runner picks them up — closing the 7-month-old
-    //   "agents can't actually run on hosted Fly" gap.
+    //   1. FOUNDEROS_HOSTED_AGENTS_ENABLED=1 + adapterChoice='anthropic_api'
+    //      → 'claude_local' (server-side hardened path, Phase 1C handler
+    //      reads the key from instance_api_keys and dispatches via the
+    //      Anthropic SDK in-process — no CLI, no laptop runner). This is
+    //      the production hosted path: the founder pastes a key, the
+    //      cloud executes their agents, no install required.
     //
-    //   `anthropic_api` keeps storing the user's key as a company secret
-    //   above; the runner can read it later if a flow needs direct API calls,
-    //   but the agent execution itself is via the local claude CLI under the
-    //   founder's authed session (which they pay for via Pro).
+    //   2. FOUNDEROS_BYO_RUNNER_ENABLED=1 (and hosted is OFF)
+    //      → preserve the user's chosen adapter type (codex_local,
+    //      gemini_local, claude_local, etc.) and mark the agent with
+    //      `transport: "local_runner"` in adapter_config. The cloud
+    //      enqueues `runner_jobs` rows; the founder's local
+    //      `@founderos/runner` picks them up and shells out to the
+    //      appropriate local CLI. This is QW1 of the multi-provider sprint:
+    //      do NOT collapse to 'byo_runner' — the runner needs the concrete
+    //      adapter type to dispatch to the right CLI at claim time.
+    //
+    //   3. Otherwise (both flags OFF — dev / local default)
+    //      → mapOnboardingChoiceToAdapter(adapterChoice). Live providers
+    //      land at their *_local adapter; google_api throws a clear
+    //      "not yet implemented" error; skip + claude_local + anthropic_api
+    //      collapse to 'claude_local' for dev convenience. This branch
+    //      preserves PR #148 behaviour for local dev installs where the
+    //      operator runs the CLI on the same box as the server.
+    //
+    // The `anthropic_api` choice always stores the user's key as a company
+    // secret upstream (step 2). Whether the agent runtime *uses* that
+    // secret depends on which branch fires:
+    //   - Hosted: server-side handler reads from instance_api_keys (the
+    //     onboarding route also writes there — see routes/onboarding.ts).
+    //   - BYO: the runner reads from the company secret if a flow needs
+    //     direct API calls; agent execution itself uses the local CLI's
+    //     authed session.
+    //   - Dev/local: the claude_local adapter reads ANTHROPIC_API_KEY from
+    //     env (hydrated from instance_api_keys at boot).
     const { isByoRunnerEnabled } = await import("../lib/byo-runner-flag.js");
-    const adapterType = isByoRunnerEnabled() ? "byo_runner" : "claude_local";
+    const { mapOnboardingChoiceToAdapter } = await import(
+      "./adapter-resolver.js"
+    );
+    const HOSTED_ENABLED =
+      process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
+    let adapterType: AgentAdapterType;
+    let byoTransport = false;
+    if (HOSTED_ENABLED && input.adapterChoice === "anthropic_api") {
+      adapterType = "claude_local";
+    } else if (isByoRunnerEnabled()) {
+      // QW1: preserve provider, mark transport so the runner knows to claim
+      // this job and dispatch to the right CLI. Do NOT collapse to byo_runner.
+      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
+      byoTransport = true;
+    } else {
+      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
+    }
+    // Build adapter config after resolution so byoTransport is available.
+    // When BYO runner is active, add transport: "local_runner" so the runner
+    // package knows to claim this agent's jobs (QW1 multi-provider sprint).
+    const adapterConfig = buildAgentAdapterConfig(
+      secret?.id ?? null,
+      byoTransport ? { transport: "local_runner" } : undefined,
+    );
     const agentIdsBySlot: Record<AgentSlot, string> = {
       cos: "",
       growth: "",
