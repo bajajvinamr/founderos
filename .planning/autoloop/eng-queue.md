@@ -65,6 +65,18 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 - **last_update**: 2026-05-11T10:08:00Z
 - **notes**: Unblocked by #171 (BL-021) merge. New widgets fill the space cleared on Dashboard.tsx. Prompt steered to Option A (PURE Tier-1): UI widgets + static Quick Wins suggestions + TODO note for the Haiku suggester service (which is BL-022 P8.b, separate Tier-2 dispatch later). Touches: Dashboard.tsx + new component files under ui/src/components/dashboard/ + new test files. Auto-merge enrolled after diff-validator passes.
 - **Return ~9min** ✅: PR #173 opened, auto-merge enrolled SQUASH at 10:32:59Z. 6 files / +679 / -0 (pure additive). 622 total tests pass (28 new). Top Blockers consolidates approvals + agent errors as the two "blocked on founder" surfaces. Quick Wins: 6 integration-tagged suggestions + 3 fallbacks, prioritized by `status: "connected"` integrations. No worktree leak (4th consecutive). Branch named correctly first-try (worktree-leak harness behavior continues improving).
+- **Cycle 11 rebase**: #173 BEHIND after #172 merged → `gh pr update-branch 173` fired ~10:38Z; fresh CI rerunning.
+
+## [EQ-006] P4.a — viewMode state + Settings toggle  (from BL-012)
+
+- **branch**: feat/bl-012-viewmode-infrastructure (or agent-self-named)
+- **agent**: dispatch-cycle-11-eq-006 (general-purpose, isolation=worktree, background) — id a28d2743442cc9a5d
+- **dispatched_at**: 2026-05-11T10:38:00Z (2 min after #172 merge unblocked BL-012)
+- **pr**: null
+- **tier_declared**: 1
+- **status**: dispatched
+- **last_update**: 2026-05-11T10:38:00Z
+- **notes**: Unblocked by #172 (BL-002) merge. Adds write-side of viewMode to complement #169's read-side useDisplay hook. Files: use-display.ts setter, RunTranscriptView.tsx data-view-mode attribute (BL-013 hook-point), Settings toggle (NEW page if needed; STOP if route-registration requires Tier-3 nav-structure edits). NO transcript rendering changes — that's BL-013 (P4.b).
 
 ## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)  ✅ PR OPENED + auto-merge enrolled
 
