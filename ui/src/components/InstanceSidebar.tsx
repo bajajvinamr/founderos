@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Clock3, Cpu, FlaskConical, Key, Puzzle, Settings, SlidersHorizontal } from "lucide-react";
+import { Clock3, Cpu, FlaskConical, Key, Plug, Puzzle, Settings, SlidersHorizontal } from "lucide-react";
 import { NavLink } from "@/lib/router";
 import { pluginsApi } from "@/api/plugins";
 import { queryKeys } from "@/lib/queryKeys";
@@ -25,6 +25,7 @@ export function InstanceSidebar() {
         <div className="flex flex-col gap-0.5">
           <SidebarNavItem to="/instance/settings/general" label="General" icon={SlidersHorizontal} end />
           <SidebarNavItem to="/instance/settings/providers" label="AI Providers" icon={Key} end />
+          <SidebarNavItem to="/instance/settings/ai-connections" label="AI Connections" icon={Plug} end />
           <SidebarNavItem to="/instance/settings/heartbeats" label="Shift schedule" icon={Clock3} end />
           <SidebarNavItem to="/instance/settings/experimental" label="Experimental" icon={FlaskConical} />
           <SidebarNavItem to="/instance/settings/plugins" label="Plugins" icon={Puzzle} />
