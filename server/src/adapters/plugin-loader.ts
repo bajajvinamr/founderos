@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ServerAdapterModule } from "./types.js";
 import { logger } from "../middleware/logger.js";
+import { assertResolvedInside } from "../lib/path-guard.js";
 
 import {
   listAdapterPlugins,
@@ -59,9 +60,17 @@ export function getOrExtractUiParserSource(adapterType: string): string | undefi
 // ---------------------------------------------------------------------------
 
 function resolvePackageDir(record: Pick<AdapterPluginRecord, "localPath" | "packageName">): string {
-  return record.localPath
-    ? path.resolve(record.localPath)
-    : path.resolve(getAdapterPluginsDir(), "node_modules", record.packageName);
+  if (record.localPath) {
+    // Local-path adapters are intentionally allowed to live anywhere on disk
+    // (the operator chose the path explicitly). No base dir to anchor to.
+    return path.resolve(record.localPath);
+  }
+  // npm-installed adapters MUST resolve under <pluginsDir>/node_modules so a
+  // crafted `packageName` like "../../etc" cannot escape the managed tree.
+  return assertResolvedInside(
+    path.resolve(getAdapterPluginsDir(), "node_modules"),
+    record.packageName,
+  );
 }
 
 function resolvePackageEntryPoint(packageDir: string): string {
@@ -169,10 +178,15 @@ export async function loadExternalAdapterPackage(
 ): Promise<ServerAdapterModule> {
   const packageDir = localPath
     ? path.resolve(localPath)
-    : path.resolve(getAdapterPluginsDir(), "node_modules", packageName);
+    : assertResolvedInside(
+      path.resolve(getAdapterPluginsDir(), "node_modules"),
+      packageName,
+    );
 
   const entryPoint = resolvePackageEntryPoint(packageDir);
-  const modulePath = path.resolve(packageDir, entryPoint);
+  // entryPoint comes from the package's own package.json — guard so a crafted
+  // `main` / `exports["."]` cannot escape the package directory.
+  const modulePath = assertResolvedInside(packageDir, entryPoint);
   const uiParserSource = extractUiParserSource(packageDir, packageName);
 
   logger.info({ packageName, packageDir, entryPoint, modulePath, hasUiParser: !!uiParserSource }, "Loading external adapter package");
@@ -211,7 +225,7 @@ export async function reloadExternalAdapter(
 
   const packageDir = resolvePackageDir(record);
   const entryPoint = resolvePackageEntryPoint(packageDir);
-  const modulePath = path.resolve(packageDir, entryPoint);
+  const modulePath = assertResolvedInside(packageDir, entryPoint);
   const fileUrl = `file://${modulePath}`;
 
   // Bust ESM module cache so re-import loads fresh code from disk.
