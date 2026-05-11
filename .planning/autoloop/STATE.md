@@ -5,12 +5,13 @@
 ## Lifecycle
 
 - **status**: `active`
-- **activated_at**: 2026-05-11T01:08:00Z
-- **stop_at**: 2026-05-11T09:08:00Z
+- **activated_at**: 2026-05-11T12:30:00Z  <!-- Activation 2: user explicitly relaunched after reviewing 7-ship summary and merging #176 + #178 -->
+- **stop_at**: 2026-05-11T20:30:00Z
 - **stopped_at**: null
 - **halt_reason**: null
-- **activation_mode**: `user-override`
-- **activation_authority**: user message "Converge into an 8 hour autonomous loop with all permissions granted" (2026-05-11T01:05Z)
+- **activation_mode**: `user-explicit-relaunch`
+- **activation_authority**: user message "Go ahead merge and launch a new autonomous loop like the last one" (2026-05-11T~12:30Z) — supersedes Activation 1 (01:08Z) which had implicitly extended past 09:08Z stop_at on "keep going" momentum
+- **activation_1_summary**: 7 ships (#170-175 + #177) over ~11h; P2 phase complete; #176 + #178 user-approved here and now landing; 10 SIGNOFFS pending (SIG-008/009 marked auto-merge-enrolled)
 
 ## Permissions Posture (this run)
 
@@ -28,24 +29,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 14
-- **last_cycle_at**: 2026-05-11T12:24:00Z
-- **next_wake_at**: 2026-05-11T13:24:00Z  <!-- +3600s — extended wait: only user-merge events can advance state; check hourly instead of 25-min cycles -->
+- **cycle**: 15
+- **last_cycle_at**: 2026-05-11T12:30:00Z
+- **next_wake_at**: 2026-05-11T12:42:00Z  <!-- +720s = 12min — tight wake to catch #176 + #178 auto-merge completion + dispatch BL-014 immediately -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-010 returned with PR #178 -->
+- **eng_dispatches_in_flight**: 0
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 close-rec + #176 (Tier-2 SIG-008) + #178 (Tier-2 SIG-009) -->
-- **open_prs_max**: 2  <!-- temporarily over by 1 (#163 is cascade, not autoloop-counted; both autoloop PRs are Tier-2 awaiting user) -->
-- **autoloop_prs_open**: 2  <!-- #176, #178 — both Tier-2 review queue -->
+- **open_prs**: 3  <!-- #163 close-rec + #176 (auto-merge ENROLLED post-rebase) + #178 (auto-merge ENROLLED post-rebase) -->
+- **open_prs_max**: 2
+- **autoloop_prs_open**: 2  <!-- #176, #178 — both auto-merge enrolled, will land on CI completion -->
 - **autoloop_prs_merged**: 7  <!-- #170, #171, #172, #173, #174, #175, #177 -->
 - **autoloop_dispatches_completed**: 10
 - **autoloop_dispatches_escalated**: 1
 - **autoloop_dispatches_shipped**: 7  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177 -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (Tier-2 SIG-008), EQ-010/#178 (Tier-2 SIG-009) -->
-- **autoloop_dispatches_active**: 0  <!-- HOLD — Tier-2 review queue holds capacity until user merges #176 or #178 -->
-- **avg_round_trip_minutes**: ~9.5  <!-- + EQ-010: 13.9 -->
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 + EQ-010/#178 — Tier-2 review queue cleared, both auto-merge enrolled -->
+- **autoloop_dispatches_active**: 0  <!-- BL-014 dispatch held pending #178 actual merge to avoid worktree-base drift -->
+- **avg_round_trip_minutes**: ~9.5
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -100,6 +101,7 @@
 | 13.1 | 12:02Z | **Stale-wake-fire no-op** — duplicate cycle-13 wake fired ~3min after cycle 13 closed with cycle-12-era anticipated state; documented for protocol retro; no new dispatch, no new wake scheduled |
 | 13.5 | 12:15Z | **#177 MERGED at 11:58:59Z** (7th autoloop ship, BL-005 P2.d Tile descriptions) — **P2 phase visible-copy sweep STRUCTURALLY COMPLETE**; **EQ-010 returned with PR #178** in 13.9min (BL-013 P4.b transcript founder-mode, 3 files +309/-11 all in ui/src/components/transcript/*, Tier-2 autoMergeRequest:null, SIG-009 logged P1 priority); EQ-010 surfaced 3 pre-existing test failures unrelated to PR scope (SIG-010 triage logged); worktree-leak invariant validated **6th consecutive time**; **HOLD on dispatch** — both autoloop_prs_open slots occupied by Tier-2 review queue (#176 + #178) |
 | 14 | 12:24Z | **Tier-2 review queue HOLD continues** — no user merges since cycle 13.5 (5min ago). Dep-chain audit: ZERO unblocked Tier-1 items remain (BL-014 needs #178, BL-018 needs BL-016 unstarted, BL-011 needs BL-010 chain). Only unblocked-but-Tier-2 candidate is BL-016 P5.a (no auto-merge, would push autoloop_prs_open to 3 over cap). **No dispatch**; extending wake interval to 60min (3600s) since only user-merge events can advance state. Wake-prompt's "BL-014 unblocks when #177 merged" assertion was structurally wrong (BL-014 deps BL-013/#178, not BL-005/#177). |
+| 15 | 12:30Z | **AUTOLOOP RELAUNCHED** — user reviewed 7-ship summary + Tier-2 review queue, executed merge on #176 + #178; both rebased + auto-merge SQUASH enrolled (will land on CI completion ~5-10min). New 8h timer: activated_at=12:30Z, stop_at=20:30Z. SIG-008 + SIG-009 marked auto-merge-enrolled (status will flip to merged at next wake). HOLD on BL-014 dispatch until #178 actually lands (worktree-base drift risk). Tight wake +720s to catch merges + dispatch. |
 
 ## Last Action Log
 
@@ -176,4 +178,9 @@
 14: 2026-05-11T12:24:30Z | ci-probe  | #176 OPEN MERGEABLE=UNKNOWN (Tier-2 SIG-008, no user merge yet); #178 OPEN MERGEABLE=MERGEABLE (Tier-2 SIG-009, no user merge yet); main HEAD confirms #177 at e62c0db
 14: 2026-05-11T12:24:45Z | dep-audit | full backlog dep-chain scan: ZERO unblocked Tier-1 items. Inventory: BL-014 (P4.c) needs #178; BL-018 (P5.c) needs BL-016 unstarted; BL-011 (P3.e) needs BL-010 chain blocked by BL-007 Tier-3. Only unblocked-but-Tier-2 candidate is BL-016 P5.a (would compound Tier-2 review queue).
 14: 2026-05-11T12:25:00Z | hold      | NO new dispatch this cycle. Only user-merge events can advance state. Extending wake interval to 3600s (60min) to reduce cache thrash for a state-bound queue.
+15: 2026-05-11T12:30:00Z | user-merge-cmd | user explicit: "Go ahead merge and launch a new autonomous loop like the last one" — informed approval after reading 7-ship + Tier-2 review summary
+15: 2026-05-11T12:30:30Z | rebase    | #178 + #176 onto post-#177 main (both were BEHIND); parallel update-branch (no file overlap so no merge-conflict risk)
+15: 2026-05-11T12:31:00Z | auto-merge-enroll | gh pr merge --auto --squash on #178 + #176 — SQUASH enrolled; will fire on CI completion (~5-10min for fresh post-rebase CI)
+15: 2026-05-11T12:31:00Z | activation | **AUTOLOOP RELAUNCH** — Activation 2; activated_at=12:30Z, stop_at=20:30Z (+8h); permissions posture unchanged (Tier-1 auto, Tier-2 open-PR, Tier-3 SIGNOFFS)
+15: 2026-05-11T12:31:30Z | hold      | BL-014 dispatch held: dep BL-013/#178 auto-merge-enrolled but not YET merged. Dispatching now would have agent's worktree base off main without BL-013 infrastructure → consume-target absent. Wake at +720s catches the merges + dispatches BL-014.
 ```
