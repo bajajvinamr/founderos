@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import type { TranscriptEntry } from "../../adapters";
 import { MarkdownBody } from "../MarkdownBody";
 import { cn, formatTokens } from "../../lib/utils";
+import { useDisplayMode } from "../../lib/use-display";
+import { summarizeTool } from "../../lib/summarize-tool";
 import {
   Check,
   ChevronDown,
@@ -47,6 +49,14 @@ type TranscriptBlock =
       ts: string;
       endTs?: string;
       name: string;
+      /**
+       * BL-014 (P4.c): the unhumanized adapter-emitted slug (e.g. `Bash`,
+       * `command_execution`, `read_file`). Preserved alongside the
+       * display-friendly `name` so `summarizeTool()` can route to the right
+       * founder-language summary in founder mode without re-parsing the
+       * humanized label.
+       */
+      rawName?: string;
       toolUseId?: string;
       input: unknown;
       result?: string;
@@ -81,6 +91,8 @@ type TranscriptBlock =
         ts: string;
         endTs?: string;
         name: string;
+        /** BL-014 (P4.c): raw adapter slug — see tool block notes above. */
+        rawName?: string;
         input: unknown;
         result?: string;
         isError?: boolean;
@@ -390,6 +402,7 @@ function groupToolBlocks(blocks: TranscriptBlock[]): TranscriptBlock[] {
         ts: block.ts,
         endTs: block.endTs,
         name: block.name,
+        rawName: block.rawName,
         input: block.input,
         result: block.result,
         isError: block.isError,
@@ -452,6 +465,10 @@ export function normalizeTranscript(entries: TranscriptEntry[], streaming: boole
         type: "tool",
         ts: entry.ts,
         name: displayToolName(entry.name, entry.input),
+        // BL-014 (P4.c): preserve the raw adapter slug for founder-mode
+        // summarization. `displayToolName` collapses every shell variant to
+        // "Executing command" which is too lossy for summarizeTool().
+        rawName: entry.name,
         toolUseId: entry.toolUseId ?? extractToolUseId(entry.input),
         input: entry.input,
         status: "running",
@@ -480,6 +497,7 @@ export function normalizeTranscript(entries: TranscriptEntry[], streaming: boole
           ts: entry.ts,
           endTs: entry.ts,
           name: entry.toolName ?? "tool",
+          rawName: entry.toolName,
           toolUseId: entry.toolUseId,
           input: null,
           result: entry.content,
@@ -1385,6 +1403,80 @@ function RawTranscriptView({
   );
 }
 
+/**
+ * BL-013 (P4.b) + BL-014 (P4.c): in founder mode the transcript hides three
+ * categories of engineer-only noise — chain-of-thought, the init model/session
+ * kick-off, and stderr output groups. Stderr is preserved on failed runs
+ * because the error log is a signal, not noise. Raw tool-use blocks (`tool`,
+ * `tool_group`, `command_group`) are NOT hidden here — they pass through and
+ * the consumer renders a founder-friendly one-liner via `FounderToolSummaryRow`
+ * in place of the raw card. This preserves "the agent is doing work right now"
+ * signal that pure hiding (P4.b) destroyed. Engineer mode is additive — every
+ * block type renders exactly as before #174.
+ *
+ * `viewMode === "engineer"` always returns true (show everything). For
+ * `viewMode === "founder"`, the gate consults `runFailed` for `stderr_group`
+ * and unconditionally hides the other categories.
+ */
+function shouldRenderBlockInFounderMode(
+  block: TranscriptBlock,
+  runFailed: boolean,
+): boolean {
+  // Hide chain-of-thought.
+  if (block.type === "thinking") return false;
+  // Hide the init kick-off event ("model X, session Y") but keep `result` and
+  // other event labels.
+  if (block.type === "event" && block.label === "init") return false;
+  // Stderr — hide unless the run failed (preserve failure-signal visibility).
+  if (block.type === "stderr_group" && !runFailed) return false;
+  return true;
+}
+
+/**
+ * BL-014 (P4.c): single-line founder-mode summary row for tool / tool_group /
+ * command_group blocks. Replaces the engineer-mode raw tool card with one
+ * founder-language line per invocation (emoji + present-progressive verb +
+ * ellipsis). Status pill ("running" / "completed" / "errored") is collapsed
+ * into a subtle dot indicator — founders want to know motion is happening,
+ * not the granular state machine.
+ *
+ * Input args are intentionally NOT surfaced — the existing P4.b test contract
+ * (`RAW_TOOL_INPUT_TOKEN` must not appear in founder mode) is preserved
+ * because `summarizeTool` ignores `input` in v1 voice.
+ */
+function FounderToolSummaryRow({
+  rawSlug,
+  input,
+  status,
+  density,
+}: {
+  rawSlug: string;
+  input: unknown;
+  status: "running" | "completed" | "error";
+  density: TranscriptDensity;
+}) {
+  const compact = density === "compact";
+  const text = summarizeTool(rawSlug, input);
+  const dotTone =
+    status === "error"
+      ? "bg-red-500"
+      : status === "running"
+        ? "bg-cyan-500 animate-pulse"
+        : "bg-emerald-500";
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 text-foreground/80",
+        compact ? "text-xs leading-5" : "text-sm leading-6",
+      )}
+      data-founder-tool-summary
+    >
+      <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", dotTone)} />
+      <span className="break-words">{text}</span>
+    </div>
+  );
+}
+
 export function RunTranscriptView({
   entries,
   mode = "nice",
@@ -1396,13 +1488,36 @@ export function RunTranscriptView({
   className,
   thinkingClassName,
 }: RunTranscriptViewProps) {
+  // BL-013 (P4.b): consume the founder/engineer viewMode hook landed by
+  // BL-012 (#174) and gate four engineer-only block categories on founder
+  // mode. Raw mode (`mode === "raw"`) is a separate engineer debug surface
+  // and bypasses the gate entirely.
+  const [viewMode] = useDisplayMode();
+
   const blocks = useMemo(() => normalizeTranscript(entries, streaming), [entries, streaming]);
-  const visibleBlocks = limit ? blocks.slice(-limit) : blocks;
+  // `runFailed` is the founder-mode stderr override — failure signal stays
+  // visible. Derived from the same entries list the blocks are built from so
+  // the two stay in lockstep.
+  const runFailed = useMemo(
+    () => entries.some((entry) => entry.kind === "result" && entry.isError),
+    [entries],
+  );
+  const renderableBlocks = useMemo(
+    () =>
+      viewMode === "founder"
+        ? blocks.filter((block) => shouldRenderBlockInFounderMode(block, runFailed))
+        : blocks,
+    [blocks, viewMode, runFailed],
+  );
+  const visibleBlocks = limit ? renderableBlocks.slice(-limit) : renderableBlocks;
   const visibleEntries = limit ? entries.slice(-limit) : entries;
 
   if (entries.length === 0) {
     return (
-      <div className={cn("rounded-2xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground", className)}>
+      <div
+        data-view-mode={viewMode}
+        className={cn("rounded-2xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground", className)}
+      >
         {emptyMessage}
       </div>
     );
@@ -1410,14 +1525,20 @@ export function RunTranscriptView({
 
   if (mode === "raw") {
     return (
-      <div className={className}>
+      <div data-view-mode={viewMode} className={className}>
         <RawTranscriptView entries={visibleEntries} density={density} />
       </div>
     );
   }
 
+  // BL-014 (P4.c): in founder mode, tool / tool_group / command_group blocks
+  // render as a one-line founder summary instead of the raw engineer card.
+  // For groups, emit one summary line per item so the founder sees motion
+  // proportional to actual tool-call volume.
+  const isFounder = viewMode === "founder";
+
   return (
-    <div className={cn("space-y-3", className)}>
+    <div data-view-mode={viewMode} className={cn("space-y-3", className)}>
       {visibleBlocks.map((block, index) => (
         <div
           key={`${block.type}-${block.ts}-${index}`}
@@ -1427,9 +1548,52 @@ export function RunTranscriptView({
           {block.type === "thinking" && (
             <TranscriptThinkingBlock block={block} density={density} className={thinkingClassName} />
           )}
-          {block.type === "tool" && <TranscriptToolCard block={block} density={density} />}
-          {block.type === "command_group" && <TranscriptCommandGroup block={block} density={density} />}
-          {block.type === "tool_group" && <TranscriptToolGroup block={block} density={density} />}
+          {block.type === "tool" && (
+            isFounder ? (
+              <FounderToolSummaryRow
+                rawSlug={block.rawName ?? block.name}
+                input={block.input}
+                status={block.status}
+                density={density}
+              />
+            ) : (
+              <TranscriptToolCard block={block} density={density} />
+            )
+          )}
+          {block.type === "command_group" && (
+            isFounder ? (
+              <div className="space-y-1">
+                {block.items.map((item, itemIndex) => (
+                  <FounderToolSummaryRow
+                    key={`${item.ts}-${itemIndex}`}
+                    rawSlug="command_execution"
+                    input={item.input}
+                    status={item.status}
+                    density={density}
+                  />
+                ))}
+              </div>
+            ) : (
+              <TranscriptCommandGroup block={block} density={density} />
+            )
+          )}
+          {block.type === "tool_group" && (
+            isFounder ? (
+              <div className="space-y-1">
+                {block.items.map((item, itemIndex) => (
+                  <FounderToolSummaryRow
+                    key={`${item.ts}-${itemIndex}`}
+                    rawSlug={item.rawName ?? item.name}
+                    input={item.input}
+                    status={item.status}
+                    density={density}
+                  />
+                ))}
+              </div>
+            ) : (
+              <TranscriptToolGroup block={block} density={density} />
+            )
+          )}
           {block.type === "diff_group" && <TranscriptDiffGroup block={block} density={density} />}
           {block.type === "stderr_group" && <TranscriptStderrGroup block={block} density={density} />}
           {block.type === "system_group" && <TranscriptSystemGroup block={block} density={density} />}
