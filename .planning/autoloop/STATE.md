@@ -34,18 +34,18 @@
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-005 just dispatched -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-005 returned with PR #173 -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 2  <!-- #163 cascade (SIG-007 close-recommended) + #172 (EQ-004 rebased) -->
-- **open_prs_max**: 2
-- **autoloop_prs_open**: 1  <!-- #172 -->
+- **open_prs**: 3  <!-- #163 (close-rec) + #172 + #173 -->
+- **open_prs_max**: 2  <!-- temporarily over; #163 close-rec, others both auto-merge enrolled -->
+- **autoloop_prs_open**: 2  <!-- #172, #173 -->
 - **autoloop_prs_merged**: 2  <!-- #170, #171 -->
-- **autoloop_dispatches_completed**: 4
+- **autoloop_dispatches_completed**: 5
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 2  <!-- EQ-002 #170, EQ-003 #171 -->
-- **autoloop_dispatches_in_pr**: 1  <!-- EQ-004/#172 -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-005 -->
-- **avg_round_trip_minutes**: ~7.5  <!-- EQ-002: 8.5, EQ-003: 8.5, EQ-004: 5.5 -->
+- **autoloop_dispatches_shipped**: 2
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-004/#172, EQ-005/#173 -->
+- **autoloop_dispatches_active**: 0
+- **avg_round_trip_minutes**: ~8  <!-- EQ-002: 8.5, EQ-003: 8.5, EQ-004: 5.5, EQ-005: ~9 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -66,11 +66,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 3   <!-- #170 BL-004, #171 BL-021, #172 BL-002 -->
-- **prs_merged**: 2   <!-- #170 BL-004, #171 BL-021 -->
+- **prs_opened**: 4   <!-- #170, #171, #172, #173 -->
+- **prs_merged**: 2   <!-- #170, #171 -->
 - **signoffs_pending**: 7   <!-- SIG-001..007 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 16   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 merged, EQ-004 in PR, EQ-005 dispatched -->
+- **backlog_items_remaining**: 15   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 merged, EQ-004 in PR, EQ-005 in PR -->
 
 ## Drift Detection State
 
@@ -114,4 +114,6 @@
 10: 2026-05-11T10:07:00Z | rebase    | #172 onto post-#171 main (was BEHIND)
 10: 2026-05-11T10:08:00Z | promote   | BL-023 → EQ-005 (Tier-1, P8.c Top Blockers + Quick Wins)
 10: 2026-05-11T10:08:00Z | dispatch  | EQ-005 to general-purpose agent (worktree, background) — id a051ee3032ed5ed78
+10.5: 2026-05-11T10:32:59Z | agent-return | EQ-005 PR #173 opened, auto-merge enrolled SQUASH, ~9min round-trip, 6 files / +679 / -0 pure-additive, no worktree leak (4th in a row)
+10.5: 2026-05-11T10:33:30Z | validate  | PR #173 diff-validator PASS — 6 files all in ui/src/components/dashboard/* + ui/src/pages/Dashboard.* — zero Tier-3 path touches
 ```

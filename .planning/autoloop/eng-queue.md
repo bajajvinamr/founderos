@@ -64,6 +64,7 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 - **status**: dispatched
 - **last_update**: 2026-05-11T10:08:00Z
 - **notes**: Unblocked by #171 (BL-021) merge. New widgets fill the space cleared on Dashboard.tsx. Prompt steered to Option A (PURE Tier-1): UI widgets + static Quick Wins suggestions + TODO note for the Haiku suggester service (which is BL-022 P8.b, separate Tier-2 dispatch later). Touches: Dashboard.tsx + new component files under ui/src/components/dashboard/ + new test files. Auto-merge enrolled after diff-validator passes.
+- **Return ~9min** ✅: PR #173 opened, auto-merge enrolled SQUASH at 10:32:59Z. 6 files / +679 / -0 (pure additive). 622 total tests pass (28 new). Top Blockers consolidates approvals + agent errors as the two "blocked on founder" surfaces. Quick Wins: 6 integration-tagged suggestions + 3 fallbacks, prioritized by `status: "connected"` integrations. No worktree leak (4th consecutive). Branch named correctly first-try (worktree-leak harness behavior continues improving).
 
 ## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)  ✅ PR OPENED + auto-merge enrolled
 
