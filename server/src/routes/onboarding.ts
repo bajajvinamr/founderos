@@ -295,6 +295,30 @@ export function onboardingRoutes(db: Db) {
               `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
             );
           }
+          // S8 P0.1 Phase 1D — when the validated key is for hosted-mode
+          // execution (server-side claude_local handler reads from
+          // instance_api_keys, NOT from company_secrets), persist it into
+          // the instance keystore as well. The bootstrap orchestrator still
+          // writes the company-secret copy below for BYO/dev paths; this
+          // additional write consolidates the credential into the surface
+          // the Phase 1C handler reads via `getDecryptedKey('anthropic',
+          // 'api')`. Failure here is fatal: without this row, the
+          // bootstrapped agents would fail at first heartbeat with
+          // `no_api_key` from the server-side handler.
+          //
+          // Done OUTSIDE the bootstrap transaction so the encryption call
+          // and DB write don't extend tx hold time on the network-bound
+          // validation path. Any failure here surfaces as an
+          // unprocessable/500 BEFORE the bootstrap runs — same fail-fast
+          // direction as the live key validator above.
+          const { instanceApiKeysService } = await import(
+            "../services/instance-api-keys.js"
+          );
+          await instanceApiKeysService(db).setKey({
+            family: "anthropic",
+            executionMode: "api",
+            value: input.anthropicKey,
+          });
         }
         // openai_api / google_api: live validation lands with the
         // respective S7.B tiles; for now the length check above is the

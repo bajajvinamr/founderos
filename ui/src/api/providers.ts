@@ -25,10 +25,10 @@ import { z } from "zod";
 
 /**
  * Provider identifier used by the wizard. We accept the legacy
- * `openai_api` alias for parity with the brief; the server contract
- * uses the bare provider name (`openai`), so we translate at the wire.
+ * `openai_api` / `google_api` aliases for parity with the brief; the
+ * server contract uses the bare provider name, so we translate at the wire.
  */
-export type ProviderId = "anthropic" | "openai_api";
+export type ProviderId = "anthropic" | "openai_api" | "google_api";
 
 /**
  * Discriminated result returned by `validateProviderKey()`. The shape is
@@ -92,8 +92,10 @@ const validateKeyErrorSchema = z.object({
 // ---------------------------------------------------------------------------
 
 /** Translate the wizard's provider id to the server's wire value. */
-function toServerProvider(provider: ProviderId): "anthropic" | "openai" {
-  return provider === "openai_api" ? "openai" : "anthropic";
+function toServerProvider(provider: ProviderId): "anthropic" | "openai" | "google" {
+  if (provider === "openai_api") return "openai";
+  if (provider === "google_api") return "google";
+  return "anthropic";
 }
 
 /**
