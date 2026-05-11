@@ -373,7 +373,7 @@ function ConversationDetail({
       </div>
 
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold">{data.title}</h1>
+        <h1 className="font-display text-xl tracking-tight">{data.title}</h1>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{formatRelativeDate(data.createdAt)}</span>
           {data.participants.length > 0 && (
@@ -490,7 +490,7 @@ export function Conversations() {
     <div className="p-6 max-w-4xl flex flex-col gap-6">
       <div className="flex items-center gap-2">
         <MessageSquare className="h-5 w-5" />
-        <h1 className="text-xl font-semibold">Conversations</h1>
+        <h1 className="font-display text-xl tracking-tight">Conversations</h1>
       </div>
       <p className="text-sm text-muted-foreground max-w-xl">
         Paste a customer call, interview, or thread. We extract the durable,
