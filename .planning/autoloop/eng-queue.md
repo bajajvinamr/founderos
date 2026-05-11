@@ -89,6 +89,19 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 - **status**: dispatched
 - **last_update**: 2026-05-11T11:02:00Z
 - **notes**: Unblocked by #172 (BL-002) merge — same dep as BL-012, just hadn't been scanned. Intra-phase parallel safety: BL-003 touches ProviderTile/ProviderChooser, no overlap with in-flight #173 (Dashboard widgets) or #174 (transcript + Settings). New display-dictionary keys for 6 provider labels + inline-SVG brand logos for Anthropic/Google/OpenAI families. Auto-merge enrolled after diff-validator passes.
+- **Return ~11.7min** ✅: PR #175 opened, auto-merge enrolled SQUASH. 4 files / +313 / -13. Branch renamed correctly. **Zero new DisplayDictionary keys** — 6 provider keys ALREADY existed from #169 P1. Agent wired them through ProviderOption.displayKey → useDisplay. 3 inline-SVG brand logos (Anthropic/Google/OpenAI) cover all 6 tiles via PROVIDER_BRAND_LOGOS family map. 606 ui tests + 10 display-dictionary tests + 27 existing routing tests (from #167) all pass. No worktree leak. **Confirms P1 upstream sizing was correct** — downstream P2 dispatch was additive-wiring only, not infrastructure-extension.
+- **Cycle 11.7 rebase**: #175 BEHIND after #173 merged → `gh pr update-branch 175` fired ~11:08Z.
+
+## [EQ-008] P8.b — "What we shipped yesterday" Haiku widget  (from BL-022)
+
+- **branch**: feat/bl-022-yesterday-widget-haiku (or agent-self-named)
+- **agent**: dispatch-cycle-11.7-eq-008 (general-purpose, isolation=worktree, background) — id a3960fd3433787f46
+- **dispatched_at**: 2026-05-11T11:09:00Z (4 min after #173 merge unlocked the full P8 stack)
+- **pr**: null
+- **tier_declared**: 2  <!-- Tier-2: adds server-side Haiku service + endpoint -->
+- **status**: dispatched
+- **last_update**: 2026-05-11T11:09:00Z
+- **notes**: Unblocked by #171 (BL-021) merge — was an intra-phase peer hiding alongside BL-022 once Dashboard had its widgets. Adds server-side Haiku service for daily summary + cached endpoint + UI widget. **NO auto-merge enrollment** per Tier-2 policy under "all permissions granted" — opens PR, user reviews at land time. Mixed Tier-1 (UI) + Tier-2 (server/services + routes); diff-validator will classify as Tier-2 overall.
 
 ## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)  ✅ PR OPENED + auto-merge enrolled
 

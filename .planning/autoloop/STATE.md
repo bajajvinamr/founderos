@@ -28,24 +28,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 11
-- **last_cycle_at**: 2026-05-11T10:38:00Z
-- **next_wake_at**: 2026-05-11T11:03:00Z  <!-- +1500s — EQ-006 dispatched, #173 rebased -->
+- **cycle**: 11.7
+- **last_cycle_at**: 2026-05-11T11:09:00Z
+- **next_wake_at**: 2026-05-11T11:34:00Z  <!-- +1500s — EQ-008 dispatched (Tier-2), #174 + #175 rebased -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-007 just dispatched; EQ-006 returned with PR #174 -->
+- **eng_dispatches_in_flight**: 1  <!-- EQ-008 just dispatched; EQ-007 returned with PR #175 -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 (close-rec) + #173 + #174 -->
-- **open_prs_max**: 2  <!-- temporarily over while cascade-flagged #163 sits open -->
-- **autoloop_prs_open**: 2  <!-- #173, #174 -->
-- **autoloop_prs_merged**: 3  <!-- #170, #171, #172 -->
-- **autoloop_dispatches_completed**: 6
+- **open_prs**: 3  <!-- #163 close-rec + #174 + #175 (both rebased) -->
+- **open_prs_max**: 2  <!-- temporarily over -->
+- **autoloop_prs_open**: 2  <!-- #174, #175 -->
+- **autoloop_prs_merged**: 4  <!-- #170, #171, #172, #173 -->
+- **autoloop_dispatches_completed**: 7
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 3
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-005/#173, EQ-006/#174 -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-007 -->
-- **avg_round_trip_minutes**: ~8  <!-- EQ-002: 8.5, EQ-003: 8.5, EQ-004: 5.5, EQ-005: ~9, EQ-006: ~7.8 -->
+- **autoloop_dispatches_shipped**: 4  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173 -->
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-006/#174, EQ-007/#175 -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-008 (Tier-2, no auto-merge) -->
+- **avg_round_trip_minutes**: ~8.3  <!-- + EQ-007: 11.7 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -66,11 +66,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 5   <!-- #170, #171, #172, #173, #174 -->
-- **prs_merged**: 3   <!-- #170, #171, #172 -->
+- **prs_opened**: 6   <!-- #170, #171, #172, #173, #174, #175 -->
+- **prs_merged**: 4   <!-- #170, #171, #172, #173 -->
 - **signoffs_pending**: 7   <!-- SIG-001..007 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 13   <!-- minus EQ-001 escalated, EQ-002/003/004 merged, 005/006 in PR, 007 dispatched -->
+- **backlog_items_remaining**: 12   <!-- minus EQ-001 escalated, EQ-002/003/004/005 merged, 006/007 in PR, 008 dispatched -->
 
 ## Drift Detection State
 
@@ -88,6 +88,11 @@
 | 6 | 01:02Z | #169 rebased post-#165 |
 | 7 | 01:08Z | **ACTIVATED** — EQ-001 + EQ-002 dispatched |
 | 8 | 01:18Z | **#170 merged** (first autoloop-shipped PR); **#168 merged** (cascade 5/7); EQ-001 → SIG-005 Tier-3 escalation; BL-021 dispatched as EQ-003; #163/#169 rebased onto post-#168/#170 main |
+| 8.5 | 09:55Z | **#169 merged** (cascade 6/7, P1 DisplayDictionary); BL-002 dispatched as EQ-004; SIG-007 logged for #163 structural close-rec |
+| 9-10 | 10:08Z | **#171 merged** (2nd autoloop ship, BL-021); EQ-005 dispatched (BL-023 P8.c Top Blockers) |
+| 10.5-11 | 10:38Z | **#172 merged** (3rd autoloop ship, BL-002 P2.a copy); EQ-006 dispatched (BL-012 P4.a viewMode) |
+| 11.5 | 11:02Z | EQ-006 returned with PR #174 (no Tier-3 touches via existing Settings page); EQ-007 dispatched (BL-003 P2.b ProviderTile) |
+| 11.7 | 11:09Z | **#173 merged** (4th autoloop ship, BL-023 P8.c Quick Wins); EQ-007 returned with PR #175; EQ-008 dispatched (BL-022 P8.b Haiku **Tier-2** — NO auto-merge) |
 
 ## Last Action Log
 
@@ -124,4 +129,10 @@
 11.5: 2026-05-11T11:01:00Z | validate  | PR #174 diff-validator PASS — 6 files in ui/src/components/transcript/* + ui/src/lib/* + ui/src/pages/InstanceExperimentalSettings.* — zero Tier-3 path touches
 11.5: 2026-05-11T11:02:00Z | promote   | BL-003 → EQ-007 (Tier-1, P2.b ProviderTile founder labels) — intra-phase parallel; dep BL-002 met
 11.5: 2026-05-11T11:02:00Z | dispatch  | EQ-007 to general-purpose agent (worktree, background) — id a9e151ec034cd9385
+11.7: 2026-05-11T11:05:05Z | pr-merge  | #173 (EQ-005 BL-023 P8.c Top Blockers + Quick Wins) MERGED — autoloop's 4th ship (Tier-1, pure-additive 6 files)
+11.7: 2026-05-11T11:07:00Z | rebase    | #174 + #175 onto post-#173 main (parallel strategy per PROTOCOL.md P1-1)
+11.7: 2026-05-11T11:08:00Z | agent-return | EQ-007 PR #175 opened, auto-merge enrolled SQUASH, ~11.7min round-trip, 4 files ui/src/components/onboarding/* / +313 / -13. Zero new DisplayDictionary keys (P1 #169 infrastructure sufficient).
+11.7: 2026-05-11T11:08:30Z | validate  | PR #175 diff-validator PASS — 4 files all under ui/src/components/onboarding/* — zero Tier-3 path touches
+11.7: 2026-05-11T11:09:00Z | promote   | BL-022 → EQ-008 (**Tier-2**, P8.b "What we shipped yesterday" Haiku widget; touches /server/src/services/ + new route surface, lives in Settings shell to avoid nav-edit)
+11.7: 2026-05-11T11:09:00Z | dispatch  | EQ-008 to general-purpose agent (worktree, background) — id a3960fd3433787f46 — **NO auto-merge per Tier-2 policy** (opens PR for user review at land time)
 ```
