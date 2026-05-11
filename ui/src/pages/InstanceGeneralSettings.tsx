@@ -325,7 +325,7 @@ export function InstanceGeneralSettings() {
               </div>
               <p className="max-w-2xl text-sm text-muted-foreground">
                 Off by default. Flip this on to share counters and event names
-                that help us see which agents and routines actually get used.
+                that help us see which agents and cadences actually get used.
                 Never shares your code, agent prompts, or customer data.
               </p>
             </div>
@@ -353,7 +353,7 @@ export function InstanceGeneralSettings() {
             </div>
             <div>
               <span className="font-medium text-foreground">Events:</span>{" "}
-              install/company/agent/routine counters and the
+              install/company/agent/cadence counters and the
               <code> error.handler_crash</code> error code (no stack, no
               prompts).
             </div>

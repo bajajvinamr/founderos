@@ -26,6 +26,14 @@ exports[`DISPLAY_DICTIONARY > should have a snapshot of the full dictionary 1`] 
     "engineer": "BYO Runner",
     "founder": "Run on my computer",
   },
+  "cadence": {
+    "engineer": "Cadence",
+    "founder": "Cadence",
+  },
+  "cadences": {
+    "engineer": "Cadences",
+    "founder": "Cadences",
+  },
   "claim": {
     "engineer": "Claim",
     "founder": "Activate",
@@ -119,12 +127,12 @@ exports[`DISPLAY_DICTIONARY > should have a snapshot of the full dictionary 1`] 
     "founder": "AI services",
   },
   "routine": {
-    "engineer": "Routine",
-    "founder": "Schedule",
+    "engineer": "Cadence",
+    "founder": "Cadence",
   },
   "routines": {
-    "engineer": "Routines",
-    "founder": "Schedules",
+    "engineer": "Cadences",
+    "founder": "Cadences",
   },
   "run": {
     "engineer": "Run",

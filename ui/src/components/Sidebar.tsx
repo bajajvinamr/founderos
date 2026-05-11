@@ -9,7 +9,7 @@ import {
   SquarePen,
   Network,
   Boxes,
-  Repeat,
+  CalendarClock,
   Settings,
   LogOut,
   ShieldCheck,
@@ -152,7 +152,7 @@ export function Sidebar() {
 
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
-          <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
+          <SidebarNavItem to="/routines" label="Cadences" icon={CalendarClock} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
         </SidebarSection>
 

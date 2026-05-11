@@ -59,6 +59,23 @@ describe('DISPLAY_DICTIONARY', () => {
     expect(displayLabel('providers', 'engineer')).toBe('Providers');
   });
 
+  it('renames routines to Cadences in BOTH modes (P3 Wave 2 W23)', () => {
+    // Old keys still resolve (back-compat for any consumer that hasn't migrated)
+    // but engineer mode no longer says "Routine" — there is no engineering term
+    // left for the old concept after the rename.
+    expect(displayLabel('routine', 'founder')).toBe('Cadence');
+    expect(displayLabel('routine', 'engineer')).toBe('Cadence');
+    expect(displayLabel('routines', 'founder')).toBe('Cadences');
+    expect(displayLabel('routines', 'engineer')).toBe('Cadences');
+  });
+
+  it('exposes explicit cadence / cadences keys for new code paths (P3 Wave 2 W23)', () => {
+    expect(displayLabel('cadence', 'founder')).toBe('Cadence');
+    expect(displayLabel('cadence', 'engineer')).toBe('Cadence');
+    expect(displayLabel('cadences', 'founder')).toBe('Cadences');
+    expect(displayLabel('cadences', 'engineer')).toBe('Cadences');
+  });
+
   it('should handle onboarding Step 4 keys correctly (BL-002)', () => {
     expect(displayLabel('onboarding.step4.headline', 'founder')).toBe(
       'How should FounderOS use AI?',
