@@ -147,7 +147,11 @@ export function InboxRow({
           />
         ) : (
           <DisabledQuickApprove
-            tooltip="High-risk — review details first"
+            tooltip={
+              risk === "high"
+                ? "High-risk — review details first"
+                : "Medium-risk — open to review"
+            }
             onClick={onOpenDetail}
           />
         )

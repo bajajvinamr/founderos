@@ -35,12 +35,20 @@ export function QuickApprove({
 }: QuickApproveProps) {
   const [state, setState] = useState<"idle" | "pending">("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `committedRef` is the race-guard: once the 10s timer callback enters, it sets
+  // this to `true` BEFORE calling `onApprove`. A late `handleUndo` (e.g. fired in
+  // the same task tick after `advanceTimersByTime` crossed the boundary, or a
+  // click landing between timer-fire and React's commit phase) sees the flag and
+  // no-ops — preventing the double-dispatch where both `onApprove` and `onUndo`
+  // fire for the same row. Reset on remount and when the row's risk changes.
+  const committedRef = useRef(false);
 
   useEffect(() => {
+    committedRef.current = false;
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [rowId, risk]);
 
   // Refuse to render under non-low risk. Callers should branch to DisabledQuickApprove,
   // but guard here too so the component is misuse-safe. Placed after hooks to keep
@@ -49,15 +57,21 @@ export function QuickApprove({
 
   function handleClick() {
     if (state === "pending") return;
+    committedRef.current = false;
     setState("pending");
     timerRef.current = setTimeout(() => {
+      // Mark committed BEFORE invoking the callback so a same-tick handleUndo
+      // observes the flag and skips its dispatch.
+      committedRef.current = true;
+      timerRef.current = null;
       onApprove(rowId);
       setState("idle");
-      timerRef.current = null;
     }, undoMs);
   }
 
   function handleUndo() {
+    // Race-guard: if the timer callback already committed, refuse to fire onUndo.
+    if (committedRef.current) return;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;

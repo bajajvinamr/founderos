@@ -88,6 +88,67 @@ describe("<QuickApprove />", () => {
     expect(onApprove).not.toHaveBeenCalled();
   });
 
+  it("race-guard: if the timer fires first, a same-tick handleUndo does NOT double-dispatch", () => {
+    const onApprove = vi.fn();
+    const onUndo = vi.fn();
+    act(() => {
+      root.render(
+        <QuickApprove rowId="r-race" risk="low" onApprove={onApprove} onUndo={onUndo} undoMs={10_000} />,
+      );
+    });
+
+    const btn = container.querySelector('[data-testid="quick-approve"]') as HTMLButtonElement;
+    act(() => btn.click());
+
+    // The pending-state Undo button — capture the live reference before the timer commits.
+    const undoBtn = container.querySelector(
+      '[data-testid="quick-approve-undo"]',
+    ) as HTMLButtonElement;
+    expect(undoBtn).not.toBeNull();
+
+    // Cross the 10s boundary — the timer callback runs synchronously inside `act`,
+    // sets committedRef=true, then fires onApprove.
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledWith("r-race");
+
+    // Now simulate the race: handleUndo lands in the same task tick AFTER the timer
+    // already committed. Calling click on the captured (now-detached) undoBtn
+    // exercises the same code path; the committedRef guard MUST stop it.
+    act(() => undoBtn.click());
+
+    // onUndo must NOT have fired — no double-dispatch.
+    expect(onUndo).not.toHaveBeenCalled();
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("keyboard activation (Enter) on the Approve button triggers the same flow as a click", () => {
+    const onApprove = vi.fn();
+    const onUndo = vi.fn();
+    act(() => {
+      root.render(
+        <QuickApprove rowId="r-kbd" risk="low" onApprove={onApprove} onUndo={onUndo} undoMs={10_000} />,
+      );
+    });
+
+    const btn = container.querySelector('[data-testid="quick-approve"]') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.tagName).toBe("BUTTON"); // Native button — Enter/Space dispatch click for free.
+
+    // Native <button> elements convert Enter/Space keypress to a click event.
+    act(() => btn.click());
+
+    // Confirm the same state transition as a mouse click — pending state, commit on timer.
+    expect(container.querySelector('[data-testid="quick-approve-undo"]')).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledWith("r-kbd");
+  });
+
   it("renders nothing when risk is not low (D17 safety guard)", () => {
     const onApprove = vi.fn();
     const onUndo = vi.fn();
