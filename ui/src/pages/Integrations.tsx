@@ -245,57 +245,95 @@ function IntegrationCard({
         </div>
       )}
 
-      {/* Composio managed OAuth (Wave 21) */}
-      {composioEnabled && (
-        <div className="rounded-md border border-dashed border-border/70 p-2.5 text-[11px] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Zap className="h-3 w-3" />
-            <span>
-              {composioConnection?.status === "active"
-                ? "Composio: connected"
-                : composioConnection?.status === "pending"
-                  ? "Composio: awaiting consent"
-                  : "Composio: not connected"}
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-[11px]"
-            disabled={composioConnectMutation.isPending}
-            onClick={() => composioConnectMutation.mutate()}
-          >
-            {composioConnectMutation.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-            ) : (
-              <ExternalLink className="h-3 w-3 mr-1" />
+      {/* Actions — primary CTA logic */}
+      <div className="flex items-center gap-2 mt-auto pt-1 flex-col">
+        {/* Composio-enabled path: one-click connect is PRIMARY */}
+        {composioEnabled && (status === "disconnected" || !integration) && (
+          <>
+            <Button
+              variant="default"
+              size="sm"
+              className="w-full"
+              disabled={composioConnectMutation.isPending}
+              onClick={() => composioConnectMutation.mutate()}
+              data-testid="composio-connect-primary"
+            >
+              {composioConnectMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+              ) : (
+                <Zap className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              One-click connect
+            </Button>
+            {composioConnection?.status === "pending" && (
+              <p className="text-[11px] text-muted-foreground text-center">
+                Awaiting OAuth consent...
+              </p>
             )}
-            {composioConnection?.status === "active"
-              ? "Reconnect"
-              : "Connect via Composio"}
-          </Button>
-        </div>
-      )}
+            {/* Advanced toggle for API-key fallback */}
+            <details className="w-full text-[11px]">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                Advanced — paste an API key instead
+              </summary>
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => onConnect(kind)}
+                >
+                  <Plug className="h-3.5 w-3.5 mr-1.5" />
+                  Connect with API key
+                </Button>
+              </div>
+            </details>
+          </>
+        )}
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 mt-auto pt-1">
-        {status === "disconnected" || !integration ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => onConnect(kind)}
-          >
-            <Plug className="h-3.5 w-3.5 mr-1.5" />
-            Connect
-          </Button>
-        ) : (
+        {/* Composio disabled: show explainer, API-key is fallback */}
+        {!composioEnabled && (status === "disconnected" || !integration) && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full opacity-60 cursor-not-allowed"
+              disabled
+              data-testid="composio-connect-disabled"
+            >
+              <Zap className="h-3.5 w-3.5 mr-1.5" />
+              One-click connection unavailable
+            </Button>
+            <details className="w-full text-[11px]">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                How to enable
+              </summary>
+              <div className="mt-2 pt-2 border-t border-border/50 space-y-2 text-muted-foreground">
+                <p>
+                  Your admin needs to set <code className="text-[10px] bg-muted px-1 rounded">COMPOSIO_API_KEY</code>.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => onConnect(kind)}
+                >
+                  <Plug className="h-3.5 w-3.5 mr-1.5" />
+                  Connect with API key
+                </Button>
+              </div>
+            </details>
+          </>
+        )}
+
+        {/* Connected: show test and disconnect */}
+        {status === "connected" && integration && (
           <>
             <Button
               variant="outline"
               size="sm"
               disabled={testMutation.isPending}
               onClick={() => testMutation.mutate()}
+              className="w-full"
             >
               {testMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -417,7 +455,7 @@ export function Integrations() {
 
   const headlineText =
     connectedCount === 0
-      ? "No integrations yet. Start with PostHog."
+      ? "Connect your tools. Start with whatever you use most: Slack, Gmail, Notion, or Google Calendar."
       : `${connectedCount} of ${totalCount} connected`;
 
   if (!selectedCompanyId) {
