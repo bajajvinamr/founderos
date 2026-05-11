@@ -46,6 +46,33 @@ P2 findings deferred to first cycle as SIGNOFFS items (activation-from-blocked-s
 
 ---
 
+## [CL-005] 2026-05-11T01:18:00Z — Cycle 7 dispatch outcomes — diff-validator and worktree-leak invariants validated live
+
+**Decision**: Document outcomes of the first two autoloop-dispatched eng agents (EQ-001 + EQ-002). Confirms path-based diff validation and worktree-leak invariants both fire correctly under autonomous dispatch.
+**Source**: autoloop-orchestrator (cycle 8)
+**Reviewers**: dispatched-agents (returned summaries)
+**Verdict**: PASS (both invariants validated)
+**Rationale**:
+
+**EQ-002 / BL-004 / PR #170 — Tier-1 shipped autonomously** ✅
+- 4 files / 222+ / 49- under `ui/src/components/onboarding/*`. Zero Tier-3 path touches per `gh pr diff 170 --name-only`. Diff-validator confirmed Tier-1 → auto-merge enrolled SQUASH → merged at 22:39:13Z.
+- 14-package typecheck green, 46 onboarding tests pass. First autoloop-shipped PR.
+- **Worktree-leak invariant validated** (vinamr-invariants.md "Agent Harness / Claude Code"): initial absolute-path Edits leaked into the parent `chore/autoloop-scaffold` checkout despite `Agent({isolation: "worktree"})`. Agent self-detected via `git diff`, restored main, re-applied via `git apply` inside the worktree. No contamination of autoloop scaffold branch. **This is the second independent confirmation of the invariant** (first was Trust Closure dispatch TC-4); pattern is reproducible.
+- Branch auto-rename from `worktree-agent-a7052b5bc00966d43` to the intended `feat/bl-004-remove-default-adapter` worked when agent explicitly renamed (per vinamr-invariants "Agent may self-name worktree branches").
+
+**EQ-001 / BL-001 — Tier-2 honestly escalated to Tier-3** ⚠️→SIG-005
+- Agent investigated, found CLAUDE.md note is **stale** (PR #148 restructured `onboarding-bootstrap.ts`), and determined the actual remaining bug requires 7-file coordinated dispatch across `packages/shared/src/constants.ts` (Tier-3) + new migration (Tier-3) + new `@founderos/anthropic-api` adapter package + 4 wiring/test files.
+- Agent refused to commit a workaround; returned full triage in summary. Worktree clean, no PR opened.
+- **Diff-validator invariant validated** (PROTOCOL.md v2 §"Tier Routing"): the path-based forbidden-surface list correctly forced the work to Tier-3 escalation rather than allowing a Tier-2 dispatch to silently touch shared constants + migrations. The council's P0-1 fix is working as designed.
+- Findings now captured in SIG-005 for user review.
+
+**Calibration signal**: 50/50 split between autonomous-ship and honest-escalate is roughly what the council assumed when designing the path validator. 100% ship → validator too loose. 100% escalate → backlog tier-declarations too aggressive. The escalation rate is the system's self-calibration.
+
+**CLAUDE.md note about onboarding-bootstrap.ts:201 is stale** — flagged for cleanup in SIG-005 artifacts (don't edit unilaterally; it's mentioned across audit docs).
+**Artifacts**: eng-queue.md (EQ-001 abandoned, EQ-002 merged), SIG-005 (B2 Tier-3 escalation), STATE.md cycle 8 update, ci-watch.md cycle 8 snapshot
+
+---
+
 ## [CL-004] 2026-05-11T01:08:00Z — Autoloop activated via user-override (P2-1 escape hatch)
 
 **Decision**: Activate autoloop despite cascade not yet settled (4/7 merged; #163 #168 #169 still in flight). 8-hour timer starts at 2026-05-11T01:08:00Z; stop_at = 2026-05-11T09:08:00Z.

@@ -26,6 +26,7 @@ User reviews each entry, edits `status:`, and the next wake cycle acts.
 | SIG-002 | P0 | tier-3-council | BL-007 (P3.a Sidebar primary CTA) | unlocks BL-008/009/010/011 (P3 commander chain) | 2026-05-18T00:00Z | pending | One-way door — primary nav CTA. Council before merge; feature-flag any rollout |
 | SIG-003 | P1 | tier-3-council | BL-019 (P6.a Composio catalog) | none directly (P6 isolated) | 2026-05-25T00:00Z | pending | `packages/shared/src/constants.ts` is cross-service contract — council before merge |
 | SIG-004 | P1 | tier-3-council | BL-020 (P7 IA collapse) | depends on BL-007 + BL-016 | 2026-06-01T00:00Z | pending | Largest one-way door in plan. Council + feature flag VITE_FOUNDEROS_SIMPLIFIED_NAV |
+| SIG-005 | P0 | tier-3-council | BL-001 actual bug (B2 bootstrap; CLAUDE.md note stale) | Anthropic/Gemini/OpenAI **API** runtime on Fly (currently collapse to claude_local) | 2026-05-18T00:00Z | pending | Coordinated 7-file Tier-3 dispatch spanning shared constants + new migration + new adapter package |
 
 ---
 
@@ -140,6 +141,38 @@ If `expires_at` passes with `status: pending`:
 - **proposed**: Open council session covering: bucket taxonomy validity, migration path for existing route memory (deep links, bookmarks), feature-flag rollout plan, rollback strategy.
 - **alternatives**: (a) Ship an "Advanced view" toggle that shows the current ~25 items, defaulting new founders to 6 buckets (preserves engineer-mode parity); (b) Defer P7 entirely to v1.1 — ship through P2-P6 and revisit IA after measurable adoption data.
 - **artifacts**: Sidebar.tsx, MobileBottomNav.tsx, App.tsx, company-routes.ts, ~12 page routes
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
+
+## [SIG-005] BL-001 B2 — server bootstrap honors chosen adapter (Tier-3 escalation from EQ-001)
+
+- **type**: tier-3-council
+- **priority**: P0
+- **decision_required**: approve
+- **blocking**: Anthropic / Gemini / OpenAI **API** runtime on Fly. Currently every API-tier choice silently collapses to `claude_local` (spawning the Claude CLI that does not exist in the Fly container). Founder pays for Anthropic API key, picks Anthropic tile, gets no agent execution.
+- **blast_radius**: 7 files spanning 3 Tier-3 forbidden surfaces — `packages/shared/src/constants.ts` (cross-service contract), new `packages/db/src/migrations/0107_*.sql` (schema), new `packages/adapters/anthropic-api/` package (parallel of #165's gemini-api). Plus `server/src/adapters/{registry.ts, builtin-adapter-types.ts}` wiring, `server/src/routes/onboarding.ts` key-persistence widening, `server/src/services/onboarding-bootstrap.ts` resolver routing, `server/src/__tests__/onboarding-adapter-type.test.ts` assertion flip.
+- **ci_state**: n/a
+- **merge_state**: n/a
+- **source**: BL-001, EQ-001 (abandoned), autoloop-cycle-7 dispatch return
+- **recommended_action**: Schedule adversarial council on the coordinated dispatch shape. Once approved, dispatch a fresh Tier-3-approved PR sized for the surface. Until then, the autoloop's path validator (correctly) refuses to ship.
+- **expires_at**: 2026-05-18T00:00Z
+- **context**: The CLAUDE.md note about `server/src/services/onboarding-bootstrap.ts:201` hardcoding `claude_local` is **stale** — PR #148 already restructured the bootstrap into tri-branch resolution (hosted → BYO runner → dev/local). Line 201 today is `const secrets = secretService(txDb);`. EQ-001's agent caught this honestly and refused to commit a workaround. The actual remaining bug is upstream: `mapOnboardingChoiceToAdapter("anthropic_api")` returns `"claude_local"` when `FOUNDEROS_HOSTED_AGENTS_ENABLED=0` (your current Fly prod setting) AND `FOUNDEROS_BYO_RUNNER_ENABLED` is off. Parallel issue: `mapOnboardingChoiceToAdapter("google_api")` throws despite #165 shipping `@founderos/gemini-api`, and `openai_api` (from #164) is similarly unwired.
+- **proposed**: Single coordinated Tier-3 PR with the 7-file surface. Council reviews migration safety (single-statement ALTER per vinamr-invariants Postgres lock guidance), the new adapter package shape, and the test-assertion flip strategy. After approval, dispatch as hand-coded Tier-3-approved PR.
+- **alternatives**:
+  - **(a) Smallest slice — route `google_api → gemini_local`** so the in-tree gemini-local multi-mode adapter handles API via `GEMINI_API_KEY` env detection. Still incomplete: `server/src/routes/onboarding.ts` only persists `instance_api_keys` for `anthropic_api`; Google key would be dropped on the floor.
+  - **(b) Pre-step — flip `FOUNDEROS_HOSTED_AGENTS_ENABLED=1` in Fly secrets.** Then `anthropic_api` resolves via the hosted-API branch instead of `claude_local` (no schema work). Risk: hosted-agents code path may not be production-tested at scale; check `packages/adapters/claude-local/src/server/execute.ts:51-52, 135-142, 394-432` (the hosted branch) and Sentry for prior errors.
+  - **(c) Defer B2 entirely.** Ship P2-P4 founder-language UX on top of the broken adapter routing and revisit B2 once design partner feedback confirms the API-tier UX is reachable. (Worst — bakes in a bug; not recommended.)
+- **artifacts**:
+  - `packages/shared/src/constants.ts:58-186` (AGENT_ADAPTER_TYPES + ONBOARDING_ADAPTER_CHOICES — needs `anthropic_api`, `gemini_api` added)
+  - `packages/db/src/migrations/0105_runner_jobs_adapter_type.sql:30-42` (CHECK constraint to extend)
+  - `server/src/services/adapter-resolver.ts:309-312` (the `mapOnboardingChoiceToAdapter` switch that throws on `google_api` and collapses `anthropic_api`)
+  - `server/src/adapters/registry.ts` + `builtin-adapter-types.ts` (registry plumbing for openai-api/gemini-api/anthropic-api)
+  - `server/src/routes/onboarding.ts:270-380` (the `auth_mode === "api"` gate — widen key persistence beyond anthropic)
+  - `server/src/services/onboarding-bootstrap.ts:339-356` (where the resolved adapter materializes)
+  - `server/src/__tests__/onboarding-adapter-type.test.ts:257-260, 683-685` (locked-in assertions to flip)
+  - `packages/adapters/gemini-api/src/index.ts` (reference shape for new `anthropic-api` adapter package)
+  - `CLAUDE.md` (the "Onboarding adapter mismatch" note — needs deletion/correction post-fix)
 - **status**: pending
 - **resolved_at**: null
 - **resolution_note**: null
