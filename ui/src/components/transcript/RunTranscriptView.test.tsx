@@ -32,7 +32,12 @@ describe("RunTranscriptView", () => {
     });
   });
 
-  it("renders assistant and thinking content as markdown in compact mode", () => {
+  it("renders assistant content as markdown in compact mode", () => {
+    // BL-013 (P4.b) — thinking blocks are now hidden in the founder-mode
+    // default (which is what SSR falls back to without `window.localStorage`).
+    // Engineer-mode thinking-render parity is covered in
+    // RunTranscriptView.founder.test.tsx. This test stays as the SSR-safe
+    // assertion that assistant markdown renders correctly in compact mode.
     const html = renderToStaticMarkup(
       <ThemeProvider>
         <RunTranscriptView
@@ -41,12 +46,7 @@ describe("RunTranscriptView", () => {
             {
               kind: "assistant",
               ts: "2026-03-12T00:00:00.000Z",
-              text: "Hello **world**",
-            },
-            {
-              kind: "thinking",
-              ts: "2026-03-12T00:00:01.000Z",
-              text: "- first\n- second",
+              text: "Hello **world**\n\n- first\n- second",
             },
           ]}
         />
@@ -109,5 +109,57 @@ describe("RunTranscriptView", () => {
     expect(html).toContain("<li>fixed deploy config</li>");
     expect(html).toContain("<li>posted issue update</li>");
     expect(html).not.toContain("result");
+  });
+
+  // BL-012 (P4.a): the view-mode seam. The outer container exposes
+  // data-view-mode so BL-013 (P4.b founder-mode rendering) can branch on it.
+  // No behavior change here — just the attribute presence + default.
+  it("exposes data-view-mode='founder' on the outer container by default", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <RunTranscriptView
+          entries={[
+            {
+              kind: "assistant",
+              ts: "2026-03-12T00:00:00.000Z",
+              text: "Hello",
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(html).toContain('data-view-mode="founder"');
+    expect(html).not.toContain('data-view-mode="engineer"');
+  });
+
+  it("exposes data-view-mode on the empty-state container too", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <RunTranscriptView entries={[]} emptyMessage="Nothing yet." />
+      </ThemeProvider>,
+    );
+
+    expect(html).toContain('data-view-mode="founder"');
+    expect(html).toContain("Nothing yet.");
+  });
+
+  it("exposes data-view-mode on the raw-mode container too", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <RunTranscriptView
+          mode="raw"
+          entries={[
+            {
+              kind: "assistant",
+              ts: "2026-03-12T00:00:00.000Z",
+              text: "Hello",
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(html).toContain('data-view-mode="founder"');
   });
 });
