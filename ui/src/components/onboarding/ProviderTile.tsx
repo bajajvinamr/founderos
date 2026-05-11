@@ -10,10 +10,18 @@
  *
  * The drawer / inline key entry is owned by S7.C.2 — this component only
  * deals with selection. Telemetry events are S7.C.4.
+ *
+ * BL-003 (P2.b, founder-language sweep) — when `option.displayKey` is
+ * set the rendered label flips between founder voice ("Claude (pay-per-
+ * use)") and engineer voice ("Anthropic API") based on `founderos.viewMode`.
+ * Engineer mode falls back to `option.label` so technical strings still
+ * surface for power users. The brand logo is injected via the `icon`
+ * prop from the chooser registry.
  */
 
 import type { ComponentType, KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
+import { useDisplay } from "@/lib/use-display";
 import type { ProviderOption } from "./ProviderChooser.js";
 
 interface Props {
@@ -31,11 +39,20 @@ export function ProviderTile({ option, selected, onSelect, icon: Icon }: Props) 
   const isLive = option.status === "live";
   const isComingSoon = option.status === "coming-soon";
 
+  // BL-003 (P2.b) — resolve user-facing label from the DisplayDictionary
+  // when this tile carries a `displayKey`. Founder mode shows "Claude
+  // (pay-per-use)" style copy, engineer mode shows the technical name.
+  // Hooks must run unconditionally; we always call `useDisplay` with a
+  // safe fallback key and then pick between dictionary text and the
+  // engineer-canonical `option.label`.
+  const dictionaryLabel = useDisplay(option.displayKey ?? "providers");
+  const label = option.displayKey ? dictionaryLabel : option.label;
+
   // Tooltip text — disabled tiles surface a hover/focus message tied to
   // the engineering-ticket ETA. Live tiles have no tooltip (the badge
   // copy already states the auth mode).
   const tooltip = isComingSoon
-    ? `${option.label} support ships in ${option.etaPhase}`
+    ? `${label} support ships in ${option.etaPhase}`
     : undefined;
 
   function handleClick() {
@@ -80,7 +97,7 @@ export function ProviderTile({ option, selected, onSelect, icon: Icon }: Props) 
         ) : null}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm font-medium leading-tight">{option.label}</p>
+            <p className="text-sm font-medium leading-tight">{label}</p>
             <Badge option={option} />
           </div>
           <p className="text-xs text-muted-foreground mt-1 leading-snug">

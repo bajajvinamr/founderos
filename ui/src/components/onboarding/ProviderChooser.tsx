@@ -20,8 +20,9 @@
  * routing logic and downstream draft persistence.
  */
 
-import { Cloud, Cpu, Key, Sparkles, Terminal, Zap } from "lucide-react";
+import type { DisplayKey } from "@founderos/shared";
 import type { ComponentType } from "react";
+import { PROVIDER_BRAND_LOGOS } from "./brand-logos.js";
 import { ProviderTile } from "./ProviderTile.js";
 
 export type ProviderAdapterType =
@@ -37,8 +38,27 @@ export type ProviderStatus = "live" | "coming-soon";
 export interface ProviderOption {
   /** Stable id used in tests, telemetry, and the draft row. */
   id: string;
-  /** User-facing display name on the tile. */
+  /**
+   * User-facing display name on the tile.
+   *
+   * BL-003 (P2.b) — this is now the ENGINEER-mode fallback only. When
+   * `displayKey` is set, the tile reads the active label from
+   * `DisplayDictionary` based on `founderos.viewMode`. `label` is still
+   * the canonical engineer string so a missing dictionary entry or a
+   * `viewMode === "engineer"` setting always produces the technical
+   * name even without the lookup.
+   */
   label: string;
+  /**
+   * Optional DisplayDictionary key for this provider's tile label.
+   * BL-003 (P2.b) — when set, ProviderTile resolves the user-facing
+   * label via `useDisplay(displayKey)` and falls back to `label` if
+   * the dictionary entry is missing. Engineer viewMode renders the
+   * engineer side of the dictionary entry which equals `label` by
+   * convention, so engineer-mode founders still see "Anthropic API"
+   * etc. — satisfying BL-003 done_criteria #2.
+   */
+  displayKey?: DisplayKey;
   /** One-line description, ~6-12 words. */
   description: string;
   /**
@@ -65,7 +85,11 @@ export interface ProviderOption {
 export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "claude_code",
+    // Engineer fallback / canonical technical name. Founder copy
+    // ("Claude (subscription)") comes from DisplayDictionary key
+    // `claude_local` via `displayKey` below.
     label: "Claude Code",
+    displayKey: "claude_local",
     description:
       "For developers — requires Claude Code CLI installed on your laptop.",
     requirement: "Requires Claude Code CLI installed on your laptop.",
@@ -76,6 +100,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "anthropic_api",
     label: "Anthropic API",
+    displayKey: "anthropic_api",
     description: "Bring your own Anthropic API key for hosted deployments.",
     requirement:
       "Requires an Anthropic API key (get one at console.anthropic.com).",
@@ -86,6 +111,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "gemini_cli",
     label: "Gemini CLI",
+    displayKey: "gemini_local",
     description: "Use your Google AI subscription via the local CLI.",
     requirement: "Requires Google AI Studio account and Gemini CLI on your laptop.",
     status: "live",
@@ -95,6 +121,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "google_api",
     label: "Gemini API",
+    displayKey: "gemini_api",
     description: "Bring your own Gemini API key for hosted deployments.",
     requirement: "Requires a Gemini API key (aistudio.google.com/apikey).",
     status: "live",
@@ -104,6 +131,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "codex_cli",
     label: "Codex CLI",
+    displayKey: "codex_local",
     description: "Use your OpenAI subscription via the local Codex CLI.",
     requirement: "Requires GitHub Codex CLI installed on your laptop.",
     status: "live",
@@ -113,6 +141,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "openai_api",
     label: "OpenAI API",
+    displayKey: "openai_api",
     description: "Bring your own OpenAI API key (GPT-4o / o3).",
     requirement: "Requires an OpenAI API key (platform.openai.com/api-keys).",
     status: "live",
@@ -121,15 +150,15 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   },
 ];
 
-/** Per-tile glyph. Cosmetic only — registry order is the contract. */
-const ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  claude_code: Terminal,
-  anthropic_api: Key,
-  gemini_cli: Sparkles,
-  google_api: Cloud,
-  codex_cli: Cpu,
-  openai_api: Zap,
-};
+/**
+ * Per-tile glyph. BL-003 (P2.b) — replaces the prior lucide icon set
+ * with brand-family marks (Anthropic / OpenAI / Google) so the tiles
+ * carry the brand the founder is actually choosing, not a generic
+ * shape. Three logos cover all six tiles via the family map in
+ * `brand-logos.tsx`.
+ */
+const ICONS: Record<string, ComponentType<{ className?: string }>> =
+  PROVIDER_BRAND_LOGOS;
 
 interface Props {
   /** Currently-selected option id, or null if no selection yet. */
