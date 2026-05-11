@@ -28,24 +28,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 12.5
-- **last_cycle_at**: 2026-05-11T11:45:00Z
-- **next_wake_at**: 2026-05-11T12:10:00Z  <!-- +1500s — EQ-008 returned with PR #176 (Tier-2 SIG-008), #175 MERGED (5th ship), #174 rebased post-#175, EQ-009 dispatched for BL-005 -->
+- **cycle**: 12.7
+- **last_cycle_at**: 2026-05-11T11:50:00Z
+- **next_wake_at**: 2026-05-11T11:59:00Z  <!-- cycle 13 wake already scheduled from cycle 12; EQ-009 returned mid-wait with PR #177 auto-merge enrolled -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-009 just dispatched (BL-005 P2.d Tier-1) -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-009 returned with PR #177 -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 close-rec + #174 (auto-merge enrolled, rebased) + #176 (Tier-2, no auto-merge) -->
-- **open_prs_max**: 2  <!-- temporarily over: #176 is Tier-2 review and won't merge autonomously -->
-- **autoloop_prs_open**: 2  <!-- #174, #176 -->
+- **open_prs**: 4  <!-- #163 close-rec + #174 (BLOCKED on test+coverage) + #176 (Tier-2) + #177 (auto-merge enrolled) -->
+- **open_prs_max**: 2  <!-- temporarily over: HOLD on new dispatch until #174 + #177 land -->
+- **autoloop_prs_open**: 3  <!-- #174, #176, #177 -->
 - **autoloop_prs_merged**: 5  <!-- #170, #171, #172, #173, #175 -->
-- **autoloop_dispatches_completed**: 8
+- **autoloop_dispatches_completed**: 9
 - **autoloop_dispatches_escalated**: 1
 - **autoloop_dispatches_shipped**: 5  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-007/175 -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-006/#174 (Tier-1 auto-merge enrolled), EQ-008/#176 (Tier-2 SIG-008) -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-009 (BL-005 Tier-1) -->
-- **avg_round_trip_minutes**: ~9.1  <!-- + EQ-008: 13.6 -->
+- **autoloop_dispatches_in_pr**: 3  <!-- EQ-006/#174 (Tier-1 auto-merge enrolled, BLOCKED test), EQ-008/#176 (Tier-2 SIG-008), EQ-009/#177 (Tier-1 auto-merge enrolled, CI fresh) -->
+- **autoloop_dispatches_active**: 0  <!-- HOLD — capacity restored when #174 + #177 land -->
+- **avg_round_trip_minutes**: ~8.9  <!-- + EQ-009: 7.9 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -66,11 +66,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 7   <!-- #170, #171, #172, #173, #174, #175, #176 -->
+- **prs_opened**: 8   <!-- #170, #171, #172, #173, #174, #175, #176, #177 -->
 - **prs_merged**: 5   <!-- #170, #171, #172, #173, #175 -->
 - **signoffs_pending**: 8   <!-- SIG-001..008 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 11   <!-- minus EQ-001 escalated, EQ-002/003/004/005/007 merged, 006 in PR (auto-merge), 008 in PR (Tier-2 review), 009 dispatched -->
+- **backlog_items_remaining**: 11   <!-- minus EQ-001 escalated, EQ-002/003/004/005/007 merged, 006 in PR (auto-merge), 008 in PR (Tier-2 review), 009 in PR (auto-merge) -->
 
 ## Drift Detection State
 
@@ -95,6 +95,7 @@
 | 11.7 | 11:09Z | **#173 merged** (4th autoloop ship, BL-023 P8.c Quick Wins); EQ-007 returned with PR #175; EQ-008 dispatched (BL-022 P8.b Haiku **Tier-2** — NO auto-merge) |
 | 12 | 11:34Z | **HOLD cycle** — #174/#175 E2E + test in-progress (all other checks green, mergeable); EQ-008 actively implementing service file; no parallel dispatch (BL-013 dep on unmerged #174); worktree-leak invariant validated 3rd time |
 | 12.5 | 11:45Z | **#175 MERGED at 11:27Z** (5th autoloop ship, BL-003 P2.b ProviderTile labels); **EQ-008 returned with PR #176** Tier-2 (BL-022 Haiku yesterday widget, 8 files +1112/-0 pure-additive, autoMergeRequest:null, SIG-008 logged); #174 rebased post-#175 (BEHIND→awaiting CI then auto-merge); **EQ-009 dispatched** (BL-005 P2.d Tile descriptions, Tier-1 auto-merge enrolled); worktree-leak invariant validated 4th time |
+| 12.7 | 11:50Z | **EQ-009 returned with PR #177** in 7.9min (BL-005 P2.d, 6 files +263/-7, 71 tests green, Tier-1 auto-merge SQUASH enrolled at 11:39:44Z); #174 BLOCKED only on `test (+ coverage)` IN_PROGRESS (no failures, auto-merge will fire on CI completion); **HOLD on new dispatch** — autoloop_prs_open=3 (over cap of 2); worktree-leak invariant validated **5th consecutive time** |
 
 ## Last Action Log
 
@@ -149,4 +150,9 @@
 12.5: 2026-05-11T11:43:30Z | rebase    | #174 onto post-#175 main (mergeStateStatus was BEHIND; conflicts resolved by gh; autoMergeRequest still SQUASH enrolled by bajajvinamr)
 12.5: 2026-05-11T11:44:00Z | promote   | BL-005 → EQ-009 (Tier-1, P2.d Tile descriptions in founder-language — Single ProviderChooser file, dep BL-003 met by #175)
 12.5: 2026-05-11T11:45:00Z | dispatch  | EQ-009 to general-purpose agent (worktree, background) — id a5551029d0edb979c — Tier-1 auto-merge enrolled SQUASH per posture
+12.7: 2026-05-11T11:50:00Z | agent-return | EQ-009 (a5551029d0edb979c) COMPLETED in 7.9min round-trip; PR #177 opened OPEN MERGEABLE; autoMergeRequest=SQUASH enrolled 11:39:44Z (Tier-1 policy honored); 6 files / +263 / -7 (DisplayDictionary +6 keys + 4 onboarding files); 71/71 tests green (onboarding 61 + display-dictionary 10); typecheck 12 packages green; worktree-leak invariant 5th consecutive validation (parent clean)
+12.7: 2026-05-11T11:50:30Z | validate  | PR #177 diff-validator PASS Tier-1 — 6 files all in packages/shared/src/display-dictionary* (additive keys only, NOT constants.ts) + ui/src/components/onboarding/* — zero Tier-3 path touches
+12.7: 2026-05-11T11:50:45Z | ci-probe  | #174 BLOCKED only on `test (+ coverage)` IN_PROGRESS; 0 failures; auto-merge SQUASH enrolled by bajajvinamr at 11:00:37Z will fire on CI completion
+12.7: 2026-05-11T11:51:00Z | hold      | NO new dispatch — autoloop_prs_open=3 (#174, #176, #177) over open_prs_max=2. Capacity restores when #174 auto-merges (test+coverage completion) + #177 auto-merges (fresh CI). BL-013 still blocked by #174. BL-014 still blocked by BL-013.
+12.7: 2026-05-11T11:51:00Z | invariant | path-validator precision validated: PR #177 touched packages/shared/src/display-dictionary.ts (Tier-1 OK per brief — "ADD keys, don't restructure") while NEVER touching packages/shared/src/constants.ts (Tier-3 forbidden) — same parent dir, different files, different tier classification
 ```
