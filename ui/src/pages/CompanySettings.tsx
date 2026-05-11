@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { getAccessToken } from "@/lib/supabase";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_FEEDBACK_DATA_SHARING_TERMS_VERSION } from "@founderos/shared";
@@ -64,6 +65,59 @@ export function CompanySettings() {
   const [inviteSnippet, setInviteSnippet] = useState<string | null>(null);
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [snippetCopyDelightId, setSnippetCopyDelightId] = useState(0);
+
+  // P0.6 — JSON data export. Streams from
+  // GET /api/companies/:companyId/export, redacts secrets server-side,
+  // and saves the response as a download.
+  const [dataExportLoading, setDataExportLoading] = useState(false);
+  const [dataExportError, setDataExportError] = useState<string | null>(null);
+
+  async function downloadCompanyDataExport() {
+    if (!selectedCompanyId) return;
+    setDataExportError(null);
+    setDataExportLoading(true);
+    try {
+      const token = await getAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(
+        `/api/companies/${encodeURIComponent(selectedCompanyId)}/export`,
+        { headers, credentials: "include" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const message =
+          (body && typeof body === "object" && "error" in body && typeof (body as { error?: unknown }).error === "string")
+            ? (body as { error: string }).error
+            : `Export failed (HTTP ${res.status})`;
+        throw new Error(message);
+      }
+      // Derive a filename from the Content-Disposition header so the
+      // saved file matches what the server sent. Fall back to a sane
+      // default if the header is missing for any reason.
+      const dispo = res.headers.get("content-disposition") ?? "";
+      const match = dispo.match(/filename="?([^"]+)"?/i);
+      const fallback = `founderos-export-${selectedCompanyId}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`;
+      const filename = match?.[1] ?? fallback;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setDataExportError(
+        err instanceof Error ? err.message : "Unknown error",
+      );
+    } finally {
+      setDataExportLoading(false);
+    }
+  }
 
   const generalDirty =
     !!selectedCompany &&
@@ -729,6 +783,44 @@ export function CompanySettings() {
                 {charterMutation.error instanceof Error
                   ? charterMutation.error.message
                   : "Failed to save"}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Data export (P0.6) */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Data export
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <p className="text-sm text-muted-foreground">
+            Download your entire company state as a JSON file. We never
+            include API keys or secrets — those stay encrypted server-side.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={downloadCompanyDataExport}
+              disabled={dataExportLoading || !selectedCompanyId}
+            >
+              {dataExportLoading ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Export company data
+                </>
+              )}
+            </Button>
+            {dataExportError && (
+              <span className="text-xs text-destructive">
+                {dataExportError}
               </span>
             )}
           </div>

@@ -13,6 +13,7 @@ import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
 import { healthRoutes } from "./routes/health.js";
 import { companyRoutes } from "./routes/companies.js";
+import { companiesExportRoutes } from "./routes/companies-export.js";
 import { companySkillRoutes } from "./routes/company-skills.js";
 import { agentRoutes } from "./routes/agents.js";
 import { projectRoutes } from "./routes/projects.js";
@@ -334,6 +335,11 @@ export async function createApp(
     }),
   );
   api.use("/companies", companyRoutes(db, opts.storageService));
+  // P0.6 — founder-facing JSON export. Mounted under /companies so the
+  // path is GET /api/companies/:companyId/export, separate from the
+  // POST .../export route in companyRoutes (which produces the
+  // structured portability bundle). Two HTTP methods → two handlers.
+  api.use("/companies", companiesExportRoutes(db));
   api.use("/companies", hireProposalRoutes(db));
   api.use(companySkillRoutes(db));
   api.use(agentRoutes(db));
