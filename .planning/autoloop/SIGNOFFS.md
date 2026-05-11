@@ -255,10 +255,10 @@ If `expires_at` passes with `status: pending`:
 - **alternatives**:
   - **(a)** Auto-merge enroll right now and accept the diff sight-unseen. Compromises the Tier-2 review intent — Tier-2 is explicitly "open PR but stop for eyes."
   - **(b)** Close the PR and re-scope BL-022 to a non-LLM "what shipped" using git log instead of Haiku. Loses the suggester intelligence but eliminates the new external API call surface.
-- **artifacts**: PR https://github.com/bajajvinamr/founderos/pull/176, agent transcript a3960fd3433787f46, worktree-leak invariant 4th confirmation
-- **status**: pending
-- **resolved_at**: null
-- **resolution_note**: null
+- **artifacts**: PR https://github.com/bajajvinamr/founderos/pull/176, agent transcript a3960fd3433787f46, worktree-leak invariant 4th confirmation, RV-001 review comment https://github.com/bajajvinamr/founderos/pull/176#issuecomment-4421817942
+- **status**: **resolved-merged**
+- **resolved_at**: 2026-05-11T15:07:32Z
+- **resolution_note**: #176 merged at 15:07:32Z (11th autoloop ship); auto-merge SQUASH fired on CI green post-#180 rebase. RV-001 (Sample-N reviewer) APPROVED with 2 LOW findings (529-overload caching gap in `defaultCallAnthropic` + inline type duplication in `ui/src/api/dashboard.ts`) — both filed as follow-up backlog candidates, not blocking. RV-001 review URL: https://github.com/bajajvinamr/founderos/pull/176#issuecomment-4421817942 — posted as comment due to GitHub own-PR self-review restriction. Practices-doc note: `isTransientAnthropicError(status)` shared helper applies repo-wide (daily-founder-brief + weekly-wrap-generator + this widget); worth a small consolidation PR.
 
 ## [SIG-009] EQ-010 / PR #178 — BL-013 P4.b transcript founder-mode Tier-2 review
 
@@ -349,6 +349,34 @@ If `expires_at` passes with `status: pending`:
   - **(a)** Reject + force a Tier-3 route registration. Costs a council cycle for what's already a usable page; loses the pragmatic-option pattern value.
   - **(b)** Approve + open a follow-up SIG for top-level `/setup/*` shell as a planned Tier-3 in P7 (IA collapse, SIG-004). Recommended — captures the future evolution without blocking now.
 - **artifacts**: PR #181 https://github.com/bajajvinamr/founderos/pull/181, branch `feat/bl-016-ai-connections-page` (commit `6c1141a` on origin), 5 files in ui/, 8 vitest tests passing, agent return summary in cycle 18 task output `aba8cc786a6044597`
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
+
+## [SIG-013] PRACT-2 / EQ-014 hold-and-propose — PR template rewrite authorization
+
+- **type**: scope-expansion / overwrite-authorization
+- **priority**: P2
+- **decision_required**: approve | reject | edit-and-approve | defer
+- **blocking**: PRACT-2 dispatch cannot proceed without overwrite authorization; PR template structural mismatch remains unaddressed
+- **blast_radius**: 1 file (`.github/PULL_REQUEST_TEMPLATE.md`, 77 lines from Paperclip-fork inheritance) — affects every future PR author's UX (they see the new template on `gh pr create`). No runtime impact; markdown only. Reversible via revert.
+- **ci_state**: n/a (no PR open)
+- **merge_state**: n/a
+- **source**: EQ-014 / PRACT-2 dispatch (autoloop-cycle-20) returned with `DEVIATION FROM SPEC — REASON FOR STOP`: file exists, spec failure-mode rule "do NOT overwrite, return summary noting the existing template and propose a diff instead" triggered correctly
+- **recommended_action**: APPROVE the structural rewrite. Existing template uses narrative "Risk: Low/Med/High" which doesn't match autoloop's path-derived tier rules in PROTOCOL.md. Proposed spine uses Tier (T1/T2/T3) checkboxes aligned with the tier-validator. Re-dispatch EQ-014b with `ALLOW_OVERWRITE=true` (or equivalent flag) when authorized.
+- **expires_at**: 2026-05-18T00:00Z
+- **context**: `.github/PULL_REQUEST_TEMPLATE.md` was inherited from the Paperclip fork (commit `9cf2aa9`, last touched `2e78513`). It has 13 narrative sections (What Changed, Why, How to Test, Routes Changed, Migrations, Breaking Changes, Test Evidence, Linked PRD, Linked ADR, Screenshots, Risk, Rollback Plan, Checklist). The autoloop's new requirement is a 7-section path-tier-aware template that complements the Sample-N reviewer-agent protocol. EQ-014 proposed a merge plan that preserves high-value existing sub-fields (Migrations, Breaking Changes, Linked PRD/ADR, Screenshots) as conditional sub-sections under the new spine.
+- **proposed**: User edits SIG-013 status to `approved`. Next wake cycle dispatches EQ-014b with `ALLOW_OVERWRITE=true` brief that:
+  - REPLACES existing 13-section template with 7-section autoloop-tier spine
+  - PRESERVES Migrations, Breaking Changes, Linked PRD/ADR, Screenshots as conditional sub-sections
+  - ADDS header citing docs/code-review-practices.md + Sample-N AI-reviewer note
+  - REPLACES narrative Risk with Tier classification checkboxes (T1/T2/T3) mapped to PROTOCOL.md §"Path-based tier rules"
+  - REPLACES CI-pass checklist with review-quality checklist (founder-language, a11y, error-handling, secrets, tier-3 path check, test coverage, single-origin guarantee)
+- **alternatives**:
+  - **(a)** REJECT — keep Paperclip-inherited template as-is. Risk: structural mismatch with autoloop tier system; reviewers don't have a path-tier checkbox to fill; the 0% review activity surface stays without the structural fix.
+  - **(b)** EDIT-AND-APPROVE — user manually edits SIG-013 with specific section preferences (e.g., "keep narrative Risk AND add Tier checkboxes alongside") and autoloop dispatches that variant.
+  - **(c)** DEFER — wait until P5.b lands or until a user-initiated PR happens with the existing template to gather real-use evidence before changing.
+- **artifacts**: EQ-014 return summary in task `aa1f5cf64ad17c514.output`, existing template at `.github/PULL_REQUEST_TEMPLATE.md` (HEAD), source-of-truth doc `docs/code-review-practices.md`, PROTOCOL.md §"Path-based tier rules"
 - **status**: pending
 - **resolved_at**: null
 - **resolution_note**: null

@@ -29,27 +29,29 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 19
-- **last_cycle_at**: 2026-05-11T14:55:00Z  <!-- cycle 19 wake fired ~28min late vs scheduled 14:26Z; wake prompt was stale (encoded cycle-18 state) -->
-- **next_wake_at**: 2026-05-11T15:20:00Z  <!-- +1500s — catches #176 auto-merge (BEHIND→rebased, test+coverage will run) + dispatch PRACT-2 if cap clears -->
+- **cycle**: 20
+- **last_cycle_at**: 2026-05-11T15:23:00Z
+- **next_wake_at**: 2026-05-11T15:48:00Z  <!-- +1500s — catches EQ-014/PRACT-2 return (~10-15min), any user activity on #181, and dispatch BL-018 P5.c (provider catalog) if EQ-013/#181 lands -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-013 returned with #181; RV-001 + RV-002 also completed -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-014 returned without PR (hold-and-propose); no new dispatch this cycle -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 long-standing close-rec + #176 (test+coverage still IN_PROGRESS or just-cleared, RV-001 APPROVED) + #181 (Tier-2 RV-002 REQUEST_CHANGES, awaiting user) -->
-- **open_prs_max**: 2  <!-- still over by 1 (#163); 2 autoloop PRs -->
-- **autoloop_prs_open**: 2  <!-- #176 (auto-merge SQUASH enrolled), #181 (Tier-2 no-auto-merge) -->
-- **autoloop_prs_merged**: 10  <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179, #180 — #180 landed 14:14:43Z -->
-- **autoloop_dispatches_completed**: 13  <!-- +EQ-013 -->
+- **open_prs**: 2  <!-- #163 long-standing close-rec + #181 (Tier-2, awaiting user on RV-002 findings) -->
+- **open_prs_max**: 2
+- **autoloop_prs_open**: 1  <!-- #181 only -->
+- **autoloop_prs_merged**: 11
+- **autoloop_dispatches_completed**: 14  <!-- +EQ-014 — completed-without-PR is still a completed dispatch outcome -->
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 10  <!-- +EQ-011/180 — EQ-013/181 not yet merged so not counted as "shipped" -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (RV-001 APPROVED, auto-merge enrolled, pending CI), EQ-013/#181 (Tier-2 RV-002 REQUEST_CHANGES — user reviews) -->
-- **autoloop_dispatches_active**: 0  <!-- 0 active eng dispatches; 2 reviewer dispatches completed -->
-- **autoloop_reviewer_dispatches**: 2  <!-- RV-001 on #176 → APPROVE+2 LOW findings; RV-002 on #181 → REQUEST_CHANGES+1 HIGH+1 MED+1 LOW -->
-- **autoloop_reviewer_review_request_changes**: 1  <!-- RV-002 on #181 -->
-- **autoloop_reviewer_findings_real_bugs_caught**: 1  <!-- RV-002 MEDIUM: fallback-order seeding race becomes silent data-loss bug at P5.b persistence -->
-- **avg_round_trip_minutes**: ~9.3  <!-- 10 ships / EQ-011: 12.1, EQ-013: 13.2 -->
+- **autoloop_dispatches_shipped**: 11  <!-- EQ-014 did NOT ship (hold-and-propose); ships count unchanged -->
+- **autoloop_dispatches_held**: 1  <!-- EQ-014 — new outcome class: "completed without PR per failure-mode rule" -->
+- **autoloop_dispatches_in_pr**: 1  <!-- EQ-013/#181 -->
+- **autoloop_dispatches_active**: 0
+- **autoloop_reviewer_dispatches**: 2
+- **autoloop_reviewer_review_request_changes**: 1
+- **autoloop_reviewer_findings_real_bugs_caught**: 1
+- **avg_round_trip_minutes**: ~9.2
+- **user_queue_pending**: 3  <!-- #181 user-review on RV-002 + SIG-013 PR-template-overwrite-auth + SIG-010 pre-existing-test-failure-triage; cycle 20 explicit discipline-hold on new dispatch to respect user throughput -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -70,11 +72,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 12   <!-- #170-#181 -->
-- **prs_merged**: 10   <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179, #180 -->
-- **signoffs_pending**: 10   <!-- SIG-001..008 + SIG-010 + SIG-012 (SIG-009 + SIG-011 resolved) -->
-- **backlog_items_total**: 23
-- **backlog_items_remaining**: 7   <!-- minus EQ-001 escalated, 10 merged, EQ-008/EQ-013 in PR -->
+- **prs_opened**: 12   <!-- #170-#181; EQ-014 did NOT open a PR (held per failure-mode rule) -->
+- **prs_merged**: 11   <!-- +#176 -->
+- **signoffs_pending**: 10   <!-- SIG-001..007 + SIG-010 + SIG-012 + SIG-013 (SIG-008 + SIG-009 + SIG-011 resolved) -->
+- **backlog_items_total**: 24
+- **backlog_items_remaining**: 7   <!-- EQ-014 returned without consuming a backlog slot — held-and-propose -->
 
 ## Drift Detection State
 
@@ -111,6 +113,7 @@
 | 18 | 14:01Z | **#179 MERGED at 13:34:15Z** (9th autoloop ship — practices doc live; docs/code-review-practices.md + CLAUDE.md index line); **#180 flake-class #11 recurred briefly** then auto-recovered (19/20 SUCCESS observed mid-cycle); **PROTOCOL.md updated**: flake class #11 (vitest cross-worker module-cache race) added to taxonomy + Branch-HEAD leak NEW invariant class documented with defensive primitive (`git branch --show-current` before every .planning/autoloop/* edit); #180 rebased post-#179 (BEHIND→cleared, fresh `test+coverage` IN_PROGRESS), #176 still waiting on its own `test+coverage` post-earlier rebase; **EQ-013 dispatched** for BL-016 P5.a AI Connections page (**Tier-2**, no auto-merge) — agent id aba8cc786a6044597, brief explicit on routing constraint (Tier-3 forbidden: company-routes.ts + Sidebar.tsx) and pragmatic-option pattern (find existing /setup/* host route OR escalate as Tier-3). Worktree-leak file-diff class **streak: 8 consecutive**. |
 | 18.5 | 14:05Z | **EQ-013 returned with PR #181** in ~13.2min — BL-016 AI Connections page, 5 files +663/-1 all in ui/* (NEW AiConnections.tsx 383, AiConnections.test.tsx 197/8 tests, ai-connections.ts 79, App.tsx +2 route reg inside existing instance/settings Layout, InstanceSidebar.tsx +1 nav item with Plug icon). Agent took **pragmatic-option pattern**: landed `/instance/settings/ai-connections` instead of `/setup/ai-connections` because `setup` not in BOARD_ROUTE_ROOTS and `company-routes.ts` is Tier-3 forbidden. autoMergeRequest=null ✓ Tier-2. SIG-012 logged. **#180 MERGED at 14:14:43Z** (10th autoloop ship — summarizeTool helper). **Branch-HEAD leak Mechanism B confirmed** (NEW root cause): EQ-013 used `cd /Users/vinamr/Projects/founderos && ...` for every Bash command → all work landed in PARENT checkout, not agent worktree. PROTOCOL.md updated with Mechanism A (harness) vs Mechanism B (agent `cd` pattern) distinction. Defense extended: agent briefs must explicitly forbid `cd <parent>` patterns. **Sample-N Reviewer-Agent Protocol ACTIVATED** (per user Option A): **RV-001** on #176 returned APPROVE+2 LOW (529-overload caching gap + inline type duplication); **RV-002** on #181 returned REQUEST_CHANGES+1 HIGH (disabled radio has no visual affordance + no test) + 1 MED (fallback-order seeding race → silent data-loss bug at P5.b) + 1 LOW (raw `<a>` should be NavLink). **First-dispatch validation**: RV protocol paid for itself on first run — RV-002 caught a real HIGH UX gap + a MED that becomes data-loss when P5.b wires persistence. PROTOCOL.md `Sample-N Reviewer-Agent Protocol` section appended. |
 | 19 | 14:55Z | Wake fired ~28min late vs scheduled 14:26Z. State probe: **#176 + #181 both OPEN BEHIND/MERGEABLE** post-#180 merge; **#180 already MERGED** at 14:14:43Z (logged in 18.5). #176 (auto-merge SQUASH enrolled, RV-001 APPROVED) rebased via `gh pr update-branch 176` → fresh CI starts. #181 (Tier-2 no-auto-merge, RV-002 REQUEST_CHANGES) **left alone — awaiting user decision** on RV-002 findings; rebase deferred until user signals merge intent. **HOLD on next dispatch**: autoloop_prs_open=2 (#176 + #181) at cap. PRACT-2 (`.github/PULL_REQUEST_TEMPLATE.md` Tier-2 — structurally addresses 0% review activity gap by inviting review on every PR) is queued for cycle 20 once #176 lands and frees a slot. Branch-HEAD leak file-diff class **streak: 9 consecutive**; defensive `git branch --show-current` opener clean. |
+| 20 | 15:23Z | **#176 MERGED at 15:07:32Z** (11th autoloop ship — BL-022 Haiku yesterday widget; auto-merge fired on rebased CI green); **SIG-008 → resolved-merged**. **EQ-014/PRACT-2 dispatched** (15:23Z id `aa1f5cf64ad17c514`) → **returned hold-and-propose in ~52s** without opening a PR: spec failure-mode rule "`.github/PULL_REQUEST_TEMPLATE.md` ALREADY EXISTS — do NOT overwrite, propose diff" fired correctly (file inherited from Paperclip fork commit `9cf2aa9`, 77 lines, narrative-risk model). Agent proposed clean structural diff merging existing high-value sub-fields (Migrations, Breaking Changes, Linked PRD/ADR, Screenshots) under new autoloop-tier spine. **SIG-013 logged** asking user to authorize overwrite. **DISCIPLINE-HOLD on new dispatch** despite slot capacity: user queue already has 3 pending decisions (#181 RV-002 fix-or-merge, SIG-013 PR-template-auth, SIG-010 test-failures-triage); shipping more would compound human-decision backlog without throughput on the user side. RV-001 follow-up (transient-error helper across yesterday-summary/daily-brief/weekly-wrap) is a Tier-2 candidate for next cycle if user clears any of the 3. Branch-HEAD leak streak: **10 consecutive** file-diff-clean opens; EQ-014's brief explicitly forbade `cd <parent>` pattern AND agent confirmed compliance in return summary — Mechanism B defense validated under live dispatch. |
 
 ## Last Action Log
 
@@ -245,4 +248,13 @@
 19: 2026-05-11T14:55:30Z | rationale | PRACT-2 rationale: PR template invites review on every PR via structured checklist (Tier classification, blast-radius, test-plan) — complements Sample-N Reviewer protocol by giving the HUMAN reviewer a frame too. Tier-2 classification: file path doesn't match Tier-3 patterns (not under workflows/, not in shared/types) but template SHAPE affects every future PR → blast radius justifies user-merge gate. CODEOWNERS (Tier-3) deferred — needs council on auto-request-review rules.
 19: 2026-05-11T14:55:30Z | defer | #181 rebase DEFERRED — user is reviewing RV-002 REQUEST_CHANGES findings; rebasing now would force-push and might invalidate any in-progress local fixes user is preparing. Rebase only when user signals merge intent.
 19: 2026-05-11T14:56:00Z | branch-leak | streak: 9 consecutive file-diff-clean opens; branch-HEAD class clean this cycle (defensive `git branch --show-current` opener — chore/autoloop-scaffold confirmed before any Edit/Write)
+20: 2026-05-11T15:07:32Z | pr-merge | **#176 (EQ-008 BL-022 P8.b Haiku yesterday widget) MERGED** — autoloop's **11th ship**; auto-merge fired on rebased CI green; SIG-008 status flipped to resolved-merged at 15:23Z
+20: 2026-05-11T15:22:10Z | wake | cycle 20 wake fire — on-time (scheduled 15:20Z, fired 15:22Z)
+20: 2026-05-11T15:22:30Z | ci-probe | open autoloop PRs: only #181 (UNKNOWN/UNKNOWN with `updatedAt`=14:51Z but commits = 1 = original EQ-013 ship only; 3 comments incl. RV-002; 0 reviews submitted — user not yet acted)
+20: 2026-05-11T15:23:00Z | dispatch | **EQ-014 / PRACT-2** dispatched (Tier-2, .github/PULL_REQUEST_TEMPLATE.md NEW) — id `aa1f5cf64ad17c514`; brief explicit on operational rules (no `cd <parent>` Mechanism-B, no destructive git, single commit on clean branch, no auto-merge enrollment per Tier-2)
+20: 2026-05-11T15:24:00Z | agent-return | EQ-014 returned in ~52s with **hold-and-propose** outcome: PR template file already exists (Paperclip fork inheritance), spec failure-mode rule prevented overwrite; agent surfaced structural diff plan (replace 13-section narrative-risk spine with 7-section autoloop-tier spine, preserve high-value sub-fields). Worktree clean, no branch created, no commit, no PR.
+20: 2026-05-11T15:24:30Z | invariant | **Branch-HEAD leak Mechanism B DEFENSE VALIDATED LIVE**: EQ-014 brief explicitly forbade `cd /Users/vinamr/Projects/founderos && ...` pattern; agent confirmed in return summary "all reads from worktree pwd /Users/vinamr/Projects/founderos/.claude/worktrees/agent-aa1f5cf64ad17c514 ✓". First dispatch since Mechanism B was documented (PROTOCOL.md cycle 18.5) — defense empirically works. Streak: 10 consecutive file-diff-clean.
+20: 2026-05-11T15:25:00Z | signoff | SIG-013 logged for PRACT-2 hold-and-propose (P2 scope-expansion / overwrite-authorization; user picks approve/reject/edit/defer; recommended APPROVE the structural rewrite with merge plan)
+20: 2026-05-11T15:25:30Z | discipline-hold | NO new dispatch despite slot capacity (autoloop_prs_open=1, autoloop_dispatches_active=0; both under cap=2). Rationale: user queue has 3 pending decisions (#181 RV-002 fix-or-merge, SIG-013 PR-template-auth, SIG-010 test-failures-triage); shipping more would compound backlog without user-throughput. Holding to respect "user throughput, not autoloop throughput" invariant.
+20: 2026-05-11T15:25:30Z | candidate-queue | Next-cycle candidate (if any user decision lands): EQ-015 = RV-001 follow-up = `isTransientAnthropicError(status: number): boolean` helper in NEW `server/src/lib/anthropic-errors.ts` + 3 callsite updates (yesterday-summary.ts, daily-founder-brief.ts, weekly-wrap-generator.ts). Tier-2 (modifying existing services). Pure additive. ~10-15min round trip. Tests required (mock 529 + 429 + 200 + null).
 ```
