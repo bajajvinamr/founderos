@@ -10,6 +10,7 @@ import { formatBootstrapError } from "@/lib/onboarding-bootstrap-error";
 import { useDialog } from "@/context/DialogContext";
 import { useCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useDisplay } from "@/lib/use-display";
 import { Step1Vision } from "./steps/Step1Vision.js";
 import { Step2Bottleneck } from "./steps/Step2Bottleneck.js";
 import { Step3Team } from "./steps/Step3Team.js";
@@ -141,6 +142,14 @@ export function FounderOnboardingWizard() {
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft());
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // BL-002 (P2.a, founder-language sweep) — Step 4 H1 + subtitle are now
+  // driven by the DisplayDictionary so they switch between founder and
+  // engineer voice based on `founderos.viewMode` in localStorage. The keys
+  // live in `packages/shared/src/display-dictionary.ts`; the hook reads
+  // viewMode + returns the active label.
+  const step4Headline = useDisplay("onboarding.step4.headline");
+  const step4Subtitle = useDisplay("onboarding.step4.subtitle");
 
   // Server-generated decisions: real Claude call that uses the founder's
   // vision + bottlenecks + team to produce 3 tailored cards. Fetched lazily
@@ -401,12 +410,17 @@ export function FounderOnboardingWizard() {
               {step === 4 && (
                 <div className="space-y-8">
                   <div>
-                    <h2 className="text-2xl font-semibold tracking-tight">
-                      Plug in your brain
+                    <h2
+                      className="text-2xl font-semibold tracking-tight"
+                      data-testid="onboarding-step4-headline"
+                    >
+                      {step4Headline}
                     </h2>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      How should agents authenticate with Claude? Integrations are optional
-                      — you can connect them later.
+                    <p
+                      className="mt-2 text-sm text-muted-foreground"
+                      data-testid="onboarding-step4-subtitle"
+                    >
+                      {step4Subtitle}
                     </p>
                   </div>
 
