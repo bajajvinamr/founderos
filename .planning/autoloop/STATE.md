@@ -28,9 +28,9 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 13.5
-- **last_cycle_at**: 2026-05-11T12:15:00Z
-- **next_wake_at**: 2026-05-11T12:24:00Z  <!-- cycle 14 wake already pending; this cycle is task-notification-fire (EQ-010 returned + #177 merged in same window) -->
+- **cycle**: 14
+- **last_cycle_at**: 2026-05-11T12:24:00Z
+- **next_wake_at**: 2026-05-11T13:24:00Z  <!-- +3600s — extended wait: only user-merge events can advance state; check hourly instead of 25-min cycles -->
 
 ## Concurrency Tracking
 
@@ -99,6 +99,7 @@
 | 13 | 11:59Z | **#174 MERGED at 11:43:40Z** (6th autoloop ship, BL-012 P4.a viewMode + Settings toggle); #177 rebased post-#174 (was BEHIND, auto-merge SQUASH still enrolled); **EQ-010 dispatched** (BL-013 P4.b transcript founder-mode render, **Tier-2 NO auto-merge** per posture); active_phase_set expanded to [B2, P2, P4, P8] |
 | 13.1 | 12:02Z | **Stale-wake-fire no-op** — duplicate cycle-13 wake fired ~3min after cycle 13 closed with cycle-12-era anticipated state; documented for protocol retro; no new dispatch, no new wake scheduled |
 | 13.5 | 12:15Z | **#177 MERGED at 11:58:59Z** (7th autoloop ship, BL-005 P2.d Tile descriptions) — **P2 phase visible-copy sweep STRUCTURALLY COMPLETE**; **EQ-010 returned with PR #178** in 13.9min (BL-013 P4.b transcript founder-mode, 3 files +309/-11 all in ui/src/components/transcript/*, Tier-2 autoMergeRequest:null, SIG-009 logged P1 priority); EQ-010 surfaced 3 pre-existing test failures unrelated to PR scope (SIG-010 triage logged); worktree-leak invariant validated **6th consecutive time**; **HOLD on dispatch** — both autoloop_prs_open slots occupied by Tier-2 review queue (#176 + #178) |
+| 14 | 12:24Z | **Tier-2 review queue HOLD continues** — no user merges since cycle 13.5 (5min ago). Dep-chain audit: ZERO unblocked Tier-1 items remain (BL-014 needs #178, BL-018 needs BL-016 unstarted, BL-011 needs BL-010 chain). Only unblocked-but-Tier-2 candidate is BL-016 P5.a (no auto-merge, would push autoloop_prs_open to 3 over cap). **No dispatch**; extending wake interval to 60min (3600s) since only user-merge events can advance state. Wake-prompt's "BL-014 unblocks when #177 merged" assertion was structurally wrong (BL-014 deps BL-013/#178, not BL-005/#177). |
 
 ## Last Action Log
 
@@ -171,4 +172,8 @@
 13.5: 2026-05-11T12:16:00Z | signoff   | SIG-009 logged for PR #178 Tier-2 review (P1 priority — P4 keystone, BL-014 blocked on this; expires 2026-05-18, recommended APPROVE-MERGE)
 13.5: 2026-05-11T12:16:30Z | signoff   | SIG-010 logged for triage of 3 pre-existing test failures surfaced by EQ-010's workspace test run (billing-gate.test.ts, heartbeat-jwt-secret-fail.test.ts, issues-execution-routes.test.ts) — P3 priority, NOT introduced by any autoloop dispatch, but autoloop validator needs to know whether these are flakes/bugs/regressions
 13.5: 2026-05-11T12:17:00Z | hold      | NO new dispatch — autoloop_prs_open=2 occupied by Tier-2 review queue (#176 SIG-008 + #178 SIG-009). BL-014 P4.c (Tier-1 tool action summarization) blocked on #178 user-merge. No other unblocked Tier-1 items in active_phase_set [B2, P2, P4, P8].
+14: 2026-05-11T12:24:00Z | wake      | cycle 14 wake fire — wake-prompt's premise "if #177 merged → BL-014 unblocks" was structurally wrong (BL-014 deps BL-013/#178, not BL-005/#177)
+14: 2026-05-11T12:24:30Z | ci-probe  | #176 OPEN MERGEABLE=UNKNOWN (Tier-2 SIG-008, no user merge yet); #178 OPEN MERGEABLE=MERGEABLE (Tier-2 SIG-009, no user merge yet); main HEAD confirms #177 at e62c0db
+14: 2026-05-11T12:24:45Z | dep-audit | full backlog dep-chain scan: ZERO unblocked Tier-1 items. Inventory: BL-014 (P4.c) needs #178; BL-018 (P5.c) needs BL-016 unstarted; BL-011 (P3.e) needs BL-010 chain blocked by BL-007 Tier-3. Only unblocked-but-Tier-2 candidate is BL-016 P5.a (would compound Tier-2 review queue).
+14: 2026-05-11T12:25:00Z | hold      | NO new dispatch this cycle. Only user-merge events can advance state. Extending wake interval to 3600s (60min) to reduce cache thrash for a state-bound queue.
 ```
