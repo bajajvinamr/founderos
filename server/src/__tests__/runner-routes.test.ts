@@ -152,7 +152,15 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
     companyId: string;
     agentId: string;
     runId: string;
-    /** S7.0.1 — adapter the runner should dispatch to. Defaults to claude_local. */
+    /**
+     * S7.0.1 — adapter the runner should dispatch to. Defaults to
+     * `byo_runner` (laptop-runner-served). S8 P0.1 (Phase 2B) added a
+     * defense-in-depth WHERE filter on `/jobs/next` + `/claim` that hides
+     * any row whose adapter_type is NOT in the laptop allowlist
+     * (e.g., hosted `claude_local` rows). Tests that exercise the
+     * happy-path long-poll/claim must default to a row the laptop runner
+     * is allowed to see.
+     */
     adapterType?: string;
   }) {
     const [row] = await db
@@ -164,7 +172,7 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
         prompt: "test prompt",
         promptHash: "a".repeat(64),
         runtimeConfig: JSON.stringify({ timeoutSec: 60 }),
-        adapterType: args.adapterType ?? "claude_local",
+        adapterType: args.adapterType ?? "byo_runner",
         status: "queued",
       })
       .returning();
@@ -810,11 +818,14 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
       expect(updated.adapterType).toBe("gemini_local");
     });
 
-    it("S7.0.1 — claim API defaults adapterType to claude_local when row predates the column", async () => {
-      // Simulate a row inserted via raw SQL bypassing the Drizzle default
-      // (this is the "agent rows that slipped through migration" defensive
-      // path — the NOT NULL DEFAULT in the migration normally handles this,
-      // but the dispatcher legacy-fallback should be belt+suspenders).
+    it("S7.0.1 — claim API echoes adapterType when the row carries an explicit laptop-served value", async () => {
+      // Belt+suspenders that the claim response surfaces the adapter
+      // dispatch hint correctly — pre-S7 the row didn't carry the column
+      // and the API defaulted to `claude_local`. Post-S8 P0.1 the laptop
+      // runner is no longer permitted to claim a `claude_local` row at
+      // all (defense-in-depth filter, see "S8 P0.1" describe below), so
+      // this test is pinned to an explicit laptop-served value
+      // (`byo_runner`).
       const company = await makeCompany("Legacy Co");
       const agent = await makeAgent(company.id);
       const run = await makeHeartbeatRun(company.id, agent.id);
@@ -822,7 +833,7 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
         companyId: company.id,
         agentId: agent.id,
         runId: run.id,
-        // Default → claude_local (mirrors the production default).
+        adapterType: "byo_runner",
       });
       const [token] = await db
         .insert(runnerTokens)
@@ -832,7 +843,80 @@ describeEmbeddedPostgres("runner REST routes — BYO-104", () => {
 
       const res = await request(app).post(`/api/runner/jobs/${job.id}/claim`);
       expect(res.status).toBe(200);
-      expect(res.body.adapterType).toBe("claude_local");
+      expect(res.body.adapterType).toBe("byo_runner");
+    });
+  });
+
+  // ─── S8 P0.1 Phase 2B (Agent 2B) — hosted/laptop segregation ────────────
+  describe("S8 P0.1 — laptop runner cannot claim hosted-typed rows", () => {
+    it("GET /api/runner/jobs/next ignores claude_local rows even when queued", async () => {
+      // Simulate a hosted-mode `claude_local` row landing in runner_jobs
+      // (e.g., legacy enqueue, manual SQL, mis-configured adapter
+      // resolver). Post-S8 P0.1 the laptop runner MUST refuse it and
+      // surface only allowlisted laptop-served adapter types.
+      const company = await makeCompany("Hosted Skip Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      // Insert the hosted-typed row first, then a legitimate laptop
+      // row — the runner should skip the hosted row and surface the
+      // laptop one.
+      await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        adapterType: "claude_local",
+      });
+      const laptopJob = await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        adapterType: "byo_runner",
+      });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "h".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).get("/api/runner/jobs/next");
+      expect(res.status).toBe(200);
+      // Surfaces ONLY the laptop-typed row, never the hosted one.
+      expect(res.body.jobId).toBe(laptopJob.id);
+    });
+
+    it("POST /api/runner/jobs/:id/claim returns 404 for a claude_local row even when the runner POSTs the jobId directly", async () => {
+      // Cover the case where a runner learns a jobId via a side-channel
+      // (e.g., cached from before the hosted cutover) and tries to
+      // claim it. The structural filter must reject the row at the
+      // claim level — long-poll WHERE filter is not enough.
+      const company = await makeCompany("Hosted Claim Co");
+      const agent = await makeAgent(company.id);
+      const run = await makeHeartbeatRun(company.id, agent.id);
+      const hostedJob = await makeQueuedJob({
+        companyId: company.id,
+        agentId: agent.id,
+        runId: run.id,
+        adapterType: "claude_local",
+      });
+      const [token] = await db
+        .insert(runnerTokens)
+        .values({ companyId: company.id, tokenHash: "i".repeat(64) })
+        .returning();
+      const app = runnerApp(token.id, company.id);
+
+      const res = await request(app).post(`/api/runner/jobs/${hostedJob.id}/claim`);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("job_not_found");
+
+      // Row remains queued — the laptop never claimed it. A future
+      // hosted-execution path (in-process Anthropic SDK) is responsible
+      // for terminal-stating this row separately.
+      const [unchanged] = await db
+        .select()
+        .from(runnerJobs)
+        .where(eq(runnerJobs.id, hostedJob.id));
+      expect(unchanged.status).toBe("queued");
+      expect(unchanged.claimedByTokenId).toBeNull();
     });
   });
 

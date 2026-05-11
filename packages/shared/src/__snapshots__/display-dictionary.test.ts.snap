@@ -1,0 +1,146 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DISPLAY_DICTIONARY > should have a snapshot of the full dictionary 1`] = `
+{
+  "adapter": {
+    "engineer": "Adapter",
+    "founder": "AI Brain",
+  },
+  "agents": {
+    "engineer": "Agents",
+    "founder": "Your team",
+  },
+  "anthropic_api": {
+    "engineer": "Anthropic API",
+    "founder": "Claude (pay-per-use)",
+  },
+  "ask_action": {
+    "engineer": "Create new issue",
+    "founder": "What do you want done?",
+  },
+  "audit": {
+    "engineer": "Audit log",
+    "founder": "History",
+  },
+  "byo_runner": {
+    "engineer": "BYO Runner",
+    "founder": "Run on my computer",
+  },
+  "claim": {
+    "engineer": "Claim",
+    "founder": "Activate",
+  },
+  "claude_local": {
+    "engineer": "Claude Code CLI",
+    "founder": "Claude (subscription)",
+  },
+  "codex_local": {
+    "engineer": "Codex CLI",
+    "founder": "ChatGPT (subscription)",
+  },
+  "create_issue": {
+    "engineer": "Create Issue",
+    "founder": "Ask the team",
+  },
+  "decisions": {
+    "engineer": "Decisions",
+    "founder": "Decisions",
+  },
+  "gemini_api": {
+    "engineer": "Gemini API",
+    "founder": "Gemini (pay-per-use)",
+  },
+  "gemini_local": {
+    "engineer": "Gemini CLI",
+    "founder": "Gemini (subscription)",
+  },
+  "heartbeat": {
+    "engineer": "Heartbeat",
+    "founder": "Check-in",
+  },
+  "inbox": {
+    "engineer": "Inbox",
+    "founder": "Inbox",
+  },
+  "integrations": {
+    "engineer": "Integrations",
+    "founder": "Connections",
+  },
+  "issue": {
+    "engineer": "Issue",
+    "founder": "Task",
+  },
+  "issues": {
+    "engineer": "Issues",
+    "founder": "Tasks",
+  },
+  "new_issue": {
+    "engineer": "New Issue",
+    "founder": "Ask FounderOS",
+  },
+  "onboarding.step4.headline": {
+    "engineer": "Adapter configuration",
+    "founder": "How should FounderOS use AI?",
+  },
+  "onboarding.step4.subtitle": {
+    "engineer": "Select adapter family + provider",
+    "founder": "Pick where the AI for your team should run",
+  },
+  "openai_api": {
+    "engineer": "OpenAI API",
+    "founder": "ChatGPT (pay-per-use)",
+  },
+  "provider.anthropic_api.description": {
+    "engineer": "Bring your own Anthropic API key for hosted deployments.",
+    "founder": "Pay Anthropic directly for each agent call — runs in the cloud, no laptop required.",
+  },
+  "provider.claude_code.description": {
+    "engineer": "For developers — requires Claude Code CLI installed on your laptop.",
+    "founder": "Use your existing Claude Code app — no extra cost beyond your Anthropic subscription.",
+  },
+  "provider.codex_cli.description": {
+    "engineer": "Use your OpenAI subscription via the local Codex CLI.",
+    "founder": "Use your ChatGPT subscription via Codex CLI on your laptop.",
+  },
+  "provider.gemini_cli.description": {
+    "engineer": "Use your Google AI subscription via the local CLI.",
+    "founder": "Use your Google AI subscription via Gemini CLI on your laptop.",
+  },
+  "provider.google_api.description": {
+    "engineer": "Bring your own Gemini API key for hosted deployments.",
+    "founder": "Pay Google directly for each agent call — runs in the cloud, no laptop required.",
+  },
+  "provider.openai_api.description": {
+    "engineer": "Bring your own OpenAI API key (GPT-4o / o3).",
+    "founder": "Pay OpenAI directly for each agent call — runs in the cloud, no laptop required.",
+  },
+  "providers": {
+    "engineer": "Providers",
+    "founder": "AI services",
+  },
+  "routine": {
+    "engineer": "Routine",
+    "founder": "Schedule",
+  },
+  "routines": {
+    "engineer": "Routines",
+    "founder": "Schedules",
+  },
+  "run": {
+    "engineer": "Run",
+    "founder": "Work shift",
+  },
+  "runs": {
+    "engineer": "Runs",
+    "founder": "Work shifts",
+  },
+  "wakeup": {
+    "engineer": "Wakeup",
+    "founder": "Start work",
+  },
+  "workspace": {
+    "engineer": "Workspace",
+    "founder": "Knowledge base",
+  },
+}
+`;
