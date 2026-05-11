@@ -237,3 +237,25 @@ If `expires_at` passes with `status: pending`:
 - **status**: pending
 - **resolved_at**: null
 - **resolution_note**: null
+
+## [SIG-008] EQ-008 / PR #176 — BL-022 P8.b Haiku "yesterday widget" Tier-2 review
+
+- **type**: tier-2-review
+- **priority**: P2
+- **decision_required**: approve-merge
+- **blocking**: none — PR is OPEN, autoMergeRequest:null (NOT enrolled), awaits user merge decision
+- **blast_radius**: 8 files, +1112 lines pure-additive. Tier-2 surfaces touched: new `server/src/services/yesterday-summary.ts` (Haiku-tier LLM service, bare-fetch pattern mirroring `daily-founder-brief.ts` + `weekly-wrap-generator.ts`), new endpoint added to existing `server/src/routes/dashboard.ts`, new server test file with 21 tests. Tier-1 surfaces: new `ui/src/components/dashboard/YesterdayWidget.tsx` + tests, new `ui/src/api/dashboard.ts` client helper, wire-in to `ui/src/pages/Dashboard.tsx`. NO touches to: migrations, packages/shared types, auth, billing-gate, stripe, router config, Dockerfile/workflows.
+- **ci_state**: opened 2026-05-11T11:22:53Z; CI gates pending verification — diff-validator PASS confirmed against Tier-2 path rules.
+- **merge_state**: OPEN, MERGEABLE, autoMergeRequest=null (Tier-2 posture honored — confirmed via `gh pr view 176 --json autoMergeRequest`)
+- **source**: EQ-008 dispatch return (autoloop-cycle-12.5)
+- **recommended_action**: APPROVE-MERGE. Diff is clean (no Tier-3 paths), tests all green (21/21 server + 15/15 UI + typecheck all 23 packages), pure-additive (deletions: 0), worktree-leak invariant validated 4th consecutive time. The only reason this is Tier-2 (not auto-merged) is the new server-side LLM service touches a new route surface — policy says these get human eyes once before they land. Pattern review checklist: (a) Haiku call uses `instanceApiKeysService(db).getDecryptedKey("anthropic", "api")` like sibling services ✓ (b) DI hooks for testing ✓ (c) `_resetYesterdaySummaryCache()` test isolation hook ✓ (d) 1024-entry bounded cache with insertion-order eviction per vinamr-invariants long-lived-Map pattern ✓.
+- **expires_at**: 2026-05-18T00:00Z
+- **context**: BL-022 ("What we shipped yesterday" widget on dashboard, Haiku-tier suggester) was Tier-2 by classification because it adds a new server-side LLM service + a new route surface. Agent (a3960fd3433787f46) returned in ~13.6min round-trip with PR #176. Branch: `feat/bl-022-yesterday-widget-haiku` (self-named correctly, not auto-renamed). Files: `server/src/services/yesterday-summary.ts` (+457), `server/src/__tests__/yesterday-summary.test.ts` (+424, 21 tests), `server/src/routes/dashboard.ts` (+15), `ui/src/components/dashboard/YesterdayWidget.tsx` (+111), `ui/src/components/dashboard/YesterdayWidget.test.tsx` (+62), `ui/src/api/dashboard.ts` (+22), `ui/src/pages/Dashboard.tsx` (+9), `ui/src/pages/Dashboard.test.tsx` (+12).
+- **proposed**: User reviews the diff (`gh pr diff 176` or Vercel preview link in the PR comments), confirms Haiku-tier model choice (`claude-haiku-4-5-20251001`) + 30s timeout + 1024 max output tokens are appropriate, then `gh pr merge 176 --squash`. Optional: enroll auto-merge AFTER review (`gh pr merge 176 --auto --squash`) if the user wants the autoloop to merge once final CI completes.
+- **alternatives**:
+  - **(a)** Auto-merge enroll right now and accept the diff sight-unseen. Compromises the Tier-2 review intent — Tier-2 is explicitly "open PR but stop for eyes."
+  - **(b)** Close the PR and re-scope BL-022 to a non-LLM "what shipped" using git log instead of Haiku. Loses the suggester intelligence but eliminates the new external API call surface.
+- **artifacts**: PR https://github.com/bajajvinamr/founderos/pull/176, agent transcript a3960fd3433787f46, worktree-leak invariant 4th confirmation
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
