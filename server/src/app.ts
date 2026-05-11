@@ -27,6 +27,7 @@ import { activityRoutes } from "./routes/activity.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { inboxDismissalRoutes } from "./routes/inbox-dismissals.js";
+import { inboxStateRoutes } from "./routes/inbox-state.js";
 import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { instanceInvitesRoutes } from "./routes/instance-invites.js";
 import { templateRoutes } from "./routes/templates.js";
@@ -363,6 +364,7 @@ export async function createApp(
   api.use(contentDraftRoutes(db));
   api.use(funnelRoutes(db));
   api.use(inboxDismissalRoutes(db));
+  api.use(inboxStateRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(instanceInvitesRoutes(db));
   api.use(templateRoutes(db));

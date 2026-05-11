@@ -37,6 +37,15 @@ export { issueComments } from "./issue_comments.js";
 export { issueExecutionDecisions } from "./issue_execution_decisions.js";
 export { issueInboxArchives } from "./issue_inbox_archives.js";
 export { inboxDismissals } from "./inbox_dismissals.js";
+export {
+  inboxState,
+  INBOX_STATE_ENTITY_TYPES,
+  INBOX_STATES,
+  type InboxState,
+  type InboxStateEntityType,
+  type InboxStateRow,
+  type InboxStateInsert,
+} from "./inbox_state.js";
 export { feedbackVotes } from "./feedback_votes.js";
 export { feedbackExports } from "./feedback_exports.js";
 export { issueReadStates } from "./issue_read_states.js";
