@@ -1,7 +1,24 @@
 import { useCallback, useState } from "react";
 import { getWorktreeUiBranding } from "../lib/worktree-branding";
+import { isDevBuild } from "../lib/dev-mode";
 
+/**
+ * Production gate (P3 Wave 1, OQ-6 resolution):
+ *
+ * The orange WORKTREE banner is engineer-real information — it exists so
+ * founders running `pnpm dev` locally on a feature branch can see which
+ * worktree they're on. Founders do NOT need this in any deployed surface
+ * (production, staging, or preview). Per 06-engineering-handoff.md §2.1
+ * + OQ-6, gate on `import.meta.env.DEV` only (resolved via ../lib/dev-mode
+ * so tests can mock it cleanly); everywhere else the banner renders `null`
+ * early — before any state setup, hooks, or branding reads.
+ */
 export function WorktreeBanner() {
+  if (!isDevBuild()) return null;
+  return <WorktreeBannerInner />;
+}
+
+function WorktreeBannerInner() {
   const branding = getWorktreeUiBranding();
   const [copied, setCopied] = useState(false);
 

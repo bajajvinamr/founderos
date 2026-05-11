@@ -4,10 +4,19 @@ import { BookOpen, Moon, Settings, Sun } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useNavigationType, useParams } from "@/lib/router";
 import { CompanyRail } from "./CompanyRail";
 import { Sidebar } from "./Sidebar";
+import { SidebarNew } from "./SidebarNew";
+import { AskBar } from "./AskBar";
+import {
+  useAskSuggestions,
+  type AskCommandSuggestion,
+  type AskPageSuggestion,
+  type AskSuggestion,
+} from "../hooks/useAskSuggestions";
 import { InstanceSidebar } from "./InstanceSidebar";
 import { BreadcrumbBar } from "./BreadcrumbBar";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { CommandPalette } from "./CommandPalette";
+import { isAskFirstShellEnabled } from "../lib/feature-flags";
 import { NewIssueDialog } from "./NewIssueDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { NewGoalDialog } from "./NewGoalDialog";
@@ -60,6 +69,14 @@ export function Layout() {
   const { sidebarOpen, setSidebarOpen, toggleSidebar, isMobile } = useSidebar();
   const { openNewIssue, openOnboarding } = useDialog();
   const { togglePanelVisible } = usePanel();
+  // P3 Wave 1 — Ask-First shell feature flag. Default OFF; flip via
+  // `VITE_FOUNDEROS_ASK_FIRST_SHELL=true` env var or `?shell=new` query
+  // param. Drives sidebar swap + AskBar render. See ui/src/lib/feature-flags.ts.
+  const askFirstShell = isAskFirstShellEnabled();
+  // AskBar state — lives at Layout scope so the typed query survives
+  // route changes within the same shell session (F-06 preserves the
+  // sentence; Esc + ⌘K must restore it across pages).
+  const [askBarValue, setAskBarValue] = useState("");
   const {
     companies,
     loading: companiesLoading,
@@ -188,6 +205,65 @@ export function Layout() {
     onTogglePanel: togglePanel,
     onShowShortcuts: () => setShortcutsOpen(true),
   });
+
+  // AskBar suggestions — built from in-memory page + command lists.
+  // No new server call in Wave 1; Wave 2-3 will add agents + recent
+  // entities via the existing api/agents + api/issues queries.
+  const askCommands: AskCommandSuggestion[] = useMemo(
+    () => [
+      {
+        kind: "command",
+        id: "cmd-new-issue",
+        domId: "askbar-cmd-new-issue",
+        label: "New issue",
+        subtitle: "Open the New Issue dialog (legacy fallback)",
+        shortcut: "C",
+        onSelect: () => openNewIssue(),
+      },
+    ],
+    [openNewIssue],
+  );
+  const askPages: AskPageSuggestion[] = useMemo(
+    () => [
+      { kind: "page", id: "page-today", domId: "askbar-page-today", label: "Today", to: "/today", shortcut: "T" },
+      { kind: "page", id: "page-work", domId: "askbar-page-work", label: "Work", to: "/work", shortcut: "W" },
+      { kind: "page", id: "page-team", domId: "askbar-page-team", label: "Team", to: "/team", shortcut: "E" },
+      { kind: "page", id: "page-library", domId: "askbar-page-library", label: "Library", to: "/library", shortcut: "L" },
+      { kind: "page", id: "page-settings", domId: "askbar-page-settings", label: "Settings", to: "/settings", shortcut: "S" },
+    ],
+    [],
+  );
+  const askGroups = useAskSuggestions({
+    query: askBarValue,
+    commands: askCommands,
+    agents: [],
+    pages: askPages,
+    recent: [],
+  });
+
+  const handleAskBarSelect = useCallback(
+    (suggestion: AskSuggestion) => {
+      if (suggestion.kind === "command") {
+        suggestion.onSelect();
+      } else if (suggestion.kind === "page" || suggestion.kind === "agent" || suggestion.kind === "recent") {
+        navigate(suggestion.to);
+      }
+      setAskBarValue("");
+    },
+    [navigate],
+  );
+
+  const handleAskTeam = useCallback(
+    (sentence: string) => {
+      // OQ-1 resolution — pre-fill the existing IssueDialog with the
+      // typed sentence as the title. Wave 4 may promote this to a real
+      // POST /api/companies/:id/ask endpoint once we measure how often
+      // founders reach for it.
+      openNewIssue({ title: sentence });
+      setAskBarValue("");
+    },
+    [openNewIssue],
+  );
 
   useEffect(() => {
     if (!isMobile) {
@@ -357,7 +433,7 @@ export function Layout() {
           >
             <div className="flex flex-1 min-h-0 overflow-hidden">
               <CompanyRail />
-              {isInstanceSettingsRoute ? <InstanceSidebar /> : <Sidebar />}
+              {isInstanceSettingsRoute ? <InstanceSidebar /> : askFirstShell ? <SidebarNew /> : <Sidebar />}
             </div>
             <div className="border-t border-r border-border px-3 py-2 bg-background">
               <div className="flex items-center gap-1">
@@ -415,7 +491,7 @@ export function Layout() {
                   sidebarOpen ? "w-60" : "w-0"
                 )}
               >
-                {isInstanceSettingsRoute ? <InstanceSidebar /> : <Sidebar />}
+                {isInstanceSettingsRoute ? <InstanceSidebar /> : askFirstShell ? <SidebarNew /> : <Sidebar />}
               </div>
             </div>
             <div className="border-t border-r border-border px-3 py-2">
@@ -467,9 +543,35 @@ export function Layout() {
         )}
 
         <div className={cn("flex min-w-0 flex-col", isMobile ? "w-full" : "h-full flex-1")}>
+          {/*
+           * P3 Wave 1 — AskBar lives at the top of the chrome content
+           * column on every page. When the Ask-First flag is on, this
+           * replaces the legacy header-toolbar search affordance. The
+           * legacy CommandPalette still mounts below for non-flag users
+           * (Cmd+K continues to work in legacy mode); the AskBar's own
+           * Cmd+K listener wins via preventDefault when both are mounted.
+           */}
+          {askFirstShell && (
+            <div
+              className={cn(
+                "flex h-14 shrink-0 items-center justify-center border-b border-border px-4",
+                isMobile && "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85",
+              )}
+              data-testid="askbar-header-slot"
+            >
+              <AskBar
+                groups={askGroups}
+                value={askBarValue}
+                onChange={setAskBarValue}
+                onSelectSuggestion={handleAskBarSelect}
+                onAskTeam={handleAskTeam}
+                variant={isMobile ? "compact" : "default"}
+              />
+            </div>
+          )}
           <div
             className={cn(
-              isMobile && "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85",
+              isMobile && !askFirstShell && "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85",
             )}
           >
             <BreadcrumbBar />
