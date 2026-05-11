@@ -94,6 +94,7 @@ import {
   claimBoardOwnership,
   inspectBoardClaimChallenge
 } from "../board-claim.js";
+import { assertSafeOutboundUrl } from "../lib/ssrf-guard.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -1548,6 +1549,8 @@ function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
 }
 
+// (assertSafeOutboundUrl is imported from ../lib/ssrf-guard.js below)
+
 type InviteResolutionProbe = {
   status: "reachable" | "timeout" | "unreachable";
   method: "HEAD";
@@ -2159,6 +2162,12 @@ export function accessRoutes(
   });
 
   router.get("/invites/:token/test-resolution", async (req, res) => {
+    // SECURITY: require instance-admin auth before making any outbound request.
+    // Invite tokens are short (8 chars, brute-forceable) and semi-public, so
+    // gating on token alone is insufficient — this endpoint is admin-only.
+    // CodeQL alert #18 (js/request-forgery).
+    await assertInstanceAdmin(req);
+
     const token = (req.params.token as string).trim();
     if (!token) throw notFound("Invite not found");
     const invite = await db
@@ -2173,12 +2182,11 @@ export function accessRoutes(
     const rawUrl =
       typeof req.query.url === "string" ? req.query.url.trim() : "";
     if (!rawUrl) throw badRequest("url query parameter is required");
-    let target: URL;
-    try {
-      target = new URL(rawUrl);
-    } catch {
-      throw badRequest("url must be an absolute http(s) URL");
-    }
+
+    // SECURITY: validate protocol + resolve hostname and reject RFC-1918,
+    // loopback, and link-local IPs before making any outbound fetch.
+    // Belt-and-suspenders: keeps the explicit protocol check below too.
+    const target = await assertSafeOutboundUrl(rawUrl);
     if (target.protocol !== "http:" && target.protocol !== "https:") {
       throw badRequest("url must use http or https");
     }
