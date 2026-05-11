@@ -22,6 +22,8 @@ import { FounderBriefing } from "../components/FounderBriefing";
 import { FirstRunProgressCard } from "../components/FirstRunProgressCard";
 import { DepartmentStatusGrid } from "../components/DepartmentStatusGrid";
 import { CapitalAllocationCard } from "../components/CapitalAllocationCard";
+import { TopBlockersWidget } from "../components/dashboard/TopBlockersWidget";
+import { QuickWinsWidget } from "../components/dashboard/QuickWinsWidget";
 import { DecisionsInbox } from "./DecisionsInbox";
 import { StatusIcon } from "../components/StatusIcon";
 
@@ -149,6 +151,18 @@ export function Dashboard() {
 
       <CompanyPulseWidget companyName={selectedCompany?.name} metrics={companyMetrics} />
       {selectedCompanyId && <PendingOutcomesBanner companyId={selectedCompanyId} />}
+
+      {/* P8.c (BL-023): Top Blockers + Quick Wins fill the dashboard slot
+          cleared by BL-021 (#171). Both are founder-language, scan-in-5s
+          surfaces. Top Blockers aggregates pending approvals + errored
+          agents (the two existing "needs you" signals); Quick Wins ships
+          static for now — see QuickWinsWidget for the BL-022 follow-up. */}
+      {selectedCompanyId && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <TopBlockersWidget companyId={selectedCompanyId} />
+          <QuickWinsWidget companyId={selectedCompanyId} />
+        </div>
+      )}
 
       {/* S1.6 — Decision Inbox (compact) — pending approvals visible without
           a click. Full inbox lives at /approvals. */}
