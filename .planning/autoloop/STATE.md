@@ -20,8 +20,8 @@
 
 ## Activation Trigger Status
 
-1. All 7 cascade PRs MERGED: **5/7** ✅ — #161 ✅ #164 ✅ #165 ✅ #167 ✅ #168 ✅ #163 ⏳ #169 ⏳
-   - **Override**: user-signoff per P2-1 escape hatch (gate bypassed)
+1. All 7 cascade PRs: **6/7 merged + 1 abandoned-superseded** — #161 ✅ #164 ✅ #165 ✅ #167 ✅ #168 ✅ #169 ✅ #163 ❌ (SIG-007: structural import bug; subsumed by SIG-005 B2 fix)
+   - **Override**: user-signoff per P2-1 escape hatch (gate bypassed at activation; cascade now effectively settled per SIG-007 close-recommendation)
 2. `COUNCIL.md` exists ✅
 3. COUNCIL.md P0 findings merged into PROTOCOL.md v2 ✅
 4. STATE.md `status: active` ✅
@@ -34,16 +34,17 @@
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-003 completed, PR opened, auto-merge enrolled -->
+- **eng_dispatches_in_flight**: 1  <!-- EQ-004 just dispatched -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 #169 cascade + #171 autoloop -->
-- **open_prs_max**: 2  <!-- temporarily over; cascade in flight -->
+- **open_prs**: 2  <!-- #163 cascade (SIG-007 close-recommended) + #171 autoloop -->
+- **open_prs_max**: 2
 - **autoloop_prs_open**: 1  <!-- #171 -->
 - **autoloop_prs_merged**: 1  <!-- #170 -->
 - **autoloop_dispatches_completed**: 3  <!-- EQ-001 (escalated), EQ-002 (shipped), EQ-003 (PR opened) -->
 - **autoloop_dispatches_escalated**: 1  <!-- EQ-001 → SIG-005 -->
 - **autoloop_dispatches_shipped**: 1  <!-- EQ-002 -->
 - **autoloop_dispatches_in_pr**: 1  <!-- EQ-003 / #171 awaiting CI -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-004 just dispatched -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -64,11 +65,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 2   <!-- #170 (BL-004), #171 (BL-021) -->
+- **prs_opened**: 2   <!-- #170 (BL-004), #171 (BL-021); EQ-004 will add #172 when agent returns -->
 - **prs_merged**: 1   <!-- #170 -->
-- **signoffs_pending**: 6   <!-- SIG-001..006 -->
+- **signoffs_pending**: 7   <!-- SIG-001..007 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 19   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 in PR, BL-021 closed-via-EQ-003 -->
+- **backlog_items_remaining**: 18   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 in PR, EQ-004 dispatched, BL-021 closed-via-EQ-003 -->
 
 ## Drift Detection State
 
@@ -100,4 +101,10 @@
 8: 2026-05-11T01:18:00Z | dispatch     | EQ-003 to general-purpose agent (worktree, background)
 8: 2026-05-11T01:27:00Z | agent-return | EQ-003 PR #171 opened, auto-merge enrolled SQUASH, awaiting CI
 8: 2026-05-11T01:27:00Z | signoff      | SIG-006 Permission Coach relocation follow-up (Tier-3, P2, bundle with SIG-002)
+8.5: 2026-05-11T09:44:59Z | cascade-merge | #169 P1 DisplayDictionary infrastructure merged
+8.5: 2026-05-11T09:48:00Z | rebase    | #171 onto post-#169 main (BEHIND status cleared)
+8.5: 2026-05-11T09:52:00Z | investigate | #163 typecheck failure analyzed — STRUCTURAL bug (package name mismatch + missing /server subpath), not flake
+8.5: 2026-05-11T09:53:00Z | signoff   | SIG-007 #163 cascade-blocked → close in favor of SIG-005 coordinated dispatch
+8.5: 2026-05-11T09:55:00Z | promote   | BL-002 → EQ-004 (Tier-1, P2.a Step 4 founder copy; unblocked by #169 landing)
+8.5: 2026-05-11T09:55:00Z | dispatch  | EQ-004 to general-purpose agent (worktree, background) — id a06f163797092410e
 ```

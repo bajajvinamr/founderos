@@ -28,6 +28,7 @@ User reviews each entry, edits `status:`, and the next wake cycle acts.
 | SIG-004 | P1 | tier-3-council | BL-020 (P7 IA collapse) | depends on BL-007 + BL-016 | 2026-06-01T00:00Z | pending | Largest one-way door in plan. Council + feature flag VITE_FOUNDEROS_SIMPLIFIED_NAV |
 | SIG-005 | P0 | tier-3-council | BL-001 actual bug (B2 bootstrap; CLAUDE.md note stale) | Anthropic/Gemini/OpenAI **API** runtime on Fly (currently collapse to claude_local) | 2026-05-18T00:00Z | pending | Coordinated 7-file Tier-3 dispatch spanning shared constants + new migration + new adapter package |
 | SIG-006 | P2 | tier-3-council | EQ-003 follow-up (Permission Coach relocation) | none (BL-021 dashboard cleanup shipped without it) | 2026-06-01T00:00Z | pending | Move PermissionCoachCard from Dashboard to a Setup-area page — touches Sidebar.tsx + company-routes.ts (Tier-3 nav-structure). Component file already exists, near-zero-effort once council approves the route registration. |
+| SIG-007 | P1 | cascade-blocked | PR #163 register-adapters cascade | cascade settle (7/7); but SIG-005 supersedes | 2026-05-13T00:00Z | pending | Close #163 in favor of SIG-005 coordinated dispatch — #163 imports `@founderos/openai-api/server` but package is named `@founderos/adapter-openai-api` with no `/server` subpath; subsumed by B2 fix. |
 
 ---
 
@@ -174,6 +175,42 @@ If `expires_at` passes with `status: pending`:
   - `server/src/__tests__/onboarding-adapter-type.test.ts:257-260, 683-685` (locked-in assertions to flip)
   - `packages/adapters/gemini-api/src/index.ts` (reference shape for new `anthropic-api` adapter package)
   - `CLAUDE.md` (the "Onboarding adapter mismatch" note — needs deletion/correction post-fix)
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
+
+## [SIG-007] PR #163 cascade-blocked — subsumed by SIG-005
+
+- **type**: cascade-blocked
+- **priority**: P1
+- **decision_required**: resolve (close in favor of SIG-005 OR pin a Tier-3 fixup)
+- **blocking**: cascade settle (currently 6/7 with only #163 unmerged). But: SIG-005's coordinated B2 dispatch will redo the registry wiring anyway; #163 doesn't need to land separately.
+- **blast_radius**: server typecheck (4 errors), no functional impact (registry wiring isn't consumed by anything else on main yet; the new openai-api/gemini-api adapter packages exist but aren't yet routed via `mapOnboardingChoiceToAdapter`)
+- **ci_state**: red (typecheck FAILURE 09:33:51Z + test FAILURE 09:42:34Z)
+- **merge_state**: BLOCKED (typecheck must pass)
+- **source**: PR #163, autoloop-cycle-8.5 investigation
+- **recommended_action**: **Close #163.** SIG-005 (B2 honest-fix) coordinated dispatch will properly wire the new adapters into the registry with corrected package names. Leaving #163 open creates noise; the cascade should be declared 6/7 settled (treating #163 as "abandoned-superseded" rather than "still in flight").
+- **expires_at**: 2026-05-13T00:00Z
+- **context**:
+  PR #163 ("Register adapters") was authored against an imagined future where the new adapter packages would exist as `@founderos/openai-api` (with a `/server` subpath) and `@founderos/gemini-api` (with a `/server` subpath). After cascade settled the order: #164 landed first and scaffolded `@founderos/adapter-openai-api` (different name, NO `/server` subpath). #165 landed second and added `@founderos/gemini-api` (correct name, WITH `/server` subpath — good).
+
+  So #163 has 4 broken imports in `server/src/adapters/registry.ts`:
+    - `@founderos/openai-api/server` — package doesn't exist; should be `@founderos/adapter-openai-api` (and the `/server` subpath doesn't exist)
+    - `@founderos/openai-api` — same name mismatch
+    - `@founderos/gemini-api/server` — actually correct! (#165 added this)
+    - `@founderos/gemini-api` — correct
+
+  Fixing #163 in place would require editing `packages/adapters/openai-api/package.json` to rename the package and add a `/server` subpath export — Tier-3 forbidden (workspace package.json + publishConfig change). The same wiring work is already on SIG-005's dispatch list, which includes the registry edits explicitly.
+- **proposed**: Close #163 with a comment: "Subsumed by SIG-005 coordinated B2 dispatch — registry wiring will land there with corrected package names." Update cascade tracking to consider it abandoned-superseded.
+- **alternatives**:
+  - **(a)** Land a tiny Tier-3 fix-up just for openai-api/package.json (rename + add `/server` subpath + ensure `src/server/index.ts` exists). Then #163 unblocks. Risk: rename of a published package name is itself a breaking change if any consumer pinned the old name — though there are no published consumers yet.
+  - **(b)** Modify #163 to use `@founderos/adapter-openai-api` (no subpath). Touches only server code (Tier-2), but loses the symmetric `/server` import shape the PR was aiming for. Half-fix at best.
+  - **(c)** Close #163 as recommended; let SIG-005 deliver the whole thing.
+- **artifacts**:
+  - `server/src/adapters/registry.ts:42-49` (the 4 broken imports)
+  - `packages/adapters/openai-api/package.json` (name + missing `/server` export)
+  - `packages/adapters/gemini-api/package.json` (correct as-is)
+  - PR #163 (the cascade item to close)
 - **status**: pending
 - **resolved_at**: null
 - **resolution_note**: null
