@@ -28,24 +28,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 9
-- **last_cycle_at**: 2026-05-11T10:05:00Z
-- **next_wake_at**: 2026-05-11T10:25:00Z  <!-- +1200s — short cycle, expecting #171 merge + EQ-004 return -->
+- **cycle**: 10
+- **last_cycle_at**: 2026-05-11T10:08:00Z
+- **next_wake_at**: 2026-05-11T10:33:00Z  <!-- +1500s — EQ-005 dispatched 60-90min; #172 rebased + auto-merge will land in ~15min -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-004 returned with PR #172 -->
+- **eng_dispatches_in_flight**: 1  <!-- EQ-005 just dispatched -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 cascade (SIG-007 close-recommended) + #171 + #172 -->
-- **open_prs_max**: 2  <!-- temporarily over; cascade #163 will be closed per SIG-007 -->
-- **autoloop_prs_open**: 2  <!-- #171, #172 -->
-- **autoloop_prs_merged**: 1  <!-- #170 -->
-- **autoloop_dispatches_completed**: 4  <!-- EQ-001 (escalated), EQ-002 (shipped), EQ-003 (PR), EQ-004 (PR) -->
-- **autoloop_dispatches_escalated**: 1  <!-- EQ-001 → SIG-005 -->
-- **autoloop_dispatches_shipped**: 1  <!-- EQ-002 -->
-- **autoloop_dispatches_in_pr**: 2  <!-- EQ-003/#171 + EQ-004/#172 awaiting CI -->
-- **autoloop_dispatches_active**: 0
-- **avg_round_trip_minutes**: ~8  <!-- EQ-002: 8.5min, EQ-003: 8.5min, EQ-004: 5.5min -->
+- **open_prs**: 2  <!-- #163 cascade (SIG-007 close-recommended) + #172 (EQ-004 rebased) -->
+- **open_prs_max**: 2
+- **autoloop_prs_open**: 1  <!-- #172 -->
+- **autoloop_prs_merged**: 2  <!-- #170, #171 -->
+- **autoloop_dispatches_completed**: 4
+- **autoloop_dispatches_escalated**: 1
+- **autoloop_dispatches_shipped**: 2  <!-- EQ-002 #170, EQ-003 #171 -->
+- **autoloop_dispatches_in_pr**: 1  <!-- EQ-004/#172 -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-005 -->
+- **avg_round_trip_minutes**: ~7.5  <!-- EQ-002: 8.5, EQ-003: 8.5, EQ-004: 5.5 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -66,11 +66,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 3   <!-- #170 (BL-004), #171 (BL-021), #172 (BL-002) -->
-- **prs_merged**: 1   <!-- #170 -->
+- **prs_opened**: 3   <!-- #170 BL-004, #171 BL-021, #172 BL-002 -->
+- **prs_merged**: 2   <!-- #170 BL-004, #171 BL-021 -->
 - **signoffs_pending**: 7   <!-- SIG-001..007 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 17   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 in PR, EQ-004 in PR, BL-021 closed-via-EQ-003, BL-002 closed-via-EQ-004 -->
+- **backlog_items_remaining**: 16   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 merged, EQ-004 in PR, EQ-005 dispatched -->
 
 ## Drift Detection State
 
@@ -110,4 +110,8 @@
 8.5: 2026-05-11T09:55:00Z | dispatch  | EQ-004 to general-purpose agent (worktree, background) — id a06f163797092410e
 9: 2026-05-11T10:01:00Z | agent-return | EQ-004 PR #172 opened, auto-merge enrolled SQUASH, ~5.5min round-trip, no worktree leak
 9: 2026-05-11T10:05:00Z | wake      | cycle 9 fire — 2 PRs auto-merge enrolled (#171, #172), 0 dispatches active, BL-023 awaiting #171 merge to unblock
+10: 2026-05-11T10:05:24Z | pr-merge | #171 (EQ-003 BL-021 Dashboard cleanup) MERGED — autoloop's 2nd ship; BL-023 unblocks
+10: 2026-05-11T10:07:00Z | rebase    | #172 onto post-#171 main (was BEHIND)
+10: 2026-05-11T10:08:00Z | promote   | BL-023 → EQ-005 (Tier-1, P8.c Top Blockers + Quick Wins)
+10: 2026-05-11T10:08:00Z | dispatch  | EQ-005 to general-purpose agent (worktree, background) — id a051ee3032ed5ed78
 ```

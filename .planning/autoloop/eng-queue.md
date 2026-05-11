@@ -52,6 +52,18 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 - **last_update**: 2026-05-11T01:27:00Z
 - **notes**: 2 files / +144 / −173 (net cleanup). Dashboard.tsx removes RunActivityChart, "Month spend" MetricCard, Recent Activity feed, PermissionCoachCard + dead-code cleanup (animation state, entity maps, projectsApi query). Dashboard.test.tsx new — 6 assertions (4 negative for removed widgets, 2 positive preserving FounderBriefing + activityApi.list which The Morning Brief still consumes). Typecheck clean across 24 workspace packages; 24/24 ui/src/pages tests pass; lint clean. **Permission Coach relocation NOT done** — pragmatic-option path: removal-only, TODO comment left, component file untouched, relocation needs Tier-3 nav-structure edit → see SIG-006. No worktree leak observed this dispatch (third consecutive — agent harness behavior may be improving for branch-explicit operations).
 - **post-#169 rebase**: cycle 8.5 `gh pr update-branch 171` fired after DisplayDictionary landed; fresh CI rerunning.
+- **MERGED at 2026-05-11T10:05:24Z** ✅ — autoloop's 2nd ship. Dashboard.tsx clean. EQ-003 round-trip dispatch→merge ≈ ~8.5h elapsed (mostly CI wait).
+
+## [EQ-005] P8.c — Top Blockers + Quick Wins widgets  (from BL-023)
+
+- **branch**: feat/bl-023-top-blockers-quick-wins (or agent-self-named)
+- **agent**: dispatch-cycle-10-eq-005 (general-purpose, isolation=worktree, background) — id a051ee3032ed5ed78
+- **dispatched_at**: 2026-05-11T10:08:00Z (3 min after #171 merge unblocked BL-023)
+- **pr**: null
+- **tier_declared**: 1
+- **status**: dispatched
+- **last_update**: 2026-05-11T10:08:00Z
+- **notes**: Unblocked by #171 (BL-021) merge. New widgets fill the space cleared on Dashboard.tsx. Prompt steered to Option A (PURE Tier-1): UI widgets + static Quick Wins suggestions + TODO note for the Haiku suggester service (which is BL-022 P8.b, separate Tier-2 dispatch later). Touches: Dashboard.tsx + new component files under ui/src/components/dashboard/ + new test files. Auto-merge enrolled after diff-validator passes.
 
 ## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)  ✅ PR OPENED + auto-merge enrolled
 
