@@ -301,15 +301,10 @@ export function mapOnboardingChoiceToAdapter(
     case "gemini_local":
       return "gemini_local";
     case "google_api":
-      // S7.0.2 — Google API adapter ships in S7 Phase 4. Until then
-      // the choice is accepted at the wire (so the wizard can render
-      // the 6-tile MVP grid) but explicitly errors here so callers
-      // see a clear "not yet implemented" signal instead of a silent
-      // half-provisioning.
-      throw new Error(
-        "google_api adapter is not yet implemented (S7 Phase 4) — " +
-          "pick a different provider during onboarding.",
-      );
+      // S7.0.2 — Renamed to gemini_api in Phase C3. The UI choice remains
+      // "google_api" for backwards compatibility with any in-flight onboarding
+      // payloads, but the adapter type resolves to gemini_api.
+      return "gemini_api";
     case "opencode_local":
       return "opencode_local";
     case "pi_local":

@@ -23,11 +23,10 @@ import {
   type RunnerAdapterType,
   type RunnerEvent,
 } from "./api.js";
-import { isDispatcherV2Enabled, type RunnerConfig } from "./config.js";
+import type { RunnerConfig } from "./config.js";
 import { runAdapter, UnknownAdapterTypeError } from "./dispatcher.js";
 import type { RunContext, RunResult } from "./handlers/types.js";
 import { RUNNER_VERSION } from "./version.js";
-import { runClaude } from "./spawn.js";
 
 export interface RunnerLogger {
   debug: (msg: string, extra?: Record<string, unknown>) => void;
@@ -56,8 +55,6 @@ export interface RunnerLoopOptions {
   maxJobs?: number;
   /** Test seam: substitute the API client. */
   apiClient?: RunnerApiClient;
-  /** Test seam: substitute the spawner. Receives the same args as runClaude. */
-  spawnFn?: typeof runClaude;
 }
 
 /**
@@ -68,22 +65,10 @@ export async function runRunnerLoop(opts: RunnerLoopOptions): Promise<{ jobsProc
   const logger = opts.logger ?? consoleLogger(config.logLevel);
   const api = opts.apiClient ?? new RunnerApiClient(config);
 
-  // PHASE-S7 dispatcher gate. Absence = legacy runClaude (safe default);
-  // truthy = route claimed jobs through `runAdapter` (S7.1.b.3 dispatcher)
-  // so claude_local / future gemini_local / codex_local / openai_api / ...
-  // share one code path. Test seam: when `opts.spawnFn` is set, the legacy
-  // spawnImpl path runs regardless of the flag — dispatcher-flag tests rely
-  // on this to pin v2 logging without paying for the dispatcher's stubbed
-  // `claudeLocalAdapter.run()` (lifecycle implementation lands in S7.1.c.*
-  // follow-ups).
-  const v2 = isDispatcherV2Enabled();
-  if (v2) {
-    console.info("[dispatcher] v2 (multi-adapter)");
-  } else {
-    console.info("[dispatcher] v1 (legacy runClaude)");
-  }
-  const spawnImpl = opts.spawnFn ?? runClaude;
-  const useDispatcher = v2 && !opts.spawnFn;
+  // PHASE-S7 dispatcher canonicalization complete. All job execution flows
+  // through the multi-adapter dispatcher (S7.1.c) unconditionally.
+  // The FOUNDEROS_DISPATCHER_V2 flag is no longer checked at runtime.
+  console.info("[dispatcher] v2 (multi-adapter) — canonical");
 
   let jobsProcessed = 0;
   let backoffMs = 0;
@@ -148,7 +133,7 @@ export async function runRunnerLoop(opts: RunnerLoopOptions): Promise<{ jobsProc
       }
 
       jobsProcessed += 1;
-      await runOneJob({ payload: claim.payload, api, config, logger, spawnImpl, useDispatcher });
+      await runOneJob({ payload: claim.payload, api, config, logger });
     }
   } finally {
     process.off("SIGINT", onSignal);
@@ -168,18 +153,10 @@ interface RunOneJobInput {
   api: RunnerApiClient;
   config: RunnerConfig;
   logger: RunnerLogger;
-  spawnImpl: typeof runClaude;
-  /**
-   * When true, route the job through `runAdapter()` (S7.1.b.3 dispatcher)
-   * instead of the legacy direct-`runClaude` path. Dispatcher-mediated
-   * runs read `payload.adapterType` and forward events / capture the
-   * terminal `RunResult` from the AsyncGenerator.
-   */
-  useDispatcher: boolean;
 }
 
 async function runOneJob(input: RunOneJobInput): Promise<void> {
-  const { payload, api, config, logger, spawnImpl, useDispatcher } = input;
+  const { payload, api, config, logger } = input;
   const jobId = payload.jobId;
 
   // Buffered event shipper. Drains every 50ms or when the buffer hits 32 events.
@@ -239,24 +216,17 @@ async function runOneJob(input: RunOneJobInput): Promise<void> {
   // shared completion-body construction below.
   let body: CompletionBody | null = null;
 
-  if (useDispatcher) {
-    body = await runViaDispatcher({
-      payload,
-      timeoutSec,
-      logger,
-      onEvent,
-    });
-  } else {
-    body = await runViaLegacy({
-      payload,
-      timeoutSec,
-      instructionsBase64,
-      config,
-      logger,
-      spawnImpl,
-      onEvent,
-    });
-  }
+  // PHASE-S7 dispatcher canonicalization: all job execution flows through
+  // the multi-adapter dispatcher (S7.1.c) unconditionally. The dispatcher
+  // reads `payload.adapterType` and routes through the appropriate adapter
+  // (claude_local by default). The legacy direct-`runClaude` path has been
+  // removed entirely; `FOUNDEROS_DISPATCHER_V2` flag is no longer checked.
+  body = await runViaDispatcher({
+    payload,
+    timeoutSec,
+    logger,
+    onEvent,
+  });
 
   // Drain any pending events before completing.
   if (flushTimer) {
@@ -291,79 +261,6 @@ async function runOneJob(input: RunOneJobInput): Promise<void> {
  *  inline conditional type on `RunOneJobInput.payload` so the helper
  *  signatures stay readable. */
 type ClaimedPayload = RunOneJobInput["payload"];
-
-/**
- * Legacy direct-`runClaude` execution path. Preserves existing behavior bit
- * for bit — same SpawnArgs, same SpawnResult → CompletionBody mapping. This
- * is what runs when `FOUNDEROS_DISPATCHER_V2` is unset (safe default) AND
- * what runs whenever a `spawnFn` test seam is provided (so the existing
- * main-loop integration tests keep pinning the same surface).
- */
-async function runViaLegacy(args: {
-  payload: ClaimedPayload;
-  timeoutSec: number;
-  instructionsBase64: string | null;
-  config: RunnerConfig;
-  logger: RunnerLogger;
-  spawnImpl: typeof runClaude;
-  onEvent: (evt: RunnerEvent) => Promise<void>;
-}): Promise<CompletionBody> {
-  const { payload, timeoutSec, instructionsBase64, config, logger, spawnImpl, onEvent } = args;
-  const jobId = payload.jobId;
-  const rt = payload.runtimeConfig ?? {};
-
-  let result: Awaited<ReturnType<typeof runClaude>> | null = null;
-  let errorMessage: string | null = null;
-  try {
-    result = await spawnImpl(
-      {
-        binary: config.claudeBin,
-        prompt: payload.prompt,
-        sessionId: payload.sessionId ?? null,
-        model: typeof rt.model === "string" ? rt.model : null,
-        maxTurns: typeof rt.maxTurns === "number" ? rt.maxTurns : null,
-        instructionsBase64,
-        timeoutSec,
-        addDirs: payload.addDirs,
-      },
-      { onEvent },
-    );
-  } catch (err) {
-    errorMessage = err instanceof Error ? err.message : String(err);
-    logger.error("spawn failed", { jobId, err: errorMessage });
-  }
-
-  if (result) {
-    const status: CompletionBody["status"] = result.timedOut
-      ? "failed"
-      : result.exitCode === 0
-        ? "completed"
-        : "failed";
-    return {
-      status,
-      exitCode: result.exitCode,
-      signal: result.signal,
-      elapsedSec: result.elapsedSec,
-      costMicros:
-        typeof result.finalResult?.costUsd === "number"
-          ? Math.round(result.finalResult.costUsd * 1_000_000)
-          : 0,
-      sessionId: result.finalResult?.sessionId ?? null,
-      cliVersion: "",
-      errorMessage: result.timedOut ? "runner timed out" : null,
-    };
-  }
-  return {
-    status: "failed",
-    exitCode: -1,
-    signal: null,
-    elapsedSec: 0,
-    costMicros: 0,
-    sessionId: null,
-    cliVersion: "",
-    errorMessage: errorMessage ?? "spawn failed",
-  };
-}
 
 /**
  * Multi-adapter dispatcher execution path (S7.1.c).
