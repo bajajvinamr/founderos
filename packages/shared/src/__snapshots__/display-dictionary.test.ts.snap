@@ -90,6 +90,30 @@ exports[`DISPLAY_DICTIONARY > should have a snapshot of the full dictionary 1`] 
     "engineer": "OpenAI API",
     "founder": "ChatGPT (pay-per-use)",
   },
+  "provider.anthropic_api.description": {
+    "engineer": "Bring your own Anthropic API key for hosted deployments.",
+    "founder": "Pay Anthropic directly for each agent call — runs in the cloud, no laptop required.",
+  },
+  "provider.claude_code.description": {
+    "engineer": "For developers — requires Claude Code CLI installed on your laptop.",
+    "founder": "Use your existing Claude Code app — no extra cost beyond your Anthropic subscription.",
+  },
+  "provider.codex_cli.description": {
+    "engineer": "Use your OpenAI subscription via the local Codex CLI.",
+    "founder": "Use your ChatGPT subscription via Codex CLI on your laptop.",
+  },
+  "provider.gemini_cli.description": {
+    "engineer": "Use your Google AI subscription via the local CLI.",
+    "founder": "Use your Google AI subscription via Gemini CLI on your laptop.",
+  },
+  "provider.google_api.description": {
+    "engineer": "Bring your own Gemini API key for hosted deployments.",
+    "founder": "Pay Google directly for each agent call — runs in the cloud, no laptop required.",
+  },
+  "provider.openai_api.description": {
+    "engineer": "Bring your own OpenAI API key (GPT-4o / o3).",
+    "founder": "Pay OpenAI directly for each agent call — runs in the cloud, no laptop required.",
+  },
   "providers": {
     "engineer": "Providers",
     "founder": "AI services",

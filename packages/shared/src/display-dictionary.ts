@@ -50,6 +50,38 @@ export const DISPLAY_DICTIONARY = {
     founder:  "Pick where the AI for your team should run",
     engineer: "Select adapter family + provider",
   },
+
+  // Provider tile descriptions — BL-005 (P2.d founder-language sweep).
+  // Engineer strings preserve the pre-BL-005 technical copy from
+  // ProviderChooser.tsx so engineer mode keeps the prior description
+  // surface verbatim. Founder strings explain what the founder is
+  // bringing (subscription vs. pay-per-use, on laptop vs. cloud) in
+  // plain language. Each founder string is ≤ 100 chars to fit the tile
+  // layout in ProviderTile (`<p class="text-xs">{description}</p>`).
+  "provider.claude_code.description": {
+    founder:  "Use your existing Claude Code app — no extra cost beyond your Anthropic subscription.",
+    engineer: "For developers — requires Claude Code CLI installed on your laptop.",
+  },
+  "provider.anthropic_api.description": {
+    founder:  "Pay Anthropic directly for each agent call — runs in the cloud, no laptop required.",
+    engineer: "Bring your own Anthropic API key for hosted deployments.",
+  },
+  "provider.gemini_cli.description": {
+    founder:  "Use your Google AI subscription via Gemini CLI on your laptop.",
+    engineer: "Use your Google AI subscription via the local CLI.",
+  },
+  "provider.google_api.description": {
+    founder:  "Pay Google directly for each agent call — runs in the cloud, no laptop required.",
+    engineer: "Bring your own Gemini API key for hosted deployments.",
+  },
+  "provider.codex_cli.description": {
+    founder:  "Use your ChatGPT subscription via Codex CLI on your laptop.",
+    engineer: "Use your OpenAI subscription via the local Codex CLI.",
+  },
+  "provider.openai_api.description": {
+    founder:  "Pay OpenAI directly for each agent call — runs in the cloud, no laptop required.",
+    engineer: "Bring your own OpenAI API key (GPT-4o / o3).",
+  },
 } as const;
 
 export type DisplayKey = keyof typeof DISPLAY_DICTIONARY;

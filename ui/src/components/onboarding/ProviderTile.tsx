@@ -17,6 +17,14 @@
  * Engineer mode falls back to `option.label` so technical strings still
  * surface for power users. The brand logo is injected via the `icon`
  * prop from the chooser registry.
+ *
+ * BL-005 (P2.d, founder-language sweep) — same pattern applied to the
+ * tile description. When `option.descriptionKey` is set, the rendered
+ * description flips between founder voice ("Pay Anthropic directly for
+ * each agent call — runs in the cloud, no laptop required.") and
+ * engineer voice (the pre-BL-005 technical copy). Engineer mode falls
+ * back to `option.description` so technical strings still surface for
+ * power users.
  */
 
 import type { ComponentType, KeyboardEvent } from "react";
@@ -47,6 +55,17 @@ export function ProviderTile({ option, selected, onSelect, icon: Icon }: Props) 
   // engineer-canonical `option.label`.
   const dictionaryLabel = useDisplay(option.displayKey ?? "providers");
   const label = option.displayKey ? dictionaryLabel : option.label;
+
+  // BL-005 (P2.d) — same pattern for the tile description. Founder mode
+  // shows "Pay Anthropic directly..." copy, engineer mode shows the
+  // pre-BL-005 technical text (which equals `option.description` by
+  // convention so the fallback path keeps the prior surface intact).
+  const dictionaryDescription = useDisplay(
+    option.descriptionKey ?? "providers",
+  );
+  const description = option.descriptionKey
+    ? dictionaryDescription
+    : option.description;
 
   // Tooltip text — disabled tiles surface a hover/focus message tied to
   // the engineering-ticket ETA. Live tiles have no tooltip (the badge
@@ -100,8 +119,11 @@ export function ProviderTile({ option, selected, onSelect, icon: Icon }: Props) 
             <p className="text-sm font-medium leading-tight">{label}</p>
             <Badge option={option} />
           </div>
-          <p className="text-xs text-muted-foreground mt-1 leading-snug">
-            {option.description}
+          <p
+            className="text-xs text-muted-foreground mt-1 leading-snug"
+            data-testid={`provider-description-${option.id}`}
+          >
+            {description}
           </p>
           <p
             className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic"
