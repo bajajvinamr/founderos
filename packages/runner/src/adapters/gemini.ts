@@ -324,17 +324,11 @@ export const geminiLocalAdapter: SubprocessAdapter = {
   async environmentChecks(ctx: EnvironmentContext): Promise<EnvironmentCheckResult> {
     const trusted = ctx.env.GEMINI_CLI_TRUST_WORKSPACE === "true";
     if (trusted) return { ok: true };
-    // The dispatcher does NOT pass `adapterConfig` to environmentChecks
-    // (see EnvironmentContext) — it only sees env. We err on the side of
-    // the structured failure when the env signal is absent; the operator
-    // can flip `GEMINI_CLI_TRUST_WORKSPACE=true` to unblock OR rely on
-    // the default `--skip-trust` argv (in which case the run() spawn will
-    // succeed and this check is a no-op surfaced as a warning at most).
-    //
-    // Because `--skip-trust` is in the default argv, return `ok: true`
-    // here unless we have positive evidence the operator disabled it via
-    // a future EnvironmentContext extension. For now: if env is unset,
-    // we still trust the default argv flag and proceed. Real prod misuse
+    // `adapterConfig` is now available via EnvironmentContext (S7.B task #53)
+    // — a future iteration can probe `ctx.adapterConfig.skipTrust` and only
+    // return `ok: true` when the flag will actually be in argv. For now we
+    // keep the safe default: `--skip-trust` is on by default in `buildArgs`,
+    // so the run will succeed even with the env var unset. Real prod misuse
     // (operator both unset env AND set skipTrust=false in adapterConfig)
     // surfaces at exit 55 in `interpretFailure`.
     return { ok: true };

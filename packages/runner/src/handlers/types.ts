@@ -74,6 +74,16 @@ export type AuthMode = "subscription" | "api_key";
  * Inputs the dispatcher passes to {@link AdapterHandler.environmentChecks}.
  * Read-only — checks may probe the filesystem (`stat`, `access`) and the
  * environment, but MUST NOT spawn processes or perform network I/O.
+ *
+ * `adapterConfig` is the same shape the adapter receives at `run()` time
+ * via {@link RunContext.adapterConfig}; exposing it here lets a check make
+ * decisions that depend on what argv / request body the adapter would
+ * actually use. The S7.B.gemini adapter, for instance, can only know
+ * whether `--skip-trust` will be in argv by reading `adapterConfig.skipTrust`
+ * — without this field its check has to assume the safe default and miss
+ * the case where the operator deliberately disabled the flag. Open
+ * `Record<string, unknown>` so the dispatcher does not need to know the
+ * union of every adapter's tunables; each adapter narrows it internally.
  */
 export interface EnvironmentContext {
   /** Adapter-config override of the default binary (subprocess) or endpoint (API). */
@@ -82,6 +92,15 @@ export interface EnvironmentContext {
   cwd?: string;
   /** Environment the adapter would receive — usually a snapshot of `process.env`. */
   env: NodeJS.ProcessEnv;
+  /**
+   * Adapter-specific tunables — same shape and contract as
+   * {@link RunContext.adapterConfig}. Read-only; checks may inspect this to
+   * see what argv / request body the adapter would compute (e.g. whether
+   * `--skip-trust` will be set, which model is selected, whether sandbox is
+   * enabled), and then either return `{ ok: true }` or surface a structured
+   * remediation. Adapters narrow it via Zod or hand-rolled type guards.
+   */
+  adapterConfig: Readonly<Record<string, unknown>>;
 }
 
 /**
