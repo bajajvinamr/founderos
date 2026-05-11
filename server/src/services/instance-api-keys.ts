@@ -6,12 +6,16 @@
  * at rest via the local-encrypted master key and never returned raw — the
  * UI only gets a hint (last 4 chars) and a "configured" boolean.
  *
- * Agent-runtime integration: stored keys are synced into the server's own
- * process.env on set / delete / boot. Because adapter subprocesses inherit
- * the parent env, this means every future `claude` / `codex` / `gemini`
- * child process automatically picks up the DB-stored keys with zero
- * per-adapter plumbing. Original process.env values (if any) are stashed
- * at module load so delete can revert cleanly.
+ * Per-call resolution model (S8 P0.1 Phase 1B, council R1 condition C2):
+ * stored keys are NEVER mirrored into `process.env`. Callers that need the
+ * decrypted value at spawn time MUST call `getDecrypted(family, mode)` and
+ * inject the credential into the per-spawn child env. The previous
+ * "hydrate process.env at boot + on every setKey" pattern was a per-tenant
+ * collision risk: when Tenant A's key was set, then Tenant B's key was set,
+ * an in-flight job on Tenant A's path would read Tenant B's key from the
+ * shared process-wide global. Codex flagged it as per-tenant collision;
+ * Gemini independently flagged the same surface as a write race. Both
+ * findings are addressed by removing the global mutation surface entirely.
  */
 
 import { eq } from "drizzle-orm";
@@ -37,42 +41,6 @@ function rowId(family: ProviderFamilyKey, mode: ExecutionMode): string {
   return `${family}:${mode}`;
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// process.env bridging.
-//
-// When a stored key is set, we also populate the server's process.env so
-// adapter subprocesses (spawned via Node `child_process` with default env
-// inheritance) see the same credential the UI just configured. We stash
-// the pre-startup value once so delete can restore it without ambiguity.
-// ────────────────────────────────────────────────────────────────────────
-
-const ENV_VAR_BY_FAMILY: Record<ProviderFamilyKey, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GEMINI_API_KEY",
-};
-
-const originalEnv: Record<ProviderFamilyKey, string | undefined> = {
-  anthropic: process.env[ENV_VAR_BY_FAMILY.anthropic],
-  openai: process.env[ENV_VAR_BY_FAMILY.openai],
-  google: process.env[ENV_VAR_BY_FAMILY.google],
-};
-
-function applyKeyToEnv(family: ProviderFamilyKey, value: string): void {
-  const envVar = ENV_VAR_BY_FAMILY[family];
-  process.env[envVar] = value;
-}
-
-function restoreOriginalEnv(family: ProviderFamilyKey): void {
-  const envVar = ENV_VAR_BY_FAMILY[family];
-  const original = originalEnv[family];
-  if (typeof original === "string" && original.length > 0) {
-    process.env[envVar] = original;
-  } else {
-    delete process.env[envVar];
-  }
-}
-
 function extractHint(value: string): string {
   if (value.length < 8) return "****";
   return "…" + value.slice(-4);
@@ -81,7 +49,8 @@ function extractHint(value: string): string {
 export function instanceApiKeysService(db: Db) {
   /**
    * Insert or update an API key for the given provider + execution mode.
-   * Returns the stored metadata (no decrypted value).
+   * Returns the stored metadata (no decrypted value). Storage is to the
+   * encrypted DB only — process.env is NEVER mutated.
    */
   async function setKey(input: {
     family: ProviderFamilyKey;
@@ -118,10 +87,6 @@ export function instanceApiKeysService(db: Db) {
         },
       })
       .returning();
-    // Sync into process.env so adapter subprocesses inherit the new key.
-    if (executionMode === "api") {
-      applyKeyToEnv(input.family, trimmed);
-    }
     return toStoredApiKey(row);
   }
 
@@ -136,41 +101,30 @@ export function instanceApiKeysService(db: Db) {
   ): Promise<boolean> {
     const id = rowId(family, executionMode);
     const result = await db.delete(instanceApiKeys).where(eq(instanceApiKeys.id, id)).returning();
-    if (executionMode === "api" && result.length > 0) {
-      restoreOriginalEnv(family);
-    }
     return result.length > 0;
   }
 
   /**
-   * Boot hook — load every stored API key and push it into process.env so
-   * adapter subprocesses pick them up. Call once during server startup.
+   * Read + decrypt a stored key for server-side use at spawn time. Returns
+   * the plaintext or null if no such key is configured (or decryption fails
+   * — typically a master-key rotation leaving the envelope orphaned).
+   *
+   * This is the authoritative path for per-call key resolution. Consumers
+   * MUST call this immediately before injecting the credential into a child
+   * subprocess env or HTTP Authorization header — the value MUST NOT be
+   * cached in module-level state, written to logs, or stashed in shared
+   * globals. The whole point of moving away from `process.env` mutation is
+   * eliminating any process-wide leak surface.
+   *
+   * Side-channel notes:
+   *   - DB lookup is performed unconditionally for every supported family.
+   *     Branching off "is this family supported?" before the DB call would
+   *     leak family-existence to a timing observer.
+   *   - Plaintext is never logged. Failures (no row, decrypt error) all
+   *     resolve to `null` with no log line — consumers decide how to surface
+   *     the absence to the user without leaking the cause.
    */
-  async function hydrateProcessEnv(): Promise<number> {
-    const rows = await db.select().from(instanceApiKeys);
-    let loaded = 0;
-    for (const row of rows) {
-      if (row.executionMode !== "api") continue;
-      if (!isSupportedFamily(row.family)) continue;
-      try {
-        const decrypted = decryptWithMasterKey(row.encryptedValue);
-        applyKeyToEnv(row.family, decrypted);
-        loaded++;
-      } catch {
-        // Skip — master key rotated or envelope corrupt. The UI will show
-        // the row as "configured" but agents won't see the env var,
-        // which is the safest failure mode.
-      }
-    }
-    return loaded;
-  }
-
-  /**
-   * Read + decrypt a stored key for server-side use (e.g., spawning an
-   * adapter subprocess with the credential in env). Returns null if no
-   * such key is configured.
-   */
-  async function getDecryptedKey(
+  async function getDecrypted(
     family: ProviderFamilyKey,
     executionMode: ExecutionMode = "api",
   ): Promise<string | null> {
@@ -182,6 +136,18 @@ export function instanceApiKeysService(db: Db) {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Deprecated alias for `getDecrypted`. Existing call sites can migrate
+   * lazily; new code MUST call `getDecrypted` directly. Functionally
+   * identical; kept only to avoid a wide consumer churn in this PR.
+   */
+  async function getDecryptedKey(
+    family: ProviderFamilyKey,
+    executionMode: ExecutionMode = "api",
+  ): Promise<string | null> {
+    return getDecrypted(family, executionMode);
   }
 
   /**
@@ -206,14 +172,10 @@ export function instanceApiKeysService(db: Db) {
     setKey,
     listKeys,
     deleteKey,
+    getDecrypted,
     getDecryptedKey,
     listConfiguredFamilies,
-    hydrateProcessEnv,
   };
-}
-
-function isSupportedFamily(f: string): f is ProviderFamilyKey {
-  return f === "anthropic" || f === "openai" || f === "google";
 }
 
 function toStoredApiKey(row: typeof instanceApiKeys.$inferSelect): StoredApiKey {
