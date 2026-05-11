@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 const MAX_PERSISTED_DEV_SERVER_STATUS_BYTES = 64 * 1024;
 
@@ -43,7 +43,7 @@ export function readPersistedDevServerStatus(
   env: NodeJS.ProcessEnv = process.env,
 ): PersistedDevServerStatus | null {
   const filePath = env.FOUNDEROS_DEV_SERVER_STATUS_FILE?.trim();
-  if (!filePath || !existsSync(filePath)) return null;
+  if (!filePath) return null;
 
   try {
     if (statSync(filePath).size > MAX_PERSISTED_DEV_SERVER_STATUS_BYTES) {

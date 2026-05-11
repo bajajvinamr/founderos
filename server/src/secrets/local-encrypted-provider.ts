@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync, chmodSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import type { SecretProviderModule, StoredSecretVersionMaterial } from "./types.js";
 import { badRequest } from "../errors.js";
@@ -51,13 +51,16 @@ function loadOrCreateMasterKey(): Buffer {
   }
 
   const keyPath = resolveMasterKeyFilePath();
-  if (existsSync(keyPath)) {
+  try {
     const raw = readFileSync(keyPath, "utf8");
     const decoded = decodeMasterKey(raw);
     if (!decoded) {
       throw badRequest(`Invalid secrets master key at ${keyPath}`);
     }
     return decoded;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    // File does not exist — generate and persist a new master key.
   }
 
   const dir = path.dirname(keyPath);

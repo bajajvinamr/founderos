@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 function parseEnvFile(contents: string): Record<string, string> {
@@ -43,12 +43,14 @@ type WorktreeEnvBootstrapResult =
 
 export function isLinkedGitWorktreeCheckout(rootDir: string): boolean {
   const gitMetadataPath = path.join(rootDir, ".git");
-  if (!existsSync(gitMetadataPath)) return false;
-
-  const stat = lstatSync(gitMetadataPath);
-  if (!stat.isFile()) return false;
-
-  return readFileSync(gitMetadataPath, "utf8").trimStart().startsWith("gitdir:");
+  try {
+    const stat = lstatSync(gitMetadataPath);
+    if (!stat.isFile()) return false;
+    return readFileSync(gitMetadataPath, "utf8").trimStart().startsWith("gitdir:");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
 }
 
 export function resolveWorktreeEnvFilePath(rootDir: string): string {
@@ -67,14 +69,20 @@ export function bootstrapDevRunnerWorktreeEnv(
   }
 
   const envPath = resolveWorktreeEnvFilePath(rootDir);
-  if (!existsSync(envPath)) {
-    return {
-      envPath,
-      missingEnv: true,
-    };
+  let envContents: string;
+  try {
+    envContents = readFileSync(envPath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {
+        envPath,
+        missingEnv: true,
+      };
+    }
+    throw err;
   }
 
-  const entries = parseEnvFile(readFileSync(envPath, "utf8"));
+  const entries = parseEnvFile(envContents);
   for (const [key, value] of Object.entries(entries)) {
     if (typeof env[key] === "string" && env[key]!.trim().length > 0) continue;
     env[key] = value;
