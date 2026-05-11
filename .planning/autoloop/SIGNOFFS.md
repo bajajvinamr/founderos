@@ -380,3 +380,26 @@ If `expires_at` passes with `status: pending`:
 - **status**: **approved**
 - **resolved_at**: 2026-05-11T15:36:00Z
 - **resolution_note**: User authorized PR template structural rewrite (cycle 21 wake). Dispatching EQ-016 (replaces EQ-014's hold) with `ALLOW_OVERWRITE=true` brief: apply the merge plan exactly as EQ-014 proposed — autoloop-tier spine (Summary / Tier classification / Surface affected / Test plan / Review checklist / Rollback plan / Related) with high-value sub-sections preserved (Migrations, Breaking Changes, Linked PRD/ADR, Screenshots) as conditional fields under appropriate spine sections. Header note citing docs/code-review-practices.md + Sample-N reviewer to be added. Tier-2 — opens PR, no auto-merge, user reviews shape before activating.
+
+## [SIG-014] PR #182 — PR template autoloop-tier-aware rewrite (Tier-2 review)
+
+- **type**: tier-2-review
+- **priority**: P2
+- **decision_required**: approve
+- **blocking**: nothing critical; activates new template on merge for all future PR authors
+- **blast_radius**: 1 file (`.github/PULL_REQUEST_TEMPLATE.md`, +48/-52). UX-only — affects every future PR author's "Edit" tab on PR creation. No runtime impact. Reversible via `git revert`.
+- **ci_state**: pending (just opened 15:38Z by EQ-016)
+- **merge_state**: pending fresh CI
+- **source**: EQ-016 dispatch (autoloop-cycle-21 re-dispatch after SIG-013 user authorization); commit d852f579
+- **recommended_action**: AWAIT RV-004 review verdict. If RV-004 APPROVES + the user agrees the new template shape is right: merge. If RV-004 requests changes: triage findings. The autoloop will dispatch a fix-EQ if findings are substantive (like the EQ-015 flow on #181).
+- **expires_at**: 2026-05-18T00:00Z
+- **context**: This is the result of: (1) RV-001 caught review-event gap → user observed 0% review activity → user picked Option A; (2) Sample-N reviewer protocol activated; (3) PRACT-2 dispatched as EQ-014 → hold-and-propose because file existed → SIG-013 logged; (4) user authorized SIG-013 → EQ-016 dispatched with ALLOW_OVERWRITE → PR #182 opened cleanly. Three-cycle feedback loop converged on a single shippable artifact. Sample-N reviewer protocol will fire RV-004 on the PR.
+- **proposed**: User reviews template shape in GH "Edit" preview (open #182 → click "Edit" tab → see the new template render); approves + merges if shape feels right.
+- **alternatives**:
+  - **(a)** REQUEST_CHANGES if specific section copy needs tweaking — autoloop dispatches EQ-017 with edits.
+  - **(b)** APPROVE but defer merge until #181 lands (so the new template doesn't apply to in-flight PRs that started under old template).
+  - **(c)** REJECT and revert SIG-013 — would put existing template back; would require closing #182 + reopening SIG-013 with `status: rejected`.
+- **artifacts**: PR https://github.com/bajajvinamr/founderos/pull/182, branch `chore/pr-template-tier-aware-rewrite`, commit d852f579, EQ-016 task output `a10d41c3de689b46d.output`
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
