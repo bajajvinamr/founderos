@@ -8,7 +8,7 @@
  * `parseStreamLine`/`extractFinalResult`/synchronous `environmentChecks`)
  * was structurally subprocess-only. Both Codex and Gemini independently
  * surfaced this as a P1 architectural finding: pure-HTTP API adapters
- * (`openai_api`, `google_api`, future `anthropic_api`) cannot be expressed
+ * (`openai_api`, `gemini_api`, future `anthropic_api`) cannot be expressed
  * as "argv + env + stream-json line parser" without forcing them into a
  * fake subprocess wrapper that would strip rate-limit headers and lose the
  * 429/529 distinction. R2 converged on the redesign in this file.
@@ -21,7 +21,7 @@
  *   `SubprocessAdapter`     — claude_local, gemini_local, codex_local, cursor.
  *                             Owns argv shape + how the prompt reaches the child
  *                             (stdin / file / env — adapter chooses).
- *   `ApiAdapter`            — openai_api, anthropic_api, google_api.
+ *   `ApiAdapter`            — openai_api, anthropic_api, gemini_api.
  *                             `run()` owns the full HTTP cycle directly; no
  *                             argv, no `promptTransport`.
  *
@@ -370,7 +370,7 @@ export interface SubprocessAdapter extends AdapterHandler {
 }
 
 // ---------------------------------------------------------------------------
-// API transport — openai_api, anthropic_api, google_api.
+// API transport — openai_api, anthropic_api, gemini_api.
 // ---------------------------------------------------------------------------
 
 /**
@@ -394,7 +394,7 @@ export interface ApiAdapter extends AdapterHandler {
    * Examples:
    *   - openai_api:    `https://api.openai.com/v1/responses`
    *   - anthropic_api: `https://api.anthropic.com/v1/messages`
-   *   - google_api:    `https://generativelanguage.googleapis.com/v1beta/...`
+   *   - gemini_api:    `https://generativelanguage.googleapis.com/v1beta/...`
    */
   readonly defaultEndpoint: string;
 }

@@ -149,3 +149,93 @@ npm uninstall -g @founderos/runner
 3. File against `BYO-` ticket prefix; attach both logs and the exact
    sequence of UI clicks. The ALS-propagated `requestId` ties UI → BE →
    runner-side log lines.
+
+## Regression checkpoint after S8 P0.1
+
+S8 P0.1 introduces server-side hosted execution (`claude_local` adapter
+spawning on Fly) alongside the existing `byo_runner` laptop-runner path.
+The hosted rollout is gated by `FOUNDEROS_HOSTED_AGENTS_ENABLED`; existing
+customers who onboarded before the flag flipped stay on `byo_runner`
+indefinitely. **The byo_runner code path MUST keep working through the
+rollout** — paying customers using the laptop runner today must not see
+any behavior change.
+
+This checkpoint runs after every PR that touches the runner surface and
+before each `release/s8-p01-*` branch is cut.
+
+### Automated regression net
+
+Four canonical baseline tests live in
+`server/src/__tests__/byo-runner-baseline.test.ts`. They run in CI on every
+commit and lock in the four scenarios that must not regress:
+
+| # | Scenario | What it pins |
+|---|---|---|
+| 1 | Issuing a runner token works | POST `/api/companies/:id/runner-tokens` returns `fos_<32 alnum>`; only sha256 hash persisted |
+| 2 | `runner_jobs` row written for byo_runner heartbeat | Adapter materializes row with `adapter_type='byo_runner'`, queued status, prompt + runtimeConfig |
+| 3 | Laptop runner can claim and complete a job | `/jobs/:id/claim` flips queued → claimed; `/jobs/:id/complete` flips claimed → completed |
+| 4 | `runner_tokens.lastSeenAt` updates on every claim | Real `runnerAuthMiddleware` writes lastSeenAt; UI liveness pill depends on this |
+
+Run locally:
+
+```bash
+npx vitest --run server/src/__tests__/byo-runner-baseline.test.ts
+```
+
+Detailed coverage of the same surface lives in:
+- `runner-auth.test.ts` (BYO-101 — token validation, expiry, debounce)
+- `runner-routes.test.ts` (BYO-104 — full REST contract for all 7 endpoints)
+- `byo-runner-adapter.test.ts` (BYO-103 — adapter polling state machine)
+
+If any baseline scenario fails, **investigate before merging** — these are
+the load-bearing happy paths. Do not skip or weaken assertions to get
+green CI; fix the regression in the changed code.
+
+### Manual smoke checklist (pre-merge feature-branch deploy)
+
+Run this before merging any PR that lands on a `feat/s8-p01-*` branch
+which touches runner code, after the feature-branch's preview deploy is
+healthy:
+
+- [ ] **Issue token** — open the Agents page on the preview deploy with
+      `FOUNDEROS_BYO_RUNNER_ENABLED=1`. Click the runner pill. The Issue
+      dialog shows a `fos_<32 alnum>` token exactly once. `Copy` works.
+- [ ] **Install runner locally** — `npm install -g @founderos/runner` (or
+      use the version from the PR if the runner package itself changed).
+      Export `FOUNDEROS_RUNNER_TOKEN=fos_...` and `FOUNDEROS_API_URL=<preview-host>`.
+      Start `founderos-runner start` and confirm the stdout shows
+      `connected to <preview-host>` and `waiting for jobs...`.
+- [ ] **Trigger heartbeat** — kick a heartbeat for a `byo_runner` agent
+      (e.g. assign an issue, click "Run Now", or fire the dev kick command).
+      Within ~10s the runner stdout should show `[runner] claimed job <jobId>`
+      followed by `[claude] stream event: ...` lines as the local CLI runs.
+- [ ] **Confirm CLI execution** — verify the job reaches a terminal state
+      visible in the run viewer (not stuck in `claimed` or `streaming`).
+      Exit code 0 = clean run; non-zero = re-check Anthropic CLI auth on
+      the host.
+- [ ] **Confirm liveness pill** — within 30s of the runner's first poll,
+      the Agents-page status pill flips from rose → emerald with
+      "Runner online".
+- [ ] **Revoke token** — click the trash icon. Within 30s the runner
+      stdout prints `error: token revoked (401)` and exits with code 2.
+      Pill flips back to rose.
+
+### Sign-off
+
+Once both gates are green (automated baseline + manual smoke):
+
+```
+S8 P0.1 byo_runner regression checkpoint:
+- baseline tests:   PASS / FAIL
+- manual smoke:     PASS / FAIL
+- engineer:         <name>
+- preview deploy:   <fly-app-name>
+- date:             <YYYY-MM-DD>
+```
+
+Drop this block in the PR body before requesting final review. The
+manual smoke is required for any PR that touches `runner-auth.ts`,
+`runner.ts` (routes), `adapter-resolver.ts`, or `packages/runner/**`;
+PRs that only touch tests or unrelated code can rely on the automated
+baseline alone.
+
