@@ -28,23 +28,23 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 12.7
-- **last_cycle_at**: 2026-05-11T11:50:00Z
-- **next_wake_at**: 2026-05-11T11:59:00Z  <!-- cycle 13 wake already scheduled from cycle 12; EQ-009 returned mid-wait with PR #177 auto-merge enrolled -->
+- **cycle**: 13
+- **last_cycle_at**: 2026-05-11T11:59:00Z
+- **next_wake_at**: 2026-05-11T12:24:00Z  <!-- +1500s — #174 MERGED (6th ship), #177 rebased, EQ-010 dispatched for BL-013 (Tier-2 NO auto-merge) -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-009 returned with PR #177 -->
+- **eng_dispatches_in_flight**: 1  <!-- EQ-010 just dispatched (BL-013 P4.b Tier-2 NO auto-merge) -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 4  <!-- #163 close-rec + #174 (BLOCKED on test+coverage) + #176 (Tier-2) + #177 (auto-merge enrolled) -->
-- **open_prs_max**: 2  <!-- temporarily over: HOLD on new dispatch until #174 + #177 land -->
-- **autoloop_prs_open**: 3  <!-- #174, #176, #177 -->
-- **autoloop_prs_merged**: 5  <!-- #170, #171, #172, #173, #175 -->
+- **open_prs**: 3  <!-- #163 close-rec + #176 (Tier-2 SIG-008) + #177 (Tier-1 auto-merge enrolled, rebased post-#174) -->
+- **open_prs_max**: 2  <!-- temporarily over by 1 (#163 is cascade, not autoloop-counted) -->
+- **autoloop_prs_open**: 2  <!-- #176, #177 — at cap -->
+- **autoloop_prs_merged**: 6  <!-- #170, #171, #172, #173, #174, #175 -->
 - **autoloop_dispatches_completed**: 9
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 5  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-007/175 -->
-- **autoloop_dispatches_in_pr**: 3  <!-- EQ-006/#174 (Tier-1 auto-merge enrolled, BLOCKED test), EQ-008/#176 (Tier-2 SIG-008), EQ-009/#177 (Tier-1 auto-merge enrolled, CI fresh) -->
-- **autoloop_dispatches_active**: 0  <!-- HOLD — capacity restored when #174 + #177 land -->
+- **autoloop_dispatches_shipped**: 6  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175 -->
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (Tier-2 SIG-008), EQ-009/#177 (Tier-1 auto-merge enrolled, rebased) -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-010 (BL-013 Tier-2, NO auto-merge per posture) -->
 - **avg_round_trip_minutes**: ~8.9  <!-- + EQ-009: 7.9 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
@@ -67,17 +67,17 @@
 ## Outputs Counter
 
 - **prs_opened**: 8   <!-- #170, #171, #172, #173, #174, #175, #176, #177 -->
-- **prs_merged**: 5   <!-- #170, #171, #172, #173, #175 -->
+- **prs_merged**: 6   <!-- #170, #171, #172, #173, #174, #175 -->
 - **signoffs_pending**: 8   <!-- SIG-001..008 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 11   <!-- minus EQ-001 escalated, EQ-002/003/004/005/007 merged, 006 in PR (auto-merge), 008 in PR (Tier-2 review), 009 in PR (auto-merge) -->
+- **backlog_items_remaining**: 10   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007 merged, 008 in PR (Tier-2 review), 009 in PR (auto-merge), 010 dispatched -->
 
 ## Drift Detection State
 
 - **items_without_parent_plan**: 0
 - **prs_in_single_dir**: { "ui/src/components/onboarding/": 1 }  <!-- #170 -->
 - **prs_outside_active_phase**: 0
-- **active_phase_set**: ["B2", "P2", "P8"]  <!-- B2 unblocked-via-SIG-005, P2 in-flight, P8 starts with BL-021 -->
+- **active_phase_set**: ["B2", "P2", "P4", "P8"]  <!-- B2 unblocked-via-SIG-005, P2 mostly shipped, P4 in-flight (BL-012 merged, BL-013 dispatched), P8 mostly shipped -->
 
 ## Cycle Outcomes Summary
 
@@ -96,6 +96,7 @@
 | 12 | 11:34Z | **HOLD cycle** — #174/#175 E2E + test in-progress (all other checks green, mergeable); EQ-008 actively implementing service file; no parallel dispatch (BL-013 dep on unmerged #174); worktree-leak invariant validated 3rd time |
 | 12.5 | 11:45Z | **#175 MERGED at 11:27Z** (5th autoloop ship, BL-003 P2.b ProviderTile labels); **EQ-008 returned with PR #176** Tier-2 (BL-022 Haiku yesterday widget, 8 files +1112/-0 pure-additive, autoMergeRequest:null, SIG-008 logged); #174 rebased post-#175 (BEHIND→awaiting CI then auto-merge); **EQ-009 dispatched** (BL-005 P2.d Tile descriptions, Tier-1 auto-merge enrolled); worktree-leak invariant validated 4th time |
 | 12.7 | 11:50Z | **EQ-009 returned with PR #177** in 7.9min (BL-005 P2.d, 6 files +263/-7, 71 tests green, Tier-1 auto-merge SQUASH enrolled at 11:39:44Z); #174 BLOCKED only on `test (+ coverage)` IN_PROGRESS (no failures, auto-merge will fire on CI completion); **HOLD on new dispatch** — autoloop_prs_open=3 (over cap of 2); worktree-leak invariant validated **5th consecutive time** |
+| 13 | 11:59Z | **#174 MERGED at 11:43:40Z** (6th autoloop ship, BL-012 P4.a viewMode + Settings toggle); #177 rebased post-#174 (was BEHIND, auto-merge SQUASH still enrolled); **EQ-010 dispatched** (BL-013 P4.b transcript founder-mode render, **Tier-2 NO auto-merge** per posture); active_phase_set expanded to [B2, P2, P4, P8] |
 
 ## Last Action Log
 
@@ -155,4 +156,10 @@
 12.7: 2026-05-11T11:50:45Z | ci-probe  | #174 BLOCKED only on `test (+ coverage)` IN_PROGRESS; 0 failures; auto-merge SQUASH enrolled by bajajvinamr at 11:00:37Z will fire on CI completion
 12.7: 2026-05-11T11:51:00Z | hold      | NO new dispatch — autoloop_prs_open=3 (#174, #176, #177) over open_prs_max=2. Capacity restores when #174 auto-merges (test+coverage completion) + #177 auto-merges (fresh CI). BL-013 still blocked by #174. BL-014 still blocked by BL-013.
 12.7: 2026-05-11T11:51:00Z | invariant | path-validator precision validated: PR #177 touched packages/shared/src/display-dictionary.ts (Tier-1 OK per brief — "ADD keys, don't restructure") while NEVER touching packages/shared/src/constants.ts (Tier-3 forbidden) — same parent dir, different files, different tier classification
+13: 2026-05-11T11:59:00Z | wake      | cycle 13 wake fire — prompt was stale (cycle-11 era references to EQ-008 + #175 open); reconciled to actual state
+13: 2026-05-11T11:43:40Z | pr-merge  | #174 (EQ-006 BL-012 P4.a viewMode infrastructure + Settings toggle) MERGED — autoloop's **6th ship** (Tier-1 auto-merge fired post-test+coverage completion)
+13: 2026-05-11T11:59:30Z | rebase    | #177 onto post-#174 main (mergeStateStatus was BEHIND; rebase succeeded; auto-merge SQUASH still enrolled)
+13: 2026-05-11T11:59:45Z | promote   | BL-013 → EQ-010 (Tier-2, P4.b transcript founder-mode render — RunTranscriptView.tsx hides TranscriptThinkingBlock/raw-tool-blocks/stderr_group-on-success/init in founder mode, engineer mode unchanged; dep BL-012 met by #174)
+13: 2026-05-11T12:00:00Z | dispatch  | EQ-010 to general-purpose agent (worktree, background) — id aeb13d4fbb494bd02 — **Tier-2: NO auto-merge enrollment**, opens PR for user review (will produce SIG-009)
+13: 2026-05-11T12:00:00Z | gh-api    | NOTE: GH API returned stale BLOCKED status for #174 at cycle 12.7 probe (~11:50Z) while #174 had actually merged at 11:43:40Z. The GH-CLI mergeStateStatus field can lag actual merge state by 5-10 min on freshly-merged PRs. Future probes: trust `mergedAt` over `mergeStateStatus`.
 ```
