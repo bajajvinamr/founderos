@@ -94,9 +94,19 @@ interface ProjectRowProps {
   agentsById: Map<string, Agent>;
 }
 
+/**
+ * Project.goalIds is the current field; Project.goals is deprecated (see
+ * packages/shared/src/types/project.ts). Prefer goalIds; fall back to goals
+ * only when goalIds is absent. `??` (nullish-coalescing) — NOT `||` — so an
+ * empty array on the current field does not fall through to the deprecated one.
+ */
+export function projectGoalCount(project: Pick<Project, "goals" | "goalIds">): number {
+  return project.goalIds?.length ?? project.goals?.length ?? 0;
+}
+
 function ProjectRow({ project, agentsById }: ProjectRowProps) {
   const leadAgent = project.leadAgentId ? agentsById.get(project.leadAgentId) : null;
-  const goalCount = (project.goals?.length ?? 0) || (project.goalIds?.length ?? 0);
+  const goalCount = projectGoalCount(project);
   const targetLabel = project.targetDate ? formatDate(project.targetDate) : "—";
   const updatedLabel = formatDate(project.updatedAt);
   const ariaLabel = `Project: ${project.name}, status ${project.status}, due ${targetLabel}`;

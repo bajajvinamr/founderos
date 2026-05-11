@@ -13,9 +13,9 @@ import { StatusBadge } from "../components/StatusBadge";
 import { cn } from "../lib/utils";
 import { Target } from "lucide-react";
 
-type DriftBand = "ontrack" | "behind" | "atrisk";
+export type DriftBand = "ontrack" | "behind" | "atrisk" | "cancelled";
 
-interface DriftSnapshot {
+export interface DriftSnapshot {
   band: DriftBand;
   /** 0–100; higher = more drift. */
   score: number;
@@ -27,8 +27,12 @@ interface DriftSnapshot {
  * surface a target/current pair, so the page renders a status-derived signal
  * until the backing fields ship. Strict mapping keeps colors stable across
  * renders and avoids the OKR-spreadsheet feel: every goal still gets a band.
+ *
+ * TODO(W3-schema): replace with goal.drift_band once the backing column ships.
+ * The switch below is exhaustive over `GoalStatus`; the never-narrowing default
+ * guarantees a compile error if a new status is added without a band mapping.
  */
-function deriveDrift(goal: Goal): DriftSnapshot {
+export function deriveDrift(goal: Goal): DriftSnapshot {
   switch (goal.status) {
     case "achieved":
       return { band: "ontrack", score: 0, label: "Achieved" };
@@ -37,22 +41,31 @@ function deriveDrift(goal: Goal): DriftSnapshot {
     case "planned":
       return { band: "behind", score: 55, label: "Behind plan" };
     case "cancelled":
-      return { band: "atrisk", score: 90, label: "At risk" };
-    default:
-      return { band: "behind", score: 50, label: "Behind plan" };
+      // Cancelled goals are TERMINATED, not at-risk-of-failing. Render with a
+      // neutral band so founders don't read a false "this is going wrong" signal.
+      return { band: "cancelled", score: 0, label: "Cancelled" };
+    default: {
+      // Exhaustiveness check — fails at compile time if a new GoalStatus is
+      // added without a case above. At runtime, fall back to a neutral band.
+      const _exhaustive: never = goal.status;
+      void _exhaustive;
+      return { band: "cancelled", score: 0, label: "Unknown" };
+    }
   }
 }
 
 function driftBarClasses(band: DriftBand): string {
   if (band === "ontrack") return "bg-emerald-500/80";
   if (band === "behind") return "bg-amber-500/80";
-  return "bg-rose-500/80";
+  if (band === "atrisk") return "bg-rose-500/80";
+  return "bg-muted-foreground/40";
 }
 
 function driftDotClasses(band: DriftBand): string {
   if (band === "ontrack") return "bg-emerald-500";
   if (band === "behind") return "bg-amber-500";
-  return "bg-rose-500";
+  if (band === "atrisk") return "bg-rose-500";
+  return "bg-muted-foreground/50";
 }
 
 function levelLabel(level: Goal["level"]): string {
