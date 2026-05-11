@@ -21,6 +21,13 @@
  */
 function readQueryParamOverride(): boolean | null {
   if (typeof window === "undefined") return null;
+  // RV-005 MED: the `?shell=new` URL toggle is a dev-mode escape hatch
+  // for founders + QA to preview the new shell during rollout. Production
+  // builds must ignore it — otherwise any non-Vinamr tenant pasting
+  // `?shell=new` enables the new shell on their account, which is a real
+  // escalation vector for an in-progress rollout. Gate at the Vite env
+  // boundary; `import.meta.env.PROD` is true on every production bundle.
+  if (import.meta.env.PROD) return null;
   try {
     const params = new URLSearchParams(window.location.search);
     const value = params.get("shell");

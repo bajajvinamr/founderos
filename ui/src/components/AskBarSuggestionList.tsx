@@ -55,30 +55,47 @@ export function AskBarSuggestionList({
       aria-label="Suggestions"
       className="max-h-[480px] overflow-y-auto py-1"
     >
-      {groups.map((group) => (
-        <li
-          key={group.kind}
-          role="group"
-          aria-label={group.label}
-          className="py-1"
-        >
-          <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {group.label}
-          </div>
-          <ul className="flex flex-col">
-            {group.items.map((item) => (
-              <SuggestionRow
-                key={item.id}
-                item={item}
-                active={activeId === item.domId}
-                onSelect={() => onSelect(item)}
-                onHover={() => onHoverRow(item.domId)}
-                onLeave={() => onHoverRow(null)}
-              />
-            ))}
-          </ul>
-        </li>
-      ))}
+      {groups.map((group) => {
+        // ARIA: `role="listbox"` requires `option` (or `optgroup`) direct
+        // children. `role="group"` is NOT a valid listbox child — assistive
+        // tech will either ignore the grouping or miscount options. The
+        // wrapping <li> is therefore `role="presentation"` (layout-only),
+        // the section heading is a visually-hidden label, and the option
+        // rows are emitted at the top level of the listbox tree below
+        // (the inner <ul> wrapper is also presentation-only so the
+        // structural <li role="option"> rows remain valid listbox children).
+        const headerId = `askbar-group-${group.kind}-label`;
+        return (
+          <li
+            key={group.kind}
+            role="presentation"
+            className="py-1"
+          >
+            <div
+              id={headerId}
+              className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              {group.label}
+            </div>
+            <span className="sr-only" id={`${headerId}-sr`}>
+              Section: {group.label}, {group.items.length} option
+              {group.items.length === 1 ? "" : "s"}
+            </span>
+            <ul role="presentation" className="flex flex-col">
+              {group.items.map((item) => (
+                <SuggestionRow
+                  key={item.id}
+                  item={item}
+                  active={activeId === item.domId}
+                  onSelect={() => onSelect(item)}
+                  onHover={() => onHoverRow(item.domId)}
+                  onLeave={() => onHoverRow(null)}
+                />
+              ))}
+            </ul>
+          </li>
+        );
+      })}
       {showEmpty && (
         <li className="px-3 py-3 text-sm italic text-muted-foreground">
           Nothing matches. <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px]">⌘↵</kbd> to ask the team this.

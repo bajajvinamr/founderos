@@ -14,7 +14,7 @@
  *   - Combobox ARIA attributes are present
  */
 
-import { act } from "react";
+import { act, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -234,6 +234,71 @@ describe("AskBar — Wave 1 keystone tests", () => {
     expect(handle.input.getAttribute("role")).toBe("searchbox");
     expect(handle.input.getAttribute("aria-autocomplete")).toBe("list");
     expect(handle.input.getAttribute("aria-label")).toContain("Ask the team");
+  });
+
+  it("filters suggestions on each keystroke and Enter activates the first filtered result (RV-005 HIGH #2)", () => {
+    // Regression: prior tests passed `openGroups` as a closure-captured
+    // static array, which made it impossible to prove that filtering
+    // actually computes from input. Real AskBar usage in `Layout.tsx`
+    // recomputes groups from `useAskSuggestions(query)` on every keystroke
+    // — this Harness mirrors that contract so the test exercises filtering
+    // through React state, not pre-computed groups.
+    const allPages: AskPageSuggestion[] = [
+      { kind: "page", id: "page-issues", domId: "askbar-page-issues", label: "Issues", to: "/issues" },
+      { kind: "page", id: "page-team", domId: "askbar-page-team", label: "Team", to: "/team" },
+      { kind: "page", id: "page-settings", domId: "askbar-page-settings", label: "Settings", to: "/settings" },
+    ];
+    const onSelectSuggestion = vi.fn();
+    const onAskTeam = vi.fn();
+
+    function Harness() {
+      const [value, setValue] = useState("");
+      const groups = useMemo<AskSuggestionGroup[]>(() => {
+        const q = value.trim().toLowerCase();
+        const items = q.length === 0
+          ? allPages
+          : allPages.filter((p) => p.label.toLowerCase().includes(q));
+        return items.length === 0 ? [] : [{ kind: "page", label: "Pages", items }];
+      }, [value]);
+      return (
+        <AskBar
+          groups={groups}
+          value={value}
+          onChange={setValue}
+          onSelectSuggestion={onSelectSuggestion}
+          onAskTeam={onAskTeam}
+        />
+      );
+    }
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(<Harness />);
+    });
+    mounts.push({ container, root, input: container.querySelector<HTMLInputElement>('input[role="searchbox"]')! });
+    const input = container.querySelector<HTMLInputElement>('input[role="searchbox"]')!;
+
+    pressGlobalKey("k", { meta: true });
+    // Typing "iss" should filter down to only the Issues page.
+    typeIntoInput(input, "iss");
+
+    const renderedRows = container.querySelectorAll<HTMLElement>('[role="option"]');
+    // Exactly two option rows: the Issues page + the sticky-foot Ask-team row.
+    expect(renderedRows.length).toBe(2);
+    // First option is the Issues page — confirms filtering computed from the
+    // current input, not a stale closure value.
+    expect(renderedRows[0]?.id).toBe("askbar-page-issues");
+
+    // Pressing Enter activates the first FILTERED result, not a hardcoded
+    // first item from the static list. If filtering weren't wired through
+    // React state, Enter would either no-op or route to the wrong page.
+    pressInputKey(input, "Enter");
+
+    expect(onSelectSuggestion).toHaveBeenCalledTimes(1);
+    expect(onSelectSuggestion.mock.calls[0]?.[0]?.id).toBe("page-issues");
+    expect(onAskTeam).not.toHaveBeenCalled();
   });
 
   it("flat-list ordering keeps the sticky-foot Ask-team row out of plain-Enter default (F-01)", () => {

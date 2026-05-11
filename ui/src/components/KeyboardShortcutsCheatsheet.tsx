@@ -15,9 +15,14 @@ interface ShortcutSection {
 //
 // Two new entries surface the AskBar reflex (⌘K, ⌘+Enter); the Inbox
 // shortcut block survives because the Inbox surface still exists for now
-// (Wave 2 collapses it into Today). The `g <letter>` chord block is the
-// universal list shortcut row from 05-design-system §5.1 — F-18 deferred
-// the previous spec's chord to P4, so this block is the resolved version.
+// (Wave 2 collapses it into Today).
+//
+// RV-005 MED: the previous "Go to (chrome)" section documented g+t / g+w /
+// g+m / g+l / g+s chords that are NOT yet wired in `useKeyboardShortcuts`.
+// Documenting unimplemented shortcuts is a trust regression — removed here
+// until the chord handler lands. The `g <letter>` chord block from
+// 05-design-system §5.1 was already deferred to P4 by F-18, so this is
+// the resolved interim version.
 const sections: ShortcutSection[] = [
   {
     title: "AskBar",
@@ -27,16 +32,6 @@ const sections: ShortcutSection[] = [
       { keys: ["⌘", "Enter"], label: "Ask the team this — submit typed query" },
       { keys: ["↑"], label: "Previous suggestion" },
       { keys: ["↓"], label: "Next suggestion" },
-    ],
-  },
-  {
-    title: "Go to (chrome)",
-    shortcuts: [
-      { keys: ["g", "t"], label: "Today" },
-      { keys: ["g", "w"], label: "Work" },
-      { keys: ["g", "m"], label: "Team" },
-      { keys: ["g", "l"], label: "Library" },
-      { keys: ["g", "s"], label: "Settings" },
     ],
   },
   {
