@@ -73,4 +73,24 @@ describe("Dashboard (BL-021 / P8.a — dashboard noise cleared)", () => {
     // remain.
     expect(DASHBOARD_SOURCE).toMatch(/activityApi\.list/);
   });
+
+  // ─── BL-023 / P8.c — Top Blockers + Quick Wins land in the cleared slot ────
+
+  it("mounts the TopBlockersWidget (BL-023 / P8.c)", () => {
+    // The widget surfaces pending approvals + errored agents as "things
+    // waiting on you". It fills the space cleared by BL-021 (#171).
+    expect(DASHBOARD_SOURCE).toMatch(/<TopBlockersWidget\b/);
+    expect(DASHBOARD_SOURCE).toMatch(
+      /from\s+["']\.\.\/components\/dashboard\/TopBlockersWidget["']/,
+    );
+  });
+
+  it("mounts the QuickWinsWidget (BL-023 / P8.c)", () => {
+    // The widget surfaces 3-5 founder-language suggestions based on
+    // connected integrations.
+    expect(DASHBOARD_SOURCE).toMatch(/<QuickWinsWidget\b/);
+    expect(DASHBOARD_SOURCE).toMatch(
+      /from\s+["']\.\.\/components\/dashboard\/QuickWinsWidget["']/,
+    );
+  });
 });
