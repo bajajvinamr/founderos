@@ -22,7 +22,7 @@ const EVENT_TYPES: Array<{ id: string; label: string; example: string }> = [
   { id: "install", label: "Install", example: "install.started, install.completed" },
   { id: "company", label: "Company", example: "company.imported (source ref hashed if private)" },
   { id: "agent", label: "Agent", example: "agent.created, agent.first_heartbeat, agent.task_completed" },
-  { id: "routine", label: "Routine", example: "routine.created, routine.run" },
+  { id: "routine", label: "Cadence", example: "routine.created, routine.run" },
   { id: "errors", label: "Errors", example: "error.handler_crash (error code only, no stack)" },
 ];
 
@@ -38,7 +38,7 @@ export function Step7Telemetry({ telemetryEnabled, onTelemetryEnabledChange }: P
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Off by default. Flip it on if you want to help us see which agents and
-          routines actually get used. Never shares your code, your founder data,
+          cadences actually get used. Never shares your code, your founder data,
           or your customer data — only counters and event names.
         </p>
       </div>

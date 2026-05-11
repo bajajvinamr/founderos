@@ -247,7 +247,7 @@ export function IssueFiltersPopover({
                       checked={state.showRoutineExecutions}
                       onCheckedChange={(checked) => onChange({ showRoutineExecutions: checked === true })}
                     />
-                    <span className="text-sm">Show routine runs</span>
+                    <span className="text-sm">Show cadence runs</span>
                   </label>
                 </div>
               ) : null}

@@ -315,7 +315,7 @@ function WorkflowsTab() {
   return (
     <PlaceholderTab
       icon={GitBranch}
-      message="Coming soon — filtered issues/routines scoped to this department."
+      message="Coming soon — filtered issues/cadences scoped to this department."
     />
   );
 }
