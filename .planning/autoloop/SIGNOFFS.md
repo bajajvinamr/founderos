@@ -377,6 +377,6 @@ If `expires_at` passes with `status: pending`:
   - **(b)** EDIT-AND-APPROVE — user manually edits SIG-013 with specific section preferences (e.g., "keep narrative Risk AND add Tier checkboxes alongside") and autoloop dispatches that variant.
   - **(c)** DEFER — wait until P5.b lands or until a user-initiated PR happens with the existing template to gather real-use evidence before changing.
 - **artifacts**: EQ-014 return summary in task `aa1f5cf64ad17c514.output`, existing template at `.github/PULL_REQUEST_TEMPLATE.md` (HEAD), source-of-truth doc `docs/code-review-practices.md`, PROTOCOL.md §"Path-based tier rules"
-- **status**: pending
-- **resolved_at**: null
-- **resolution_note**: null
+- **status**: **approved**
+- **resolved_at**: 2026-05-11T15:36:00Z
+- **resolution_note**: User authorized PR template structural rewrite (cycle 21 wake). Dispatching EQ-016 (replaces EQ-014's hold) with `ALLOW_OVERWRITE=true` brief: apply the merge plan exactly as EQ-014 proposed — autoloop-tier spine (Summary / Tier classification / Surface affected / Test plan / Review checklist / Rollback plan / Related) with high-value sub-sections preserved (Migrations, Breaking Changes, Linked PRD/ADR, Screenshots) as conditional fields under appropriate spine sections. Header note citing docs/code-review-practices.md + Sample-N reviewer to be added. Tier-2 — opens PR, no auto-merge, user reviews shape before activating.
