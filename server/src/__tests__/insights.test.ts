@@ -28,6 +28,7 @@ import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
+import { assertDbErrorMatches } from "./helpers/db-error-matchers.js";
 import { insightRoutes } from "../routes/insights.js";
 import { errorHandler } from "../middleware/index.js";
 
@@ -294,14 +295,15 @@ describeEmbeddedPostgres("Insights API (S3.1)", () => {
   it("(6) CHECK constraint rejects an invalid kind via raw SQL bypass", async () => {
     // Bypass the typed insert path (Drizzle's $type<InsightKind>() is erased
     // at runtime). The CHECK constraint MUST reject this at the SQL layer.
-    await expect(
+    await assertDbErrorMatches(
       db.execute(sql`
         INSERT INTO "insights"
           ("company_id","department","kind","title","body","confidence","evidence")
         VALUES
           (${companyId},'growth','not_a_real_kind','x','x',0.5,'{}'::jsonb)
       `),
-    ).rejects.toThrow(/insights_kind_check|check constraint/i);
+      /insights_kind_check|check constraint/i,
+    );
   });
 
   // ── Bonus: Zod rejects out-of-range confidence at the API boundary ────

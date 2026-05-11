@@ -14,7 +14,16 @@ function normalizeDocumentKey(key: string) {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505";
+  // Drizzle 0.44+ wraps driver errors in DrizzleQueryError; original pg error
+  // (carrying `code`) lives at `error.cause`. Walk a shallow chain.
+  let current: unknown = error;
+  for (let i = 0; i < 8 && current; i++) {
+    if (typeof current !== "object" || current === null) return false;
+    const c = current as { code?: string; cause?: unknown };
+    if (c.code === "23505") return true;
+    current = c.cause;
+  }
+  return false;
 }
 
 export function extractLegacyPlanBody(description: string | null | undefined) {

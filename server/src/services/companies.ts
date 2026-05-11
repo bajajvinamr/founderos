@@ -122,16 +122,25 @@ export function companyService(db: Db) {
   }
 
   function isIssuePrefixConflict(error: unknown) {
-    const constraint = typeof error === "object" && error !== null && "constraint" in error
-      ? (error as { constraint?: string }).constraint
-      : typeof error === "object" && error !== null && "constraint_name" in error
-        ? (error as { constraint_name?: string }).constraint_name
-        : undefined;
-    return typeof error === "object"
-      && error !== null
-      && "code" in error
-      && (error as { code?: string }).code === "23505"
-      && constraint === "companies_issue_prefix_idx";
+    // Drizzle 0.44+ wraps driver errors in DrizzleQueryError; the original pg
+    // error (carrying `code` + `constraint`) lives at `error.cause`. Walk a
+    // shallow chain so this matches whether or not Drizzle is wrapping.
+    let current: unknown = error;
+    for (let i = 0; i < 8 && current; i++) {
+      if (typeof current !== "object" || current === null) return false;
+      const candidate = current as {
+        code?: string;
+        constraint?: string;
+        constraint_name?: string;
+        cause?: unknown;
+      };
+      const constraint = candidate.constraint ?? candidate.constraint_name;
+      if (candidate.code === "23505" && constraint === "companies_issue_prefix_idx") {
+        return true;
+      }
+      current = candidate.cause;
+    }
+    return false;
   }
 
   async function createCompanyWithUniquePrefix(data: typeof companies.$inferInsert) {

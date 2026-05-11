@@ -30,6 +30,7 @@ import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
+import { assertDbErrorMatches } from "./helpers/db-error-matchers.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported
@@ -111,9 +112,10 @@ describeEmbeddedPostgres("runner_tokens + runner_jobs migration smoke", () => {
 
     await db.insert(runnerTokens).values({ companyId: company.id, tokenHash: dupHash });
 
-    await expect(
+    await assertDbErrorMatches(
       db.insert(runnerTokens).values({ companyId: company.id, tokenHash: dupHash }),
-    ).rejects.toThrow(/duplicate key|unique/i);
+      /duplicate key|unique/i,
+    );
   });
 
   it("cascade-deletes runner_tokens when parent company is deleted", async () => {

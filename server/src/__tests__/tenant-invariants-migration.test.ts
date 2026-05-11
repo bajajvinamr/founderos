@@ -37,6 +37,7 @@ import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
+import { assertDbErrorMatches } from "./helpers/db-error-matchers.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported
@@ -129,7 +130,7 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
     // companyB. Composite FK must reject this even though both single-column
     // FKs (agent.id exists, heartbeat_run.id exists, company.id exists) are
     // individually satisfied.
-    await expect(
+    await assertDbErrorMatches(
       db.insert(runnerJobs).values({
         companyId: companyA.id,
         agentId: agentB.id, // wrong tenant
@@ -138,7 +139,8 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
         promptHash: "0".repeat(64),
         runtimeConfig: "{}",
       }),
-    ).rejects.toThrow(/foreign key|violates|constraint/i);
+      /foreign key|violates|constraint/i,
+    );
   });
 
   it("runner_jobs: rejects cross-tenant heartbeat_run_id via composite FK", async () => {
@@ -157,7 +159,7 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
       })
       .returning();
 
-    await expect(
+    await assertDbErrorMatches(
       db.insert(runnerJobs).values({
         companyId: companyA.id,
         agentId: agentA.id,
@@ -166,7 +168,8 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
         promptHash: "1".repeat(64),
         runtimeConfig: "{}",
       }),
-    ).rejects.toThrow(/foreign key|violates|constraint/i);
+      /foreign key|violates|constraint/i,
+    );
   });
 
   it("runner_jobs: rejects out-of-enum status via CHECK", async () => {
@@ -184,7 +187,7 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
 
     // Bypass Drizzle's $type<>() compile-time guard via raw SQL — this is
     // the path the CHECK constraint is the last line of defense for.
-    await expect(
+    await assertDbErrorMatches(
       db.execute(sql`
         INSERT INTO runner_jobs (
           company_id, agent_id, heartbeat_run_id, prompt, prompt_hash, runtime_config, status
@@ -192,7 +195,8 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
           ${company.id}, ${agent.id}, ${run.id}, 'p', ${"2".repeat(64)}, '{}', 'invalid_status'
         )
       `),
-    ).rejects.toThrow(/check constraint|violates|status_check/i);
+      /check constraint|violates|status_check/i,
+    );
   });
 
   it("runner_jobs: accepts canonical same-tenant insert", async () => {
@@ -233,26 +237,28 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
     const companyB = await makeCompany("HR Tenant B");
     const agentB = await makeAgent(companyB.id);
 
-    await expect(
+    await assertDbErrorMatches(
       db.insert(heartbeatRuns).values({
         companyId: companyA.id,
         agentId: agentB.id, // wrong tenant
         invocationSource: "on_demand",
         status: "queued",
       }),
-    ).rejects.toThrow(/foreign key|violates|constraint/i);
+      /foreign key|violates|constraint/i,
+    );
   });
 
   it("heartbeat_runs: rejects out-of-enum status via CHECK", async () => {
     const company = await makeCompany("HR Status Co");
     const agent = await makeAgent(company.id);
 
-    await expect(
+    await assertDbErrorMatches(
       db.execute(sql`
         INSERT INTO heartbeat_runs (company_id, agent_id, invocation_source, status)
         VALUES (${company.id}, ${agent.id}, 'on_demand', 'bogus')
       `),
-    ).rejects.toThrow(/check constraint|violates|status_check/i);
+      /check constraint|violates|status_check/i,
+    );
   });
 
   it("heartbeat_runs: accepts coalesced status (heartbeat-scheduler-only)", async () => {
@@ -298,13 +304,14 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
       .values({ companyId: companyA.id, name: "label-a", color: "#000" })
       .returning();
 
-    await expect(
+    await assertDbErrorMatches(
       db.insert(issueLabels).values({
         companyId: companyA.id,
         issueId: issueB.id, // wrong tenant
         labelId: labelA.id,
       }),
-    ).rejects.toThrow(/foreign key|violates|constraint/i);
+      /foreign key|violates|constraint/i,
+    );
   });
 
   it("issue_labels: rejects cross-tenant label_id via composite FK", async () => {
@@ -325,13 +332,14 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
       .values({ companyId: companyB.id, name: "label-b", color: "#fff" })
       .returning();
 
-    await expect(
+    await assertDbErrorMatches(
       db.insert(issueLabels).values({
         companyId: companyA.id,
         issueId: issueA.id,
         labelId: labelB.id, // wrong tenant
       }),
-    ).rejects.toThrow(/foreign key|violates|constraint/i);
+      /foreign key|violates|constraint/i,
+    );
   });
 
   it("issue_labels: accepts canonical same-tenant insert", async () => {
@@ -374,7 +382,7 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
       .values({ companyId: companyB.id, name: "B project" })
       .returning();
 
-    await expect(
+    await assertDbErrorMatches(
       db.insert(executionWorkspaces).values({
         companyId: companyA.id,
         projectId: projectB.id, // wrong tenant
@@ -384,7 +392,8 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
         status: "active",
         providerType: "local_fs",
       }),
-    ).rejects.toThrow(/foreign key|violates|constraint/i);
+      /foreign key|violates|constraint/i,
+    );
   });
 
   it("execution_workspaces: rejects out-of-enum status via CHECK", async () => {
@@ -394,7 +403,7 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
       .values({ companyId: company.id, name: "P" })
       .returning();
 
-    await expect(
+    await assertDbErrorMatches(
       db.execute(sql`
         INSERT INTO execution_workspaces (
           company_id, project_id, mode, strategy_type, name, status, provider_type
@@ -403,7 +412,8 @@ describeEmbeddedPostgres("0085_tenant_invariants migration smoke", () => {
           'bad-status workspace', 'unknown_state', 'local_fs'
         )
       `),
-    ).rejects.toThrow(/check constraint|violates|status_check/i);
+      /check constraint|violates|status_check/i,
+    );
   });
 
   it("execution_workspaces: accepts canonical same-tenant insert", async () => {

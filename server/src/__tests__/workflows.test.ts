@@ -50,6 +50,7 @@ import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
+import { assertDbErrorMatches } from "./helpers/db-error-matchers.js";
 import { workflowRoutes } from "../routes/workflows.js";
 import { errorHandler } from "../middleware/index.js";
 import { AUTONOMOUS_EMAIL_SETTING_KEY } from "../services/workflow-autonomy.js";
@@ -488,14 +489,15 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
       .values({ name: "Check Test Co", issuePrefix: "CHK" })
       .returning({ id: companies.id });
 
-    await expect(
+    await assertDbErrorMatches(
       db.execute(sql`
         INSERT INTO "workflows"
           ("company_id","name","template","trigger_kind","trigger_spec","autonomy_level","status","config")
         VALUES
           (${company!.id},'x','onboarding-emails','manual','{}',2,'NOT_REAL_STATUS','{}')
       `),
-    ).rejects.toThrow(/workflows_status_check|check constraint/i);
+      /workflows_status_check|check constraint/i,
+    );
   });
 
   it("E2. CHECK constraint rejects invalid workflow_run status via raw SQL", async () => {
@@ -519,14 +521,15 @@ describeEmbeddedPostgres("Workflow Registry API (S4.5)", () => {
       })
       .returning({ id: workflows.id });
 
-    await expect(
+    await assertDbErrorMatches(
       db.execute(sql`
         INSERT INTO "workflow_runs"
           ("workflow_id","company_id","status","triggered_by","actions")
         VALUES
           (${wf!.id},${company!.id},'INVALID_STATUS','{"kind":"manual"}','[]')
       `),
-    ).rejects.toThrow(/workflow_runs_status_check|check constraint/i);
+      /workflow_runs_status_check|check constraint/i,
+    );
   });
 
   // ════════════════════════════════════════════════════════════════════════
