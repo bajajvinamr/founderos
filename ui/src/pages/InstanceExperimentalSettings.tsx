@@ -5,6 +5,7 @@ import { instanceSettingsApi } from "@/api/instanceSettings";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { useDisplayMode } from "../lib/use-display";
 
 export function InstanceExperimentalSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -54,6 +55,12 @@ export function InstanceExperimentalSettings() {
 
   const enableIsolatedWorkspaces = experimentalQuery.data?.enableIsolatedWorkspaces === true;
   const autoRestartDevServerWhenIdle = experimentalQuery.data?.autoRestartDevServerWhenIdle === true;
+
+  // BL-012 (P4.a): client-local Advanced (engineer) view toggle. Persists to
+  // localStorage["founderos.viewMode"]; read by useDisplay/useDisplayMode
+  // across the UI (RunTranscriptView wires data-view-mode for BL-013).
+  const [viewMode, setViewMode] = useDisplayMode();
+  const isEngineerMode = viewMode === "engineer";
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -105,6 +112,27 @@ export function InstanceExperimentalSettings() {
             onCheckedChange={() => toggleMutation.mutate({ autoRestartDevServerWhenIdle: !autoRestartDevServerWhenIdle })}
             disabled={toggleMutation.isPending}
             aria-label="Toggle guarded dev-server auto-restart"
+          />
+        </div>
+      </section>
+
+      <section
+        data-testid="advanced-view-mode-section"
+        className="rounded-xl border border-border bg-card p-5"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-sm font-semibold">Advanced (engineer) view</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Show raw tool calls, thinking blocks, and engineer-style labels in the
+              run transcript and across the UI. Defaults to founder view for new users.
+              This preference is stored in your browser and syncs across tabs.
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={isEngineerMode}
+            onCheckedChange={(next) => setViewMode(next ? "engineer" : "founder")}
+            aria-label="Toggle Advanced engineer view"
           />
         </div>
       </section>

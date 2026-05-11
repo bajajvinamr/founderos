@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { TranscriptEntry } from "../../adapters";
 import { MarkdownBody } from "../MarkdownBody";
 import { cn, formatTokens } from "../../lib/utils";
+import { useDisplayMode } from "../../lib/use-display";
 import {
   Check,
   ChevronDown,
@@ -1396,13 +1397,21 @@ export function RunTranscriptView({
   className,
   thinkingClassName,
 }: RunTranscriptViewProps) {
+  // BL-012 (P4.a): expose the founder/engineer view mode as a data attribute
+  // hook-point. BL-013 (P4.b) will branch rendering on this. Rendering is
+  // unchanged in this dispatch — the attribute is the seam only.
+  const [viewMode] = useDisplayMode();
+
   const blocks = useMemo(() => normalizeTranscript(entries, streaming), [entries, streaming]);
   const visibleBlocks = limit ? blocks.slice(-limit) : blocks;
   const visibleEntries = limit ? entries.slice(-limit) : entries;
 
   if (entries.length === 0) {
     return (
-      <div className={cn("rounded-2xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground", className)}>
+      <div
+        data-view-mode={viewMode}
+        className={cn("rounded-2xl border border-dashed border-border/70 bg-background/40 p-4 text-sm text-muted-foreground", className)}
+      >
         {emptyMessage}
       </div>
     );
@@ -1410,14 +1419,14 @@ export function RunTranscriptView({
 
   if (mode === "raw") {
     return (
-      <div className={className}>
+      <div data-view-mode={viewMode} className={className}>
         <RawTranscriptView entries={visibleEntries} density={density} />
       </div>
     );
   }
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div data-view-mode={viewMode} className={cn("space-y-3", className)}>
       {visibleBlocks.map((block, index) => (
         <div
           key={`${block.type}-${block.ts}-${index}`}

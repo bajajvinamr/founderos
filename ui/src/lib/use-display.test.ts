@@ -1,9 +1,49 @@
 // @vitest-environment jsdom
 
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { displayLabel } from '@founderos/shared';
+import { displayLabel, type DisplayMode } from '@founderos/shared';
+import { useDisplayMode } from './use-display';
 
 const STORAGE_KEY = 'founderos.viewMode';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+/**
+ * Renders a probe component that exposes the current hook state via a ref
+ * passed in by the test. Avoids pulling in @testing-library/react which is
+ * not part of the existing UI test surface.
+ */
+function renderUseDisplayModeProbe(): {
+  container: HTMLDivElement;
+  root: Root;
+  ref: { mode: DisplayMode; setMode: (next: DisplayMode) => void };
+} {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  // Filled by the probe component on every render.
+  const ref: { mode: DisplayMode; setMode: (next: DisplayMode) => void } = {
+    mode: 'founder',
+    setMode: () => {},
+  };
+
+  function Probe() {
+    const [mode, setMode] = useDisplayMode();
+    ref.mode = mode;
+    ref.setMode = setMode;
+    return null;
+  }
+
+  act(() => {
+    root.render(createElement(Probe));
+  });
+
+  return { container, root, ref };
+}
 
 describe('useDisplay hook integration', () => {
   beforeEach(() => {
@@ -94,5 +134,145 @@ describe('useDisplay hook integration', () => {
       expect(typeof founderLabel).toBe('string');
       expect(typeof engineerLabel).toBe('string');
     }
+  });
+});
+
+// BL-012 (P4.a): write-side hook coverage. #169 shipped the read side; this
+// block exercises the setter, default-to-founder behavior for new users, and
+// cross-tab StorageEvent sync.
+describe('useDisplayMode hook (BL-012 / P4.a)', () => {
+  let container: HTMLDivElement | null = null;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    if (root) {
+      act(() => {
+        root!.unmount();
+      });
+      root = null;
+    }
+    if (container) {
+      container.remove();
+      container = null;
+    }
+    localStorage.clear();
+  });
+
+  it('defaults to "founder" for new users (no localStorage entry)', () => {
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    expect(probe.ref.mode).toBe('founder');
+  });
+
+  it('reads existing engineer mode from localStorage on mount', () => {
+    localStorage.setItem(STORAGE_KEY, 'engineer');
+
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    expect(probe.ref.mode).toBe('engineer');
+  });
+
+  it('setMode persists to localStorage and updates the returned mode', () => {
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    expect(probe.ref.mode).toBe('founder');
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    act(() => {
+      probe.ref.setMode('engineer');
+    });
+
+    expect(probe.ref.mode).toBe('engineer');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('engineer');
+
+    act(() => {
+      probe.ref.setMode('founder');
+    });
+
+    expect(probe.ref.mode).toBe('founder');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('founder');
+  });
+
+  it('reacts to cross-tab storage events (mode flipped in another tab)', () => {
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    expect(probe.ref.mode).toBe('founder');
+
+    // Simulate another tab writing the key. jsdom does not auto-fire a
+    // StorageEvent for same-window setItem, so we dispatch it manually —
+    // which is exactly what cross-tab sync looks like in real browsers.
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: STORAGE_KEY,
+          newValue: 'engineer',
+          oldValue: null,
+        }),
+      );
+    });
+
+    expect(probe.ref.mode).toBe('engineer');
+  });
+
+  it('ignores storage events for unrelated keys', () => {
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'some.other.key',
+          newValue: 'engineer',
+          oldValue: null,
+        }),
+      );
+    });
+
+    expect(probe.ref.mode).toBe('founder');
+  });
+
+  it('ignores storage events with invalid values', () => {
+    localStorage.setItem(STORAGE_KEY, 'engineer');
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    expect(probe.ref.mode).toBe('engineer');
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: STORAGE_KEY,
+          newValue: 'not-a-mode',
+          oldValue: 'engineer',
+        }),
+      );
+    });
+
+    // Stays at engineer — invalid newValue is ignored, not collapsed to default.
+    expect(probe.ref.mode).toBe('engineer');
+  });
+
+  it('treats unknown stored values as default founder mode', () => {
+    localStorage.setItem(STORAGE_KEY, 'gibberish');
+
+    const probe = renderUseDisplayModeProbe();
+    container = probe.container;
+    root = probe.root;
+
+    expect(probe.ref.mode).toBe('founder');
   });
 });
