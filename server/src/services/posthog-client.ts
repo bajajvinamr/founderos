@@ -207,12 +207,19 @@ export function createPostHogClient(config: PostHogConfig): PostHogClient {
   async function runHogQL(
     projectId: number,
     query: string,
+    values?: Record<string, unknown>,
   ): Promise<PostHogHogQLResponse> {
     return apiFetch<PostHogHogQLResponse>(
       `/api/projects/${projectId}/query/`,
       {
         method: "POST",
-        body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+        body: JSON.stringify({
+          query: {
+            kind: "HogQLQuery",
+            query,
+            ...(values !== undefined ? { values } : {}),
+          },
+        }),
       },
     );
   }
@@ -224,18 +231,28 @@ export function createPostHogClient(config: PostHogConfig): PostHogClient {
   ): Promise<Record<string, number>> {
     if (events.length === 0) return {};
 
-    const inList = events.map((e) => `'${e.replace(/'/g, "\\'")}'`).join(", ");
+    // Build per-event parameter names (event0, event1, …) to avoid any
+    // string interpolation of attacker-influenced event names into the query.
+    // PostHog HogQL supports {paramName} substitution via the `values` field:
+    // https://posthog.com/docs/hogql/api
+    const eventParams: Record<string, string> = {};
+    const paramRefs = events.map((e, i) => {
+      const key = `event${i}`;
+      eventParams[key] = e;
+      return `{${key}}`;
+    });
+
     const sinceIso = since.toISOString();
 
     const hql = `
       SELECT event, count() AS cnt
       FROM events
-      WHERE event IN (${inList})
+      WHERE event IN (${paramRefs.join(", ")})
         AND timestamp >= '${sinceIso}'
       GROUP BY event
     `.trim();
 
-    const result = await runHogQL(projectId, hql);
+    const result = await runHogQL(projectId, hql, eventParams);
 
     const counts: Record<string, number> = {};
     for (const e of events) counts[e] = 0;
