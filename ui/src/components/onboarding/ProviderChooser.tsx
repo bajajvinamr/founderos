@@ -62,6 +62,18 @@ export interface ProviderOption {
   /** One-line description, ~6-12 words. */
   description: string;
   /**
+   * Optional DisplayDictionary key for this tile's description.
+   * BL-005 (P2.d) — when set, ProviderTile resolves the user-facing
+   * description via `useDisplay(descriptionKey)` and falls back to
+   * `description` if the dictionary entry is missing. Engineer
+   * viewMode renders the engineer side of the dictionary entry which
+   * equals `description` by convention, so engineer-mode founders still
+   * see the pre-BL-005 technical copy ("Bring your own Anthropic API
+   * key for hosted deployments.", etc.) — mirrors the BL-003 label
+   * pattern.
+   */
+  descriptionKey?: DisplayKey;
+  /**
    * Plain-English "what this requires" line shown under the description.
    * Tells the founder up-front what they need (CLI / key / signup) so the
    * choice is honest before they pick — surfaces audit P0.4. Roughly 8-16
@@ -92,6 +104,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     displayKey: "claude_local",
     description:
       "For developers — requires Claude Code CLI installed on your laptop.",
+    descriptionKey: "provider.claude_code.description",
     requirement: "Requires Claude Code CLI installed on your laptop.",
     status: "live",
     adapterType: "claude_local",
@@ -102,6 +115,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "Anthropic API",
     displayKey: "anthropic_api",
     description: "Bring your own Anthropic API key for hosted deployments.",
+    descriptionKey: "provider.anthropic_api.description",
     requirement:
       "Requires an Anthropic API key (get one at console.anthropic.com).",
     status: "live",
@@ -113,6 +127,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "Gemini CLI",
     displayKey: "gemini_local",
     description: "Use your Google AI subscription via the local CLI.",
+    descriptionKey: "provider.gemini_cli.description",
     requirement: "Requires Google AI Studio account and Gemini CLI on your laptop.",
     status: "live",
     adapterType: "gemini_local",
@@ -123,6 +138,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "Gemini API",
     displayKey: "gemini_api",
     description: "Bring your own Gemini API key for hosted deployments.",
+    descriptionKey: "provider.google_api.description",
     requirement: "Requires a Gemini API key (aistudio.google.com/apikey).",
     status: "live",
     adapterType: "gemini_local",
@@ -133,6 +149,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "Codex CLI",
     displayKey: "codex_local",
     description: "Use your OpenAI subscription via the local Codex CLI.",
+    descriptionKey: "provider.codex_cli.description",
     requirement: "Requires GitHub Codex CLI installed on your laptop.",
     status: "live",
     adapterType: "codex_local",
@@ -143,6 +160,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: "OpenAI API",
     displayKey: "openai_api",
     description: "Bring your own OpenAI API key (GPT-4o / o3).",
+    descriptionKey: "provider.openai_api.description",
     requirement: "Requires an OpenAI API key (platform.openai.com/api-keys).",
     status: "live",
     adapterType: "openai_api",
