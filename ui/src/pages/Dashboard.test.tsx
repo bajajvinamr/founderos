@@ -93,4 +93,16 @@ describe("Dashboard (BL-021 / P8.a — dashboard noise cleared)", () => {
       /from\s+["']\.\.\/components\/dashboard\/QuickWinsWidget["']/,
     );
   });
+
+  // ─── BL-022 / P8.b — Haiku-generated "what we shipped yesterday" widget ────
+
+  it("mounts the YesterdayWidget (BL-022 / P8.b)", () => {
+    // The widget surfaces 3-5 task completions from the last 24h,
+    // summarized into founder-language by Claude Haiku. The third P8
+    // widget after TopBlockers + QuickWins (#173).
+    expect(DASHBOARD_SOURCE).toMatch(/<YesterdayWidget\b/);
+    expect(DASHBOARD_SOURCE).toMatch(
+      /from\s+["']\.\.\/components\/dashboard\/YesterdayWidget["']/,
+    );
+  });
 });

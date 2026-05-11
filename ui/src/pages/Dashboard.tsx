@@ -24,6 +24,7 @@ import { DepartmentStatusGrid } from "../components/DepartmentStatusGrid";
 import { CapitalAllocationCard } from "../components/CapitalAllocationCard";
 import { TopBlockersWidget } from "../components/dashboard/TopBlockersWidget";
 import { QuickWinsWidget } from "../components/dashboard/QuickWinsWidget";
+import { YesterdayWidget } from "../components/dashboard/YesterdayWidget";
 import { DecisionsInbox } from "./DecisionsInbox";
 import { StatusIcon } from "../components/StatusIcon";
 
@@ -163,6 +164,14 @@ export function Dashboard() {
           <QuickWinsWidget companyId={selectedCompanyId} />
         </div>
       )}
+
+      {/* P8.b (BL-022): "What we shipped yesterday" — Haiku-generated founder-
+          language summary of the last 24h's task completions. Renders below
+          the TopBlockers/QuickWins row so the three P8 widgets read top-to-
+          bottom as: "what needs you / what you could ask / what already
+          shipped". Empty state is reassuring; LLM failure silently falls
+          back to raw titles server-side. */}
+      {selectedCompanyId && <YesterdayWidget companyId={selectedCompanyId} />}
 
       {/* S1.6 — Decision Inbox (compact) — pending approvals visible without
           a click. Full inbox lives at /approvals. */}
