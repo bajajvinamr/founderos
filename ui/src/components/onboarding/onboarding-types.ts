@@ -178,7 +178,14 @@ export interface OnboardingDraft {
   team: TeamShape;
   cofounderName: string;
   cofounderEmail: string;
-  adapterChoice: AdapterChoice;
+  /**
+   * BL-004 (P2.c, audit finding) — null until the founder explicitly clicks a
+   * provider tile. The pre-2026-05-11 default of `"anthropic_api"` biased
+   * analytics ("most founders pick Anthropic" — they didn't, the tile was
+   * just pre-selected). Removing the default forces an honest choice; the
+   * wizard's Continue button is disabled while this is null.
+   */
+  adapterChoice: AdapterChoice | null;
   anthropicKey: string;
   integrations: Record<IntegrationKey, boolean>;
   /** S1.9 — non-core departments the founder opted in to. Core 5 always on. */
