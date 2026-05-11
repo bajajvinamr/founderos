@@ -658,8 +658,13 @@ export function App() {
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
           </Route>
-          <Route path="*" element={<NotFoundPage scope="global" />} />
         </Route>
+        {/* Public 404 catch-all sits OUTSIDE CloudAccessGate so unknown
+            routes show a real Not Found page instead of redirecting to
+            /auth?next=<unknown-path>. Truly-protected routes still hit
+            the gate above; this only matches paths that don't appear in
+            any other Route entry. Audit P2 — DESIGN-AUDIT-2026-05-10. */}
+        <Route path="*" element={<NotFoundPage scope="global" />} />
       </Routes>
       {FOUNDEROS_ONBOARDING_V2 ? <FounderOnboardingWizard /> : <OnboardingWizard />}
     </>
