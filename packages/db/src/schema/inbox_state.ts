@@ -17,6 +17,7 @@
  */
 
 import { pgTable, uuid, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { authUsers } from "./auth.js";
 
 /**
@@ -83,13 +84,14 @@ export const inboxState = pgTable(
   (table) => ({
     /**
      * Hot Inbox query: "show this user's unread + snoozed rows."
-     * Partial WHERE lives in the migration SQL; Drizzle's DSL doesn't
-     * carry the predicate here but the runtime index is partial.
+     * Partial index — only carries rows that are actually in-tray, so
+     * it stays bounded by the working-set size rather than total history.
+     * The `.where()` clause must mirror the migration SQL exactly so
+     * the schema-drift CI gate sees a clean snapshot.
      */
-    userStateIdx: index("idx_inbox_state_user_state").on(
-      table.userId,
-      table.state,
-    ),
+    userStateIdx: index("idx_inbox_state_user_state")
+      .on(table.userId, table.state)
+      .where(sql`${table.state} IN ('unread', 'snoozed')`),
     /**
      * Upsert target — every (user, entity_type, entity_id) pair has
      * at most one row. Idempotent snooze/archive/mark-read upserts
