@@ -53,13 +53,13 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 - **notes**: 2 files / +144 / −173 (net cleanup). Dashboard.tsx removes RunActivityChart, "Month spend" MetricCard, Recent Activity feed, PermissionCoachCard + dead-code cleanup (animation state, entity maps, projectsApi query). Dashboard.test.tsx new — 6 assertions (4 negative for removed widgets, 2 positive preserving FounderBriefing + activityApi.list which The Morning Brief still consumes). Typecheck clean across 24 workspace packages; 24/24 ui/src/pages tests pass; lint clean. **Permission Coach relocation NOT done** — pragmatic-option path: removal-only, TODO comment left, component file untouched, relocation needs Tier-3 nav-structure edit → see SIG-006. No worktree leak observed this dispatch (third consecutive — agent harness behavior may be improving for branch-explicit operations).
 - **post-#169 rebase**: cycle 8.5 `gh pr update-branch 171` fired after DisplayDictionary landed; fresh CI rerunning.
 
-## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)
+## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)  ✅ PR OPENED + auto-merge enrolled
 
-- **branch**: feat/bl-002-step-4-founder-copy (or agent-self-named)
-- **agent**: dispatch-cycle-8.5-eq-004 (general-purpose, isolation=worktree, background) — id a06f163797092410e
-- **dispatched_at**: 2026-05-11T09:55:00Z (just after #169 DisplayDictionary landed at 09:44:59Z)
-- **pr**: null
-- **tier_declared**: 1
-- **status**: dispatched
-- **last_update**: 2026-05-11T09:55:00Z
-- **notes**: Unblocked by #169 merge. Touches FounderOnboardingWizard.tsx Step 4 + possibly display-dictionary.ts (sibling to types/, NOT a Tier-3 forbidden path per PROTOCOL.md v2). Tier-1 by path. Auto-merge enrolled after diff-validator passes. Snapshot tests for both viewModes.
+- **branch**: feat/bl-002-step-4-founder-copy (renamed at push-time from worktree-agent-a06f163797092410e via `git push origin local:remote`)
+- **agent**: cycle-8.5 dispatch a06f163797092410e (completed 2026-05-11T10:01:00Z, ~5.5min — fastest round-trip yet)
+- **dispatched_at**: 2026-05-11T09:55:00Z
+- **pr**: #172 — auto-merge enrolled SQUASH at 09:59:58Z; BLOCKED on CI (13 success / 0 failure / 7 running). MERGEABLE per gh.
+- **tier_declared**: 1 → actual Tier-1 (diff-validator confirmed: 5 files; `display-dictionary.{ts, test.ts, snap}` + `FounderOnboardingWizard.tsx` + new step4 test — all in Tier-1 paths)
+- **status**: pr_opened
+- **last_update**: 2026-05-11T10:01:00Z
+- **notes**: 5 files / +191 / -5. Added 2 DisplayDictionary keys (`onboarding.step4.headline`, `onboarding.step4.subtitle`) with founder/engineer mode strings, wired wizard Step 4 via `useDisplay` hook + `data-testid`s, added 140-line step4 test with 4 assertions (founder mode, engineer mode, localStorage persistence, fallback). 50/50 onboarding tests pass, 10/10 display-dictionary tests pass, 8-package typecheck green, lint clean. **No worktree leak** this dispatch — confirms harness behavior improving for branch-explicit operations (third no-leak in a row after EQ-002 leak).
