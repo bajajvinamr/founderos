@@ -49,6 +49,10 @@ export function companyMemoryRoutes(db: Db) {
         topic: req.body.topic ?? null,
         occurredAt: req.body.occurredAt ? new Date(req.body.occurredAt) : undefined,
         pinned: req.body.pinned ?? false,
+        // S6.4 / audit P0.3 — let founders categorize entries from the UI so
+        // agent-recall queries can filter by semantic role.
+        category: req.body.category ?? null,
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
         source: "manual",
       });
 
@@ -85,6 +89,9 @@ export function companyMemoryRoutes(db: Db) {
         body: req.body.body,
         topic: req.body.topic,
         pinned: req.body.pinned,
+        // S6.4 / audit P0.3 — recategorize and TTL adjustments from the UI.
+        category: req.body.category,
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : req.body.expiresAt,
       });
 
       if (!updated) {

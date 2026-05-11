@@ -1,4 +1,4 @@
-import type { CompanyMemoryEntry, MemoryKind } from "@founderos/shared";
+import type { CompanyMemoryEntry, MemoryCategory, MemoryKind } from "@founderos/shared";
 import { api } from "./client";
 
 export type CreateMemoryBody = {
@@ -8,6 +8,10 @@ export type CreateMemoryBody = {
   topic?: string | null;
   occurredAt?: string;
   pinned?: boolean;
+  /** S6.4 / audit P0.3 — agent-recall semantic category. */
+  category?: MemoryCategory | null;
+  /** S6.4 — TTL. ISO string. NULL/omitted = no expiry. */
+  expiresAt?: string | null;
 };
 
 export type UpdateMemoryBody = {
@@ -15,6 +19,8 @@ export type UpdateMemoryBody = {
   body?: string;
   topic?: string | null;
   pinned?: boolean;
+  category?: MemoryCategory | null;
+  expiresAt?: string | null;
 };
 
 export type ListMemoryParams = {
