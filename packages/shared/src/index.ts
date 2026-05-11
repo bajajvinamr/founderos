@@ -839,3 +839,11 @@ export type {
   ProviderFamily,
   AgentProviderPreference,
 } from "./types/template.js";
+
+export {
+  DISPLAY_DICTIONARY,
+  displayLabel,
+  type DisplayMode,
+  type DisplayLabel,
+  type DisplayKey,
+} from "./display-dictionary.js";

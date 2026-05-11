@@ -489,17 +489,13 @@ export async function startServer(): Promise<StartedServer> {
     strictCompanyIsolation: process.env.FOUNDEROS_STRICT_COMPANY_ISOLATION,
   });
 
-  // Hydrate DB-stored provider API keys into process.env so adapter
-  // subprocesses inherit them without per-adapter plumbing.
-  try {
-    const { instanceApiKeysService } = await import("./services/instance-api-keys.js");
-    const svc = instanceApiKeysService(db as any);
-    const loaded = await svc.hydrateProcessEnv();
-    if (loaded > 0) logger.info({ providerKeysLoaded: loaded }, "Hydrated provider API keys into env");
-  } catch (err) {
-    logger.warn({ err }, "Failed to hydrate provider API keys — agents may fall back to env vars");
-  }
-  
+  // S8 P0.1 Phase 1B (council R1 condition C2): provider API keys are NO
+  // LONGER hydrated into process.env at boot. Per-tenant collision risk
+  // (Codex) and write-race (Gemini) — both rooted in the same shared-global
+  // mutation surface — are removed by switching every consumer to per-call
+  // `instanceApiKeysService(db).getDecrypted(family)` and injecting the
+  // plaintext into the child subprocess env at spawn time.
+
   if (config.deploymentMode === "authenticated") {
     if (config.authBaseUrlMode === "explicit" && !config.authPublicBaseUrl) {
       throw new Error("auth.baseUrlMode=explicit requires auth.publicBaseUrl");
@@ -852,6 +848,17 @@ export async function startServer(): Promise<StartedServer> {
   if (isByoRunnerEnabled()) {
     registerByoRunnerAdapter(db);
     logger.info("[byo-runner] adapter registered (FOUNDEROS_BYO_RUNNER_ENABLED=1)");
+  }
+
+  // Phase S8 P0.1 council R1 condition C6 — orphaned-workdir sweep.
+  // Boot-time + 6h interval cleanup of `/founderos/agents/<companyId>/<runId>/`
+  // dirs older than 24h. Forward-compatible: no-ops if the root doesn't exist
+  // (Phase 1C lands the per-job workdirs separately). Async, does not block boot.
+  {
+    const { scheduleOrphanedWorkdirSweep } = await import(
+      "./services/orphaned-workdir-sweep.js"
+    );
+    scheduleOrphanedWorkdirSweep();
   }
 
   await new Promise<void>((resolveListen, rejectListen) => {
