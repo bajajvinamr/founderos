@@ -12,6 +12,7 @@
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -74,9 +75,11 @@ async function flush() {
 async function renderPage() {
   await act(async () => {
     root!.render(
-      <QueryClientProvider client={queryClient}>
-        <AiConnections />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <AiConnections />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
     await flush();
   });
@@ -166,6 +169,65 @@ describe("AiConnections page", () => {
 
     const connectedSection = container!.querySelector("[data-testid=connected-section]");
     expect(connectedSection?.textContent).toContain("No AI providers connected yet");
+  });
+
+  it("DefaultForNewWorkSection radios are disabled in P5.a", async () => {
+    listMock.mockResolvedValue(sampleRows);
+    await renderPage();
+
+    const radios = container!.querySelectorAll<HTMLInputElement>(
+      "[data-testid^=default-adapter-]",
+    );
+    expect(radios.length).toBeGreaterThan(0);
+    // At least one radio is disabled and its associated label carries the
+    // opacity-60 visual affordance per RV-002 review on PR #181.
+    const firstRadio = radios[0];
+    expect(firstRadio.disabled).toBe(true);
+    const label = container!.querySelector(
+      `label[for="${firstRadio.id}"]`,
+    ) as HTMLLabelElement | null;
+    expect(label).not.toBeNull();
+    expect(label!.className).toContain("opacity-60");
+  });
+
+  it("fallback-order seeded once; user reordering survives data refresh", async () => {
+    listMock.mockResolvedValue(sampleRows);
+    await renderPage();
+
+    // Initial seed order: claude_local first, codex_local second (only `connected` rows).
+    let entries = container!.querySelectorAll("[data-testid^=fallback-entry-]");
+    expect(entries.length).toBe(2);
+    expect(entries[0].getAttribute("data-testid")).toBe("fallback-entry-claude_local");
+    expect(entries[1].getAttribute("data-testid")).toBe("fallback-entry-codex_local");
+
+    // User clicks "move down" on claude_local — order becomes [codex_local, claude_local].
+    const downBtn = container!.querySelector(
+      "[data-testid=fallback-down-claude_local]",
+    ) as HTMLButtonElement | null;
+    expect(downBtn).not.toBeNull();
+    await act(async () => {
+      downBtn!.click();
+      await flush();
+    });
+
+    entries = container!.querySelectorAll("[data-testid^=fallback-entry-]");
+    expect(entries[0].getAttribute("data-testid")).toBe("fallback-entry-codex_local");
+    expect(entries[1].getAttribute("data-testid")).toBe("fallback-entry-claude_local");
+
+    // Simulate a stale-while-revalidate refresh — refetch returns identical server data.
+    // The ref-guard must NOT re-seed; user reordering must survive.
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["adapters"] });
+      await flush();
+    });
+    await act(async () => {
+      await flush();
+    });
+
+    entries = container!.querySelectorAll("[data-testid^=fallback-entry-]");
+    expect(entries.length).toBe(2);
+    expect(entries[0].getAttribute("data-testid")).toBe("fallback-entry-codex_local");
+    expect(entries[1].getAttribute("data-testid")).toBe("fallback-entry-claude_local");
   });
 });
 

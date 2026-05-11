@@ -30,7 +30,8 @@
  *     can be threaded in once the hooks land.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, GripVertical, Plug } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -105,6 +106,7 @@ export function reorderFallback(
 export function AiConnections() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const [fallbackOrder, setFallbackOrder] = useState<FallbackOrderEntry[]>([]);
+  const seededRef = useRef(false);
 
   useEffect(() => {
     setBreadcrumbs([
@@ -124,15 +126,16 @@ export function AiConnections() {
   );
 
   // Initialise fallback-order from the connected list once data lands.
+  // Use ref-guard so user reordering survives stale-while-revalidate; RV-002 review on PR #181
   useEffect(() => {
-    if (connectionsQuery.data && fallbackOrder.length === 0) {
-      setFallbackOrder(
-        connectionsQuery.data
-          .filter((c) => c.status === "connected")
-          .map((c) => ({ adapterType: c.type, label: c.label })),
-      );
+    const serverOrder = connectionsQuery.data
+      ?.filter((c) => c.status === "connected")
+      .map((c) => ({ adapterType: c.type, label: c.label }));
+    if (!seededRef.current && serverOrder?.length) {
+      seededRef.current = true;
+      setFallbackOrder(serverOrder);
     }
-  }, [connectionsQuery.data, fallbackOrder.length]);
+  }, [connectionsQuery.data]);
 
   function moveUp(idx: number) {
     setFallbackOrder((current) => reorderFallback(current, idx, idx - 1));
@@ -210,9 +213,9 @@ export function ConnectedSection({ connections }: { connections: AiConnectionRow
         <h2 className="text-sm font-semibold">Connected</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           No AI providers connected yet. Connect one from{" "}
-          <a className="underline" href="/instance/settings/adapters">
+          <Link className="underline" to="/instance/settings/adapters">
             Workstations
-          </a>{" "}
+          </Link>{" "}
           to get started.
         </p>
       </section>
@@ -282,11 +285,15 @@ function DefaultForNewWorkSection({ connections }: { connections: AiConnectionRo
                 id={`default-${c.type}`}
                 value={c.type}
                 defaultChecked={i === 0}
+                // Disabled per P5.a placeholder — wiring lands in P5.b
                 disabled
                 className="h-4 w-4 shrink-0 accent-foreground"
                 data-testid={`default-adapter-${c.type}`}
               />
-              <label htmlFor={`default-${c.type}`} className="flex items-center gap-2 text-sm text-muted-foreground">
+              <label
+                htmlFor={`default-${c.type}`}
+                className="flex items-center gap-2 text-sm text-muted-foreground opacity-60 cursor-not-allowed"
+              >
                 <AdapterBrandLogo adapterType={c.type} />
                 {c.label}
               </label>
