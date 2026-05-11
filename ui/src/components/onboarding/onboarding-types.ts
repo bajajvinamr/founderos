@@ -187,6 +187,23 @@ export interface OnboardingDraft {
    */
   adapterChoice: AdapterChoice | null;
   anthropicKey: string;
+  /**
+   * Step 4 advance-gate (2026-05-12) — flipped true ONLY after the founder
+   * has validated their chosen adapter:
+   *   - `api_key` adapters: `validateProviderKey()` returned `{ valid: true }`.
+   *   - `subscription` (local CLI) adapters: founder clicked the explicit
+   *     "Confirm CLI is installed" attestation button.
+   *
+   * Reset to false on every `adapterChoice` change so a stale validation
+   * from a previously-picked tile cannot leak past the gate.
+   */
+  adapterValidated: boolean;
+  /**
+   * The adapter the current `adapterValidated=true` flag belongs to. If a
+   * founder validates tile A then switches to tile B before clicking
+   * Continue, this disambiguates so the gate refuses to advance.
+   */
+  validatedFor: AdapterChoice | null;
   integrations: Record<IntegrationKey, boolean>;
   /** S1.9 — non-core departments the founder opted in to. Core 5 always on. */
   nonCoreDepartments: NonCoreDepartmentId[];

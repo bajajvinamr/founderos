@@ -97,6 +97,7 @@ Current deploys:
 - Runbooks: `docs/runbooks/`
 - Deploy config: `DEPLOYMENT.md` + `docs/ops/branch-protection.md`
 - Project handover (always current): `CONTINUE.md`
+- Code review practices (distilled from autoloop's lived record): `docs/code-review-practices.md`
 
 ## Deferred / human-only next steps
 

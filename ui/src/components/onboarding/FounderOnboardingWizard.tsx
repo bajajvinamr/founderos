@@ -10,6 +10,7 @@ import { formatBootstrapError } from "@/lib/onboarding-bootstrap-error";
 import { useDialog } from "@/context/DialogContext";
 import { useCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useDisplay } from "@/lib/use-display";
 import { Step1Vision } from "./steps/Step1Vision.js";
 import { Step2Bottleneck } from "./steps/Step2Bottleneck.js";
 import { Step3Team } from "./steps/Step3Team.js";
@@ -18,6 +19,7 @@ import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
 import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
 import { Step7Telemetry } from "./steps/Step7Telemetry.js";
 import { ProviderChooser, type ProviderOption } from "./ProviderChooser.js";
+import { AdapterValidationPanel } from "./AdapterValidationPanel.js";
 import {
   buildAutoCharters,
   buildFirstDecisions,
@@ -116,6 +118,11 @@ function buildInitialDraft(): OnboardingDraft {
     // Continue button is gated on `canAdvance(4)` rejecting null below.
     adapterChoice: null,
     anthropicKey: "",
+    // Step 4 advance-gate (2026-05-12) — both fields stay null/false
+    // until the founder validates their chosen adapter. See
+    // `AdapterValidationPanel` and `canAdvance(4)` below.
+    adapterValidated: false,
+    validatedFor: null,
     integrations: { ...DEFAULT_INTEGRATION_STATE },
     nonCoreDepartments: [...DEFAULT_NON_CORE_DEPARTMENTS],
     autonomyLevel: DEFAULT_AUTONOMY_LEVEL,
@@ -141,6 +148,14 @@ export function FounderOnboardingWizard() {
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft());
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // BL-002 (P2.a, founder-language sweep) — Step 4 H1 + subtitle are now
+  // driven by the DisplayDictionary so they switch between founder and
+  // engineer voice based on `founderos.viewMode` in localStorage. The keys
+  // live in `packages/shared/src/display-dictionary.ts`; the hook reads
+  // viewMode + returns the active label.
+  const step4Headline = useDisplay("onboarding.step4.headline");
+  const step4Subtitle = useDisplay("onboarding.step4.subtitle");
 
   // Server-generated decisions: real Claude call that uses the founder's
   // vision + bottlenecks + team to produce 3 tailored cards. Fetched lazily
@@ -220,7 +235,16 @@ export function FounderOnboardingWizard() {
     if (current === 3) return true;
     // BL-004 — Step 4 (provider chooser) requires an explicit tile click.
     // Default is null; Continue stays disabled until the founder picks.
-    if (current === 4) return draft.adapterChoice !== null;
+    // 2026-05-12 — gate also requires the founder to validate the chosen
+    // adapter. `validatedFor === adapterChoice` defends against a race
+    // where the founder validates tile A then switches to tile B.
+    if (current === 4) {
+      return (
+        draft.adapterChoice !== null &&
+        draft.adapterValidated &&
+        draft.validatedFor === draft.adapterChoice
+      );
+    }
     if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
     if (current === 7) return true;
@@ -237,6 +261,19 @@ export function FounderOnboardingWizard() {
     // POST null to the server's Zod validator (which would 400 anyway).
     if (draft.adapterChoice === null) {
       setSubmitError("Please choose an AI provider on Step 4 before launching.");
+      setSubmitting(false);
+      return;
+    }
+    // 2026-05-12 — defense in depth: Step 4's canAdvance() already
+    // refuses to advance without validation, but reject again here in
+    // case the validation gate was bypassed via stale state.
+    if (
+      !draft.adapterValidated ||
+      draft.validatedFor !== draft.adapterChoice
+    ) {
+      setSubmitError(
+        "Please validate your AI provider on Step 4 before launching.",
+      );
       setSubmitting(false);
       return;
     }
@@ -401,12 +438,17 @@ export function FounderOnboardingWizard() {
               {step === 4 && (
                 <div className="space-y-8">
                   <div>
-                    <h2 className="text-2xl font-semibold tracking-tight">
-                      Plug in your brain
+                    <h2
+                      className="text-2xl font-semibold tracking-tight"
+                      data-testid="onboarding-step4-headline"
+                    >
+                      {step4Headline}
                     </h2>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      How should agents authenticate with Claude? Integrations are optional
-                      — you can connect them later.
+                    <p
+                      className="mt-2 text-sm text-muted-foreground"
+                      data-testid="onboarding-step4-subtitle"
+                    >
+                      {step4Subtitle}
                     </p>
                   </div>
 
@@ -419,9 +461,37 @@ export function FounderOnboardingWizard() {
                     onSelect={(option) => {
                       const nextChoice = mapProviderToAdapter(option);
                       if (nextChoice === null) return;
-                      patchDraft({ adapterChoice: nextChoice });
+                      // 2026-05-12 — switching tiles ALWAYS resets the
+                      // validation gate, even if the founder lands back
+                      // on the same tile (`patchDraft` is a no-op on
+                      // unchanged fields, so re-selecting is harmless).
+                      patchDraft({
+                        adapterChoice: nextChoice,
+                        adapterValidated: false,
+                        validatedFor: null,
+                      });
                     }}
                   />
+
+                  {draft.adapterChoice !== null && (
+                    <AdapterValidationPanel
+                      adapterChoice={draft.adapterChoice}
+                      apiKey={draft.anthropicKey}
+                      onApiKeyChange={(next) =>
+                        patchDraft({ anthropicKey: next })
+                      }
+                      validated={
+                        draft.adapterValidated &&
+                        draft.validatedFor === draft.adapterChoice
+                      }
+                      onValidated={(next) =>
+                        patchDraft({
+                          adapterValidated: next,
+                          validatedFor: next ? draft.adapterChoice : null,
+                        })
+                      }
+                    />
+                  )}
 
                   {/* Integrations toggles */}
                   <div>
