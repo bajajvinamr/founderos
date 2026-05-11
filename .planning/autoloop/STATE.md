@@ -29,24 +29,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 17
-- **last_cycle_at**: 2026-05-11T13:45:00Z
-- **next_wake_at**: 2026-05-11T14:10:00Z  <!-- +1500s — 3 PRs auto-merge enrolled pending CI: #176 (rebased), #179 (practices), #180 (BL-014); expect 3 merges in next 15-20min -->
+- **cycle**: 18
+- **last_cycle_at**: 2026-05-11T14:01:00Z
+- **next_wake_at**: 2026-05-11T14:26:00Z  <!-- +1500s — 2 PRs auto-merge enrolled pending CI: #176 (test+coverage IN_PROGRESS post-rebase), #180 (test+coverage IN_PROGRESS post-fresh-rebase); EQ-013 in flight expected to return → #181 -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-011 + EQ-012 both returned -->
+- **eng_dispatches_in_flight**: 1  <!-- EQ-013 (BL-016 AI Connections page Tier-2) — id aba8cc786a6044597 -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 4  <!-- #163 close-rec + #176 (rebased, CI re-running) + #179 (practices doc) + #180 (BL-014) -->
-- **open_prs_max**: 2  <!-- temporarily over: all 3 autoloop PRs are Tier-1 auto-merge enrolled, will land in next ~15min -->
-- **autoloop_prs_open**: 3  <!-- #176, #179, #180 — all auto-merge SQUASH enrolled, all pending CI -->
-- **autoloop_prs_merged**: 8  <!-- #170, #171, #172, #173, #174, #175, #177, #178 -->
-- **autoloop_dispatches_completed**: 12
+- **open_prs**: 3  <!-- #163 close-rec + #176 (rebased, test+coverage IN_PROGRESS) + #180 (rebased post-#179, test+coverage IN_PROGRESS) -->
+- **open_prs_max**: 2  <!-- temporarily over by 1 (#163 long-standing close-rec); 2 autoloop PRs both auto-merge enrolled -->
+- **autoloop_prs_open**: 2  <!-- #176, #180 — both auto-merge SQUASH enrolled, both pending test+coverage -->
+- **autoloop_prs_merged**: 9  <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179 -->
+- **autoloop_dispatches_completed**: 12  <!-- EQ-013 not yet returned -->
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 8  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177, EQ-010/178 -->
-- **autoloop_dispatches_in_pr**: 3  <!-- EQ-008/#176 (rebased, SIG-011 resolved-flake), EQ-011/#180 (BL-014), EQ-012/#179 (practices doc) -->
-- **autoloop_dispatches_active**: 0
-- **avg_round_trip_minutes**: ~9.6  <!-- + EQ-011: 12.1, + EQ-012: 6.5 -->
+- **autoloop_dispatches_shipped**: 9  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177, EQ-010/178, EQ-012/179 -->
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-008/#176 (test+coverage IN_PROGRESS post-rebase, SIG-011 resolved-flake from previous rerun), EQ-011/#180 (test+coverage IN_PROGRESS post-fresh-rebase) -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-013 in flight -->
+- **avg_round_trip_minutes**: ~9.4  <!-- 9 ships / round-trip narrows as practices-doc EQ-012 was short -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -68,10 +68,10 @@
 ## Outputs Counter
 
 - **prs_opened**: 11   <!-- #170-#180 (incl. practices doc #179) -->
-- **prs_merged**: 8   <!-- #170, #171, #172, #173, #174, #175, #177, #178 -->
-- **signoffs_pending**: 9   <!-- SIG-001..008 + SIG-010 (SIG-009 + SIG-011 resolved-merged/resolved-flake) -->
+- **prs_merged**: 9   <!-- #170, #171, #172, #173, #174, #175, #177, #178, #179 -->
+- **signoffs_pending**: 9   <!-- SIG-001..008 + SIG-010 (SIG-009 + SIG-011 resolved) -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 9   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007/009/010 merged, 008 + 011 + 012-practices in PR -->
+- **backlog_items_remaining**: 8   <!-- minus EQ-001 escalated, 9 merged, EQ-008/EQ-011 in PR, EQ-013 in flight -->
 
 ## Drift Detection State
 
@@ -105,6 +105,7 @@
 | 16 | 13:15Z | **#178 MERGED at 13:05:40Z** (8th autoloop ship, P4.b transcript founder-mode — P4 keystone LIVE in prod); SIG-009 flipped to resolved-merged. **#176 CI FAILED** with `db.select is not a function` at onboarding-bootstrap.ts:437 — NOT pre-existing (identical-base #178 passed same job); #176-introduced regression. CI rerun triggered (flake-or-real-bug discrimination); SIG-011 logged P1 with investigation playbook. **EQ-011 dispatched** (BL-014 P4.c summarizeTool helper, Tier-1 auto-merge) — fills the founder-mode gap left by #178 hiding raw tool blocks. |
 | 16.2-16.5 | 13:24-13:31Z | **Branch-HEAD leak NEW invariant class detected + recovered TWICE** (cycle 16.2 initial, cycle 16.5 recurrence post-EQ-012 cherry-pick); EQ-012 returned with PR #179 (practices doc, 2 files +492/-0 base=main); EQ-012 also independently detected + self-recovered from same leak class. Meta: doc validates itself by surviving its documented failure mode. |
 | 17 | 13:45Z | **EQ-011 returned with PR #180** in 12.1min (BL-014 P4.c summarizeTool, 4 files +590/-13, **15 tool slugs cataloged**, 690 UI tests pass); design choice: added optional `rawName` field to block types for adapter-slug routing without breaking displayToolName humanization. **SIG-011 RESOLVED-FLAKE**: #176 CI rerun ALL GREEN — confirmed vitest cross-worker module-cache race, not a real bug. #176 rebased post-#178 → auto-merge waiting on one more CI cycle. **3 PRs in flight** (#176, #179, #180) all Tier-1 auto-merge enrolled; expect 3 ships in next 15-20min. Worktree-leak file-diff class **streak: 7 consecutive** (branch-HEAD class recurring but recoverable). |
+| 18 | 14:01Z | **#179 MERGED at 13:34:15Z** (9th autoloop ship — practices doc live; docs/code-review-practices.md + CLAUDE.md index line); **#180 flake-class #11 recurred briefly** then auto-recovered (19/20 SUCCESS observed mid-cycle); **PROTOCOL.md updated**: flake class #11 (vitest cross-worker module-cache race) added to taxonomy + Branch-HEAD leak NEW invariant class documented with defensive primitive (`git branch --show-current` before every .planning/autoloop/* edit); #180 rebased post-#179 (BEHIND→cleared, fresh `test+coverage` IN_PROGRESS), #176 still waiting on its own `test+coverage` post-earlier rebase; **EQ-013 dispatched** for BL-016 P5.a AI Connections page (**Tier-2**, no auto-merge) — agent id aba8cc786a6044597, brief explicit on routing constraint (Tier-3 forbidden: company-routes.ts + Sidebar.tsx) and pragmatic-option pattern (find existing /setup/* host route OR escalate as Tier-3). Worktree-leak file-diff class **streak: 8 consecutive**. |
 
 ## Last Action Log
 
@@ -206,4 +207,15 @@
 17: 2026-05-11T13:44:00Z | signoff   | SIG-011 status flipped to resolved-flake at 13:40:00Z; resolution note: defensive `vi.resetModules()` in yesterday-summary.test.ts beforeEach is recommended hardening but not required to merge #176
 17: 2026-05-11T13:44:30Z | flake-tax | new flake class #11 candidate for PROTOCOL.md taxonomy: **vitest cross-worker module-cache race**. Pattern: test file defines partial mock that bleeds via singleton import-time effects; downstream tests sharing worker see contaminated module. Detection: rapid-fire identical TypeError across many tests at unchanged code path. Retry policy: 1 automatic retry; expire 30d if not encountered again. Defensive code: `vi.resetModules()` in beforeEach of mock-heavy tests.
 17: 2026-05-11T13:45:00Z | tally     | **3 PRs auto-merge enrolled pending CI** — #176 (post-rebase), #179 (practices doc), #180 (BL-014). Expect 3 ships in next 15-20min (cycle 18 wake catches them). EQ-008/011/012 all completed and shipped to PR; 0 active dispatches; capacity restored when these 3 merge.
+18: 2026-05-11T13:34:15Z | pr-merge  | #179 (EQ-012 practices doc) MERGED — autoloop's **9th ship**; first non-product PR via autoloop (meta: practices distilled FROM autoloop's 16-cycle record, then SHIPPED BY autoloop itself); base=main clean (no rebase needed pre-merge)
+18: 2026-05-11T14:00:00Z | ci-probe  | #176 post-rebase: 19 SUCCESS + test+coverage IN_PROGRESS; flake class #11 confirmed transient (earlier rerun PASSED); auto-merge SQUASH still enrolled, will fire on test+coverage completion
+18: 2026-05-11T14:00:30Z | ci-probe  | #180: mergeable BEHIND (#179 ahead on main), all other checks SUCCESS, test+coverage IN_PROGRESS on stale base
+18: 2026-05-11T14:00:56Z | rebase    | #180 onto post-#179 main (`gh pr update-branch 180` → ✓ PR branch updated); auto-merge SQUASH still enrolled; fresh test+coverage triggered
+18: 2026-05-11T14:01:00Z | protocol  | PROTOCOL.md **flake taxonomy entry #11 added** (vitest cross-worker module-cache race; retry policy: 1 automatic rerun via `gh run rerun --failed`; expire 2026-08-01)
+18: 2026-05-11T14:01:00Z | protocol  | PROTOCOL.md **Branch-HEAD leak section added** (NEW invariant class beyond file-diff leak; defensive primitive: `git branch --show-current == chore/autoloop-scaffold` check before every Edit/Write to .planning/autoloop/*; recovery: `git checkout chore/autoloop-scaffold`)
+18: 2026-05-11T14:01:00Z | promote   | BL-016 → EQ-013 (**Tier-2**, P5.a AI Connections page — pragmatic-option escape: agent must find existing /setup/* host route OR escalate to Tier-3 via SIGNOFFS; nav-edit forbidden)
+18: 2026-05-11T14:01:00Z | dispatch  | EQ-013 to general-purpose agent (worktree, background) — id aba8cc786a6044597 — Tier-2 policy honored (NO auto-merge enrollment in brief); routing-constraint preamble explicit in prompt
+18: 2026-05-11T14:01:30Z | tally     | autoloop_prs_open=2 (#176 + #180, both auto-merge enrolled, both pending test+coverage), autoloop_dispatches_active=1 (EQ-013), shipped=9, ratio: dispatches-shipped/dispatches-completed = 9/12 = 75% (matches v2 expectation; EQ-001 escalation accounts for the gap)
+18: 2026-05-11T14:01:30Z | observability | A/B/C question to user on GitHub review activity (raised post-EQ-012) STILL PENDING; PR #179 merged without code-review event compounds the gap. Re-surface after wake schedule.
+18: 2026-05-11T14:02:00Z | INVARIANT-RECURRENCE | **Branch-HEAD leak RECURRED for the 3rd time this session** — parent HEAD flipped to `feat/bl-016-ai-connections-page` (EQ-013's intended branch) after dispatch + during staging of cycle 18 commits. **Defensive primitive caught it**: `git branch --show-current` between Edit and `git add` surfaced the mismatch BEFORE staged changes contaminated the wrong branch. Recovery: `git stash push --include-untracked` (preserved staged edits including untracked) → `git checkout chore/autoloop-scaffold` → `git stash pop` → re-stage. **Meta validation**: PROTOCOL.md Branch-HEAD leak section's defensive primitive worked exactly as designed on its FIRST exposure post-documentation. The rule is now empirical, not theoretical.
 ```

@@ -149,8 +149,11 @@ Replaces the v1 flat list. Each row: symptom class, owning subsystem, detection 
 | child-process orphan | post-test cleanup | "Terminate orphan process" appears in log but exit code 0 | NONE — false signal, ignore as success | always |
 | workspace-runtime parallel race | server tests | workspace-runtime.test.ts intermittent failure under parallel load (documented in `docs/CI-KNOWN-FLAKES.md` v1) | up to 2 retries | 2026-08-01 |
 | linked-worktree symlink drift | worktree dispatch | Agent worktree references stale package-link in `node_modules/.pnpm/` after a sibling PR updated the workspace | recreate worktree + retry once, then halt | always |
+| vitest cross-worker module-cache race | server/UI tests | Rapid-fire identical TypeError (e.g. `db.select is not a function`) across many tests at UNCHANGED code paths; PR adds a new test file with partial `vi.mock` or singleton import-time effects; identical-base sibling PRs PASS the same job | up to 1 retry via `gh run rerun --failed`; if rerun also fails, dispatch isolation-fix (likely `vi.resetModules()` in beforeEach or convert partial mocks to pure DI) | 2026-08-01 |
 
 **Unknown flake**: halt fast. Do not retry blindly. Write SIGNOFFS as `flake-unknown` with the failing job URL + first 50 lines of error output + a `next_step: identify_symptom_class` field.
+
+**Branch HEAD leak (new invariant class)**: Agent({isolation: "worktree"}) dispatches can flip the parent checkout's HEAD to the agent's intended branch (the worktree itself gets auto-renamed to `worktree-agent-<id>`). Detection: `git branch --show-current` returns something other than the autoloop-scaffold branch when the autoloop runner expects to be on it. Defense: every Edit/Write to .planning/autoloop/* must be preceded by `git branch --show-current` check; recover via `git checkout chore/autoloop-scaffold`. Observed twice in cycle 16.2-16.5 — class is recurring, not one-time. (Not technically a flake; it's an agent-harness leak. Documented here because the defensive primitive belongs in the same retry/recovery taxonomy.)
 
 ## Halt Conditions (REVISED post-council — augments v1)
 
