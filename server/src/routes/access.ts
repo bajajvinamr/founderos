@@ -44,6 +44,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Router } from "express";
 import type { Request } from "express";
+import {
+  cliAuthCreateLimiter,
+  cliAuthPollLimiter,
+  cliAuthApproveLimiter,
+  cliAuthCancelLimiter,
+} from "../middleware/rate-limit.js";
 import { and, eq, isNull, desc } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import {
@@ -1684,6 +1690,7 @@ export function accessRoutes(
 
   router.post(
     "/cli-auth/challenges",
+    cliAuthCreateLimiter,
     validate(createCliAuthChallengeSchema),
     async (req, res) => {
       const created = await boardAuth.createCliAuthChallenge(req.body);
@@ -1705,7 +1712,7 @@ export function accessRoutes(
     },
   );
 
-  router.get("/cli-auth/challenges/:id", async (req, res) => {
+  router.get("/cli-auth/challenges/:id", cliAuthPollLimiter, async (req, res) => {
     const id = (req.params.id as string).trim();
     const token =
       typeof req.query.token === "string" ? req.query.token.trim() : "";
@@ -1733,6 +1740,7 @@ export function accessRoutes(
 
   router.post(
     "/cli-auth/challenges/:id/approve",
+    cliAuthApproveLimiter,
     validate(resolveCliAuthChallengeSchema),
     async (req, res) => {
       const id = (req.params.id as string).trim();
@@ -1786,6 +1794,7 @@ export function accessRoutes(
 
   router.post(
     "/cli-auth/challenges/:id/cancel",
+    cliAuthCancelLimiter,
     validate(resolveCliAuthChallengeSchema),
     async (req, res) => {
       const id = (req.params.id as string).trim();

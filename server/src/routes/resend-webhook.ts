@@ -57,6 +57,7 @@ import {
 import { logger } from "../middleware/logger.js";
 import { verifySvixSignature } from "../services/transports/resend-webhook-verify.js";
 import { insertSuppression } from "../services/customer-email-suppressions.js";
+import { resendWebhookLimiter } from "../middleware/rate-limit.js";
 
 // ── Resend webhook event shapes ─────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ function deriveRunStatusFromActions(
 export function resendWebhookRoutes(db: Db) {
   const router = Router();
 
-  router.post("/api/webhooks/resend", async (req: Request, res: Response) => {
+  router.post("/api/webhooks/resend", resendWebhookLimiter, async (req: Request, res: Response) => {
     const secret = process.env.RESEND_WEBHOOK_SECRET;
     if (!secret) {
       // Fail closed — operator hasn't configured the secret. Don't accept

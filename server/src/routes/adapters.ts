@@ -18,6 +18,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { Router } from "express";
 import {
+  adapterInstallLimiter,
+  adapterDeleteLimiter,
+} from "../middleware/rate-limit.js";
+import {
   listServerAdapters,
   findServerAdapter,
   findActiveServerAdapter,
@@ -208,7 +212,7 @@ export function adapterRoutes() {
    * - isLocalPath?: boolean (default false)
    * - version?: string — target version for npm packages
    */
-  router.post("/adapters/install", async (req, res) => {
+  router.post("/adapters/install", adapterInstallLimiter, async (req, res) => {
     assertBoard(req);
 
     const { packageName, isLocalPath = false, version } = req.body as AdapterInstallRequest;
@@ -409,7 +413,7 @@ export function adapterRoutes() {
    *
    * Unregister an external adapter. Built-in adapters cannot be removed.
    */
-  router.delete("/adapters/:type", async (req, res) => {
+  router.delete("/adapters/:type", adapterDeleteLimiter, async (req, res) => {
     assertBoard(req);
 
     const adapterType = req.params.type;
@@ -536,7 +540,7 @@ export function adapterRoutes() {
   //
   // This is a convenience shortcut for remove + install with the same
   // package name, but without the risk of losing the store record.
-  router.post("/adapters/:type/reinstall", async (req, res) => {
+  router.post("/adapters/:type/reinstall", adapterInstallLimiter, async (req, res) => {
     assertBoard(req);
 
     const type = req.params.type;

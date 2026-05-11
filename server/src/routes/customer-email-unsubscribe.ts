@@ -29,6 +29,7 @@ import { Router, type Request, type Response } from "express";
 import type { Db } from "@founderos/db";
 import { verifyUnsubscribeToken } from "../services/email-unsubscribe-tokens.js";
 import { recordSuppression } from "../services/customer-email-suppressions.js";
+import { customerUnsubscribeLimiter } from "../middleware/rate-limit.js";
 
 export function customerEmailUnsubscribeRoutes(db: Db): Router {
   const router = Router();
@@ -70,8 +71,8 @@ export function customerEmailUnsubscribeRoutes(db: Db): Router {
     res.status(200).type("text/plain").send(body);
   }
 
-  router.get("/u/customer/:token", handle);
-  router.post("/u/customer/:token", handle);
+  router.get("/u/customer/:token", customerUnsubscribeLimiter, handle);
+  router.post("/u/customer/:token", customerUnsubscribeLimiter, handle);
 
   return router;
 }

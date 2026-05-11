@@ -36,6 +36,7 @@ import net from "node:net";
 import type { Db } from "@founderos/db";
 import { pluginRegistryService } from "../services/plugin-registry.js";
 import { logger } from "../middleware/logger.js";
+import { pluginUiStaticLimiter } from "../middleware/rate-limit.js";
 
 // ---------------------------------------------------------------------------
 // Dev-proxy loopback enforcement
@@ -274,7 +275,7 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
    * - Content-hashed filenames → immutable, 1-year max-age
    * - Other files → must-revalidate with ETag
    */
-  router.get("/_plugins/:pluginId/ui/*filePath", async (req, res) => {
+  router.get("/_plugins/:pluginId/ui/*filePath", pluginUiStaticLimiter, async (req, res) => {
     const { pluginId } = req.params;
 
     // Extract the relative file path from the named wildcard.

@@ -27,6 +27,7 @@ import {
   verifyUnsubscribeToken,
 } from "../services/daily-digest.js";
 import { assertCompanyAccess } from "./authz.js";
+import { digestUnsubscribeLimiter } from "../middleware/rate-limit.js";
 
 function requireUserActor(req: Request): string {
   if (req.actor.type !== "board") {
@@ -184,7 +185,7 @@ export function digestRoutes(db: Db, opts: { publicUrl?: string } = {}) {
    * Public — no auth middleware required. Token is HMAC-signed so the
    * server trusts it without needing a cookie.
    */
-  router.post("/digest/unsubscribe/:token", async (req, res) => {
+  router.post("/digest/unsubscribe/:token", digestUnsubscribeLimiter, async (req, res) => {
     const token = String(req.params.token ?? "");
     const verified = verifyUnsubscribeToken(token, resolveUnsubscribeSecret());
     if (!verified) {
@@ -208,7 +209,7 @@ export function digestRoutes(db: Db, opts: { publicUrl?: string } = {}) {
 
   // GET alias for unsubscribe so one-click email links work without JS. Mail
   // clients send a GET when the user clicks the raw link.
-  router.get("/digest/unsubscribe/:token", async (req, res) => {
+  router.get("/digest/unsubscribe/:token", digestUnsubscribeLimiter, async (req, res) => {
     const token = String(req.params.token ?? "");
     const verified = verifyUnsubscribeToken(token, resolveUnsubscribeSecret());
     if (!verified) {
