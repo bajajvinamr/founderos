@@ -31,7 +31,7 @@ import { findActiveServerAdapter } from "../adapters/index.js";
 import { resolveFounderOSInstanceRoot } from "../home-paths.js";
 import { assertResolvedInside } from "../lib/path-guard.js";
 import { notFound, unprocessable } from "../errors.js";
-import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
+import { assertSafeGitHubHostname, ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
 import { secretService } from "./secrets.js";
@@ -544,6 +544,7 @@ function parseGitHubSourceUrl(rawUrl: string) {
 }
 
 async function resolveGitHubPinnedRef(parsed: ReturnType<typeof parseGitHubSourceUrl>) {
+  await assertSafeGitHubHostname(parsed.hostname);
   const apiBase = gitHubApiBase(parsed.hostname);
   if (/^[0-9a-f]{40}$/i.test(parsed.ref.trim())) {
     return {
@@ -1010,6 +1011,7 @@ async function readUrlSkillImports(
   } catch { return false; } })();
   if (looksLikeRepoUrl) {
     const parsed = parseGitHubSourceUrl(url);
+    await assertSafeGitHubHostname(parsed.hostname);
     const apiBase = gitHubApiBase(parsed.hostname);
     const { pinnedRef, trackingRef } = await resolveGitHubPinnedRef(parsed);
     let ref = pinnedRef;
@@ -1671,6 +1673,7 @@ export function companySkillService(db: Db) {
     }
 
     const hostname = asString(metadata.hostname) || "github.com";
+    await assertSafeGitHubHostname(hostname);
     const apiBase = gitHubApiBase(hostname);
     const latestRef = await resolveGitHubCommitSha(owner, repo, trackingRef, apiBase);
     return {
