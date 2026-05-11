@@ -1,0 +1,114 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DISPLAY_DICTIONARY > should have a snapshot of the full dictionary 1`] = `
+{
+  "adapter": {
+    "engineer": "Adapter",
+    "founder": "AI Brain",
+  },
+  "agents": {
+    "engineer": "Agents",
+    "founder": "Your team",
+  },
+  "anthropic_api": {
+    "engineer": "Anthropic API",
+    "founder": "Claude (pay-per-use)",
+  },
+  "ask_action": {
+    "engineer": "Create new issue",
+    "founder": "What do you want done?",
+  },
+  "audit": {
+    "engineer": "Audit log",
+    "founder": "History",
+  },
+  "byo_runner": {
+    "engineer": "BYO Runner",
+    "founder": "Run on my computer",
+  },
+  "claim": {
+    "engineer": "Claim",
+    "founder": "Activate",
+  },
+  "claude_local": {
+    "engineer": "Claude Code CLI",
+    "founder": "Claude (subscription)",
+  },
+  "codex_local": {
+    "engineer": "Codex CLI",
+    "founder": "ChatGPT (subscription)",
+  },
+  "create_issue": {
+    "engineer": "Create Issue",
+    "founder": "Ask the team",
+  },
+  "decisions": {
+    "engineer": "Decisions",
+    "founder": "Decisions",
+  },
+  "gemini_api": {
+    "engineer": "Gemini API",
+    "founder": "Gemini (pay-per-use)",
+  },
+  "gemini_local": {
+    "engineer": "Gemini CLI",
+    "founder": "Gemini (subscription)",
+  },
+  "heartbeat": {
+    "engineer": "Heartbeat",
+    "founder": "Check-in",
+  },
+  "inbox": {
+    "engineer": "Inbox",
+    "founder": "Inbox",
+  },
+  "integrations": {
+    "engineer": "Integrations",
+    "founder": "Connections",
+  },
+  "issue": {
+    "engineer": "Issue",
+    "founder": "Task",
+  },
+  "issues": {
+    "engineer": "Issues",
+    "founder": "Tasks",
+  },
+  "new_issue": {
+    "engineer": "New Issue",
+    "founder": "Ask FounderOS",
+  },
+  "openai_api": {
+    "engineer": "OpenAI API",
+    "founder": "ChatGPT (pay-per-use)",
+  },
+  "providers": {
+    "engineer": "Providers",
+    "founder": "AI services",
+  },
+  "routine": {
+    "engineer": "Routine",
+    "founder": "Schedule",
+  },
+  "routines": {
+    "engineer": "Routines",
+    "founder": "Schedules",
+  },
+  "run": {
+    "engineer": "Run",
+    "founder": "Work shift",
+  },
+  "runs": {
+    "engineer": "Runs",
+    "founder": "Work shifts",
+  },
+  "wakeup": {
+    "engineer": "Wakeup",
+    "founder": "Start work",
+  },
+  "workspace": {
+    "engineer": "Workspace",
+    "founder": "Knowledge base",
+  },
+}
+`;
