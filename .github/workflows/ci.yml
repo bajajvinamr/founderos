@@ -375,8 +375,19 @@ jobs:
         env:
           RESULTS: ${{ toJson(needs) }}
         run: |
+          set -euo pipefail
+          # Print the full needs context for diagnostics on every run.
           echo "$RESULTS"
-          echo "$RESULTS" | grep -q '"result": "failure"' && {
-            echo "::error::One or more checks failed."
+          echo "Required check results:"
+          echo "$RESULTS" | jq -r 'to_entries[] | "  \(.key): \(.value.result)"'
+          # Fail closed: every required check must be 'success'. Anything else
+          # (failure, cancelled, skipped, or any future state) fails the gate.
+          # Previously this was a grep for '"result": "failure"', which let
+          # cancelled/skipped jobs silently pass the aggregate — a fail-open bug.
+          non_success=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"')
+          if [ -n "$non_success" ]; then
+            echo "::error::One or more required checks did not succeed:"
+            echo "$non_success"
             exit 1
-          } || echo "All checks passed."
+          fi
+          echo "All required checks succeeded."
