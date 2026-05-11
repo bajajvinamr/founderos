@@ -327,6 +327,6 @@ If `expires_at` passes with `status: pending`:
   - **(b)** Close #176 and re-dispatch BL-022 from scratch. Lossy — agent already built 8 files of working code; the bug is likely a 1-line fix in the test file.
   - **(c)** Wait for SIG-010 triage first to determine if there's overlap. Defers the question without solving it.
 - **artifacts**: PR #176, failed CI run https://github.com/bajajvinamr/founderos/actions/runs/25671388070, agent transcript a3960fd3433787f46, vinamr-invariants pattern "Event-ingest singleton initialization in tests"
-- **status**: pending  <!-- will flip to resolved-flake if rerun passes, or to in-progress if re-dispatch needed -->
-- **resolved_at**: null
-- **resolution_note**: null
+- **status**: **resolved-flake** (CI rerun passed all checks)
+- **resolved_at**: 2026-05-11T13:40:00Z
+- **resolution_note**: CI rerun at cycle 16 came back ALL GREEN (`test (+ coverage)` flipped from FAIL → SUCCESS). Confirmed flake-class: **vitest cross-worker module-cache race** — when a test file (yesterday-summary.test.ts) defines a partial `db` mock that bleeds across vitest workers via singleton import-time effects, downstream tests sharing the worker can see a contaminated `db` object missing methods like `.select`. First-run hit the race; rerun didn't. To be added to PROTOCOL.md flake taxonomy as class #11 with retry policy: 1 automatic retry per test job; expire after 30d if not encountered again. Defensive code change (NOT required to merge #176): add `vi.resetModules()` in `yesterday-summary.test.ts` beforeEach. #176 will auto-merge after its post-#178 rebase clears CI.

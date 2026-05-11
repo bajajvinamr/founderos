@@ -29,24 +29,24 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 16
-- **last_cycle_at**: 2026-05-11T13:15:00Z
-- **next_wake_at**: 2026-05-11T13:40:00Z  <!-- +1500s — check EQ-011 return + #176 CI rerun outcome -->
+- **cycle**: 17
+- **last_cycle_at**: 2026-05-11T13:45:00Z
+- **next_wake_at**: 2026-05-11T14:10:00Z  <!-- +1500s — 3 PRs auto-merge enrolled pending CI: #176 (rebased), #179 (practices), #180 (BL-014); expect 3 merges in next 15-20min -->
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-011 dispatched (BL-014 P4.c Tier-1 summarizeTool helper) -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-011 + EQ-012 both returned -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 2  <!-- #163 close-rec + #176 (auto-merge enrolled, CI rerun pending, SIG-011 investigation) -->
-- **open_prs_max**: 2
-- **autoloop_prs_open**: 1  <!-- #176 only — #178 merged 13:05:40Z -->
+- **open_prs**: 4  <!-- #163 close-rec + #176 (rebased, CI re-running) + #179 (practices doc) + #180 (BL-014) -->
+- **open_prs_max**: 2  <!-- temporarily over: all 3 autoloop PRs are Tier-1 auto-merge enrolled, will land in next ~15min -->
+- **autoloop_prs_open**: 3  <!-- #176, #179, #180 — all auto-merge SQUASH enrolled, all pending CI -->
 - **autoloop_prs_merged**: 8  <!-- #170, #171, #172, #173, #174, #175, #177, #178 -->
-- **autoloop_dispatches_completed**: 10
+- **autoloop_dispatches_completed**: 12
 - **autoloop_dispatches_escalated**: 1
 - **autoloop_dispatches_shipped**: 8  <!-- EQ-002/170, EQ-003/171, EQ-004/172, EQ-005/173, EQ-006/174, EQ-007/175, EQ-009/177, EQ-010/178 -->
-- **autoloop_dispatches_in_pr**: 1  <!-- EQ-008/#176 (CI rerun pending — SIG-011 if rerun fails) -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-011 (BL-014 Tier-1 summarizeTool helper) -->
-- **avg_round_trip_minutes**: ~9.5
+- **autoloop_dispatches_in_pr**: 3  <!-- EQ-008/#176 (rebased, SIG-011 resolved-flake), EQ-011/#180 (BL-014), EQ-012/#179 (practices doc) -->
+- **autoloop_dispatches_active**: 0
+- **avg_round_trip_minutes**: ~9.6  <!-- + EQ-011: 12.1, + EQ-012: 6.5 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -67,11 +67,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 9   <!-- #170-#178 -->
+- **prs_opened**: 11   <!-- #170-#180 (incl. practices doc #179) -->
 - **prs_merged**: 8   <!-- #170, #171, #172, #173, #174, #175, #177, #178 -->
-- **signoffs_pending**: 10   <!-- SIG-001..007 + SIG-008 + SIG-010 + SIG-011 (SIG-009 resolved-merged at 13:05:40Z) -->
+- **signoffs_pending**: 9   <!-- SIG-001..008 + SIG-010 (SIG-009 + SIG-011 resolved-merged/resolved-flake) -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 9   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007/009/010 merged, 008 in PR (CI rerun SIG-011), 011 dispatched -->
+- **backlog_items_remaining**: 9   <!-- minus EQ-001 escalated, EQ-002/003/004/005/006/007/009/010 merged, 008 + 011 + 012-practices in PR -->
 
 ## Drift Detection State
 
@@ -103,6 +103,8 @@
 | 14 | 12:24Z | **Tier-2 review queue HOLD continues** — no user merges since cycle 13.5 (5min ago). Dep-chain audit: ZERO unblocked Tier-1 items remain (BL-014 needs #178, BL-018 needs BL-016 unstarted, BL-011 needs BL-010 chain). Only unblocked-but-Tier-2 candidate is BL-016 P5.a (no auto-merge, would push autoloop_prs_open to 3 over cap). **No dispatch**; extending wake interval to 60min (3600s) since only user-merge events can advance state. Wake-prompt's "BL-014 unblocks when #177 merged" assertion was structurally wrong (BL-014 deps BL-013/#178, not BL-005/#177). |
 | 15 | 12:30Z | **AUTOLOOP RELAUNCHED** — user reviewed 7-ship summary + Tier-2 review queue, executed merge on #176 + #178; both rebased + auto-merge SQUASH enrolled (will land on CI completion ~5-10min). New 8h timer: activated_at=12:30Z, stop_at=20:30Z. SIG-008 + SIG-009 marked auto-merge-enrolled (status will flip to merged at next wake). HOLD on BL-014 dispatch until #178 actually lands (worktree-base drift risk). Tight wake +720s to catch merges + dispatch. |
 | 16 | 13:15Z | **#178 MERGED at 13:05:40Z** (8th autoloop ship, P4.b transcript founder-mode — P4 keystone LIVE in prod); SIG-009 flipped to resolved-merged. **#176 CI FAILED** with `db.select is not a function` at onboarding-bootstrap.ts:437 — NOT pre-existing (identical-base #178 passed same job); #176-introduced regression. CI rerun triggered (flake-or-real-bug discrimination); SIG-011 logged P1 with investigation playbook. **EQ-011 dispatched** (BL-014 P4.c summarizeTool helper, Tier-1 auto-merge) — fills the founder-mode gap left by #178 hiding raw tool blocks. |
+| 16.2-16.5 | 13:24-13:31Z | **Branch-HEAD leak NEW invariant class detected + recovered TWICE** (cycle 16.2 initial, cycle 16.5 recurrence post-EQ-012 cherry-pick); EQ-012 returned with PR #179 (practices doc, 2 files +492/-0 base=main); EQ-012 also independently detected + self-recovered from same leak class. Meta: doc validates itself by surviving its documented failure mode. |
+| 17 | 13:45Z | **EQ-011 returned with PR #180** in 12.1min (BL-014 P4.c summarizeTool, 4 files +590/-13, **15 tool slugs cataloged**, 690 UI tests pass); design choice: added optional `rawName` field to block types for adapter-slug routing without breaking displayToolName humanization. **SIG-011 RESOLVED-FLAKE**: #176 CI rerun ALL GREEN — confirmed vitest cross-worker module-cache race, not a real bug. #176 rebased post-#178 → auto-merge waiting on one more CI cycle. **3 PRs in flight** (#176, #179, #180) all Tier-1 auto-merge enrolled; expect 3 ships in next 15-20min. Worktree-leak file-diff class **streak: 7 consecutive** (branch-HEAD class recurring but recoverable). |
 
 ## Last Action Log
 
@@ -197,4 +199,11 @@
 16.5: 2026-05-11T13:30:30Z | validate | PR #179 diff-validator PASS Tier-1 — exactly 2 files (docs/* + CLAUDE.md); zero Tier-3 path touches; zero deletions. Auto-merge fires on CI green.
 16.5: 2026-05-11T13:31:00Z | INVARIANT-RECURRENCE | **Branch-HEAD leak recurred** at parent checkout — flipped AGAIN to feat/practices-code-review-doc during/after EQ-012's cherry-pick recovery dance. Re-recovered via `git checkout chore/autoloop-scaffold`. Confirmed origin matches local. **The new invariant is stronger than initially recorded**: branch-HEAD leak isn't a one-time event class — it can recur from sibling-agent activity. Defense upgrade: every Edit/Write to .planning/autoloop/* must be PRECEDED by `git branch --show-current` check, not just at session start.
 16.5: 2026-05-11T13:31:30Z | self-validation | EQ-012's deliverable (docs/code-review-practices.md §3.7) cites the worktree-leak invariant as a documented pattern. The agent encountered the NEW severity class while WRITING about the old one — and recovered correctly. The doc has live forensic evidence of its own subject matter. Meta-pattern: practices docs grounded in real autoloop events are self-validating; abstract best-practices docs aren't.
+17: 2026-05-11T13:42:00Z | agent-return | EQ-011 (a6965cedcf1198e9a) COMPLETED in 12.1min; PR #180 opened OPEN; autoMergeRequest=SQUASH enrolled 13:24:03Z; 4 files / +590 / -13 (ui/src/lib/summarize-tool.ts NEW +199, ui/src/lib/__tests__/summarize-tool.test.ts NEW +190, ui/src/components/transcript/RunTranscriptView.tsx +124/-13, RunTranscriptView.founder.test.tsx +77); 690/690 UI tests green; 29 summarize-tool tests + 11 founder.test (3 new for P4.c); typecheck across all packages green; **worktree-leak file-diff class clean — 7th consecutive validation**.
+17: 2026-05-11T13:42:30Z | validate | PR #180 diff-validator PASS Tier-1 — 4 files in ui/src/lib/* + ui/src/components/transcript/* — zero Tier-3 path touches; pure-additive in helper, surgical in transcript view, design choice (`rawName` field on block type) is optional/additive (no breaking change)
+17: 2026-05-11T13:43:00Z | ci-status | **#176 CI rerun PASSED** all checks (test+coverage flipped from FAIL→SUCCESS); confirms flake-class — vitest cross-worker module-cache race, NOT a real bug; SIG-011 resolved-flake
+17: 2026-05-11T13:43:30Z | rebase    | #176 onto post-#178 main (mergeStateStatus was BEHIND post-#178 merge); auto-merge SQUASH still enrolled; will fire on final post-rebase CI completion
+17: 2026-05-11T13:44:00Z | signoff   | SIG-011 status flipped to resolved-flake at 13:40:00Z; resolution note: defensive `vi.resetModules()` in yesterday-summary.test.ts beforeEach is recommended hardening but not required to merge #176
+17: 2026-05-11T13:44:30Z | flake-tax | new flake class #11 candidate for PROTOCOL.md taxonomy: **vitest cross-worker module-cache race**. Pattern: test file defines partial mock that bleeds via singleton import-time effects; downstream tests sharing worker see contaminated module. Detection: rapid-fire identical TypeError across many tests at unchanged code path. Retry policy: 1 automatic retry; expire 30d if not encountered again. Defensive code: `vi.resetModules()` in beforeEach of mock-heavy tests.
+17: 2026-05-11T13:45:00Z | tally     | **3 PRs auto-merge enrolled pending CI** — #176 (post-rebase), #179 (practices doc), #180 (BL-014). Expect 3 ships in next 15-20min (cycle 18 wake catches them). EQ-008/011/012 all completed and shipped to PR; 0 active dispatches; capacity restored when these 3 merge.
 ```
