@@ -1386,6 +1386,35 @@ function RawTranscriptView({
   );
 }
 
+/**
+ * BL-013 (P4.b): in founder mode the transcript hides four categories of
+ * engineer-only noise — chain-of-thought, raw tool-use blocks, the init
+ * model/session kick-off, and stderr output groups. Stderr is preserved on
+ * failed runs because the error log is a signal, not noise. Engineer mode is
+ * additive — every block type renders exactly as before #174.
+ *
+ * `viewMode === "engineer"` always returns true (show everything). For
+ * `viewMode === "founder"`, the gate consults `runFailed` for `stderr_group`
+ * and unconditionally hides the other three categories.
+ */
+function shouldRenderBlockInFounderMode(
+  block: TranscriptBlock,
+  runFailed: boolean,
+): boolean {
+  // Hide chain-of-thought.
+  if (block.type === "thinking") return false;
+  // Hide raw tool-use blocks (the call/argument card and any batched groups).
+  if (block.type === "tool" || block.type === "tool_group" || block.type === "command_group") {
+    return false;
+  }
+  // Hide the init kick-off event ("model X, session Y") but keep `result` and
+  // other event labels.
+  if (block.type === "event" && block.label === "init") return false;
+  // Stderr — hide unless the run failed (preserve failure-signal visibility).
+  if (block.type === "stderr_group" && !runFailed) return false;
+  return true;
+}
+
 export function RunTranscriptView({
   entries,
   mode = "nice",
@@ -1397,13 +1426,28 @@ export function RunTranscriptView({
   className,
   thinkingClassName,
 }: RunTranscriptViewProps) {
-  // BL-012 (P4.a): expose the founder/engineer view mode as a data attribute
-  // hook-point. BL-013 (P4.b) will branch rendering on this. Rendering is
-  // unchanged in this dispatch — the attribute is the seam only.
+  // BL-013 (P4.b): consume the founder/engineer viewMode hook landed by
+  // BL-012 (#174) and gate four engineer-only block categories on founder
+  // mode. Raw mode (`mode === "raw"`) is a separate engineer debug surface
+  // and bypasses the gate entirely.
   const [viewMode] = useDisplayMode();
 
   const blocks = useMemo(() => normalizeTranscript(entries, streaming), [entries, streaming]);
-  const visibleBlocks = limit ? blocks.slice(-limit) : blocks;
+  // `runFailed` is the founder-mode stderr override — failure signal stays
+  // visible. Derived from the same entries list the blocks are built from so
+  // the two stay in lockstep.
+  const runFailed = useMemo(
+    () => entries.some((entry) => entry.kind === "result" && entry.isError),
+    [entries],
+  );
+  const renderableBlocks = useMemo(
+    () =>
+      viewMode === "founder"
+        ? blocks.filter((block) => shouldRenderBlockInFounderMode(block, runFailed))
+        : blocks,
+    [blocks, viewMode, runFailed],
+  );
+  const visibleBlocks = limit ? renderableBlocks.slice(-limit) : renderableBlocks;
   const visibleEntries = limit ? entries.slice(-limit) : entries;
 
   if (entries.length === 0) {
