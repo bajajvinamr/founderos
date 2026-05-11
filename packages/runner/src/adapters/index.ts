@@ -8,7 +8,7 @@
  * `Partial<Record<...>>` (not bare `Record<...>`) is intentional:
  * S7.1.b.2 only ships `claude_local`. The rest of the families
  * (`gemini_local`, `codex_local`, `cursor_local`, `openai_api`,
- * `anthropic_api`, `google_api`, ...) land in S7.1.c / S7.B.* / S7.C.
+ * `anthropic_api`, `gemini_api`, ...) land in S7.1.c / S7.B.* / S7.C.
  * The `satisfies` clause still gives compile-time exhaustiveness on
  * what IS implemented — adding a key whose value type doesn't match
  * `AnyAdapter` (e.g. forgetting the `transport: "subprocess"` discriminant)
@@ -40,7 +40,7 @@ import { geminiLocalAdapter } from "./gemini.js";
  *                  `~/.claude/rules/vinamr-invariants.md` — the default
  *                  argv MUST NOT include `--approval-policy` / `--sandbox`
  *                  or the CLI exits 2 with "unexpected argument '-a'").
- *   - S7.C / future — cursor_local, openai_api, anthropic_api, google_api.
+ *   - S7.C / future — cursor_local, openai_api, anthropic_api, gemini_api.
  *
  * Note: `gemini_local` and `codex_local` are dormant under V1
  * (`FOUNDEROS_DISPATCHER_V2` unset). They go live when the dispatcher

@@ -23,7 +23,7 @@
 
 import { Router, type Request, type RequestHandler } from "express";
 import { randomBytes, createHash } from "node:crypto";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@founderos/db";
 import {
@@ -52,6 +52,34 @@ const NEXT_JOB_TICK_MS = 1_000;
 const TOKEN_RANDOM_BYTES = 24; // base64url → 32 chars
 /** Online window for `RunnerStatus.online`. Matches the 30 s debounce in runner-auth. */
 const RUNNER_ONLINE_WINDOW_MS = 30_000;
+/**
+ * S8 P0.1 Phase 2B (Agent 2B) — defense-in-depth allowlist for the laptop
+ * runner's `/jobs/next` claim endpoint. The runner is permitted to receive
+ * ONLY `runner_jobs` rows whose `adapter_type` belongs to this set.
+ *
+ * Specifically excludes `claude_local`. In hosted mode
+ * (`FOUNDEROS_HOSTED_AGENTS_ENABLED=1`) `claude_local` agents execute via
+ * the in-process Anthropic SDK handler in
+ * `packages/adapters/claude-local/src/server/execute.ts` — they NEVER
+ * enqueue a `runner_jobs` row. This filter is the structural backstop:
+ * even if a `claude_local` row slips through (legacy enqueue, manual SQL,
+ * mis-configured adapter resolver), a laptop runner cannot claim it.
+ *
+ * Adding a new laptop-served adapter here is the gate for "this CLI now
+ * dispatches via @founderos/runner." Pair with a `runner_jobs.adapter_type`
+ * CHECK migration if the new value is also new to the enum.
+ */
+// Drizzle's `inArray` overload binds to the column's data type
+// (`AgentAdapterType` here, not `string`) and requires a mutable array,
+// so the allowlist is typed as `string[]` (the runtime values are still
+// the same fixed set — modify only via the literal here).
+const LAPTOP_RUNNER_ADAPTER_TYPES: string[] = [
+  "byo_runner",
+  "codex_local",
+  "cursor_local",
+  "gemini_local",
+  "opencode_local",
+];
 /**
  * W0.3 (council 2026-05-05) — default TTL on token issuance. 90 days bounds
  * the blast radius of a leaked plaintext while staying well clear of the
@@ -240,7 +268,18 @@ export function runnerJobRoutes(db: Db): Router {
         })
         .from(runnerJobs)
         .innerJoin(agents, eq(agents.id, runnerJobs.agentId))
-        .where(and(eq(runnerJobs.companyId, companyId), eq(runnerJobs.status, "queued")))
+        .where(
+          and(
+            eq(runnerJobs.companyId, companyId),
+            eq(runnerJobs.status, "queued"),
+            // S8 P0.1 — defense in depth. Hosted `claude_local` jobs execute
+            // in-process and never enqueue here, but the filter ensures a
+            // laptop runner can NEVER claim a row that belongs to the hosted
+            // path. New laptop-served adapter types must be allowlisted in
+            // LAPTOP_RUNNER_ADAPTER_TYPES.
+            inArray(runnerJobs.adapterType, LAPTOP_RUNNER_ADAPTER_TYPES),
+          ),
+        )
         .orderBy(asc(runnerJobs.createdAt))
         .limit(1);
 
@@ -300,6 +339,16 @@ export function runnerJobRoutes(db: Db): Router {
     if (existing.companyId !== companyId) {
       // Cross-company isolation. Same shape as 404 to avoid leaking job
       // existence to a runner from a different company.
+      throw notFound("job_not_found");
+    }
+    // S8 P0.1 — refuse to claim a hosted-typed row. Mirrors the WHERE filter
+    // on /jobs/next so a runner cannot bypass the long-poll listing by
+    // POSTing a jobId it learned via another channel. 404 (not 403) keeps
+    // the response shape identical to "row never existed for this runner."
+    if (
+      existing.adapterType &&
+      !LAPTOP_RUNNER_ADAPTER_TYPES.includes(existing.adapterType)
+    ) {
       throw notFound("job_not_found");
     }
 
