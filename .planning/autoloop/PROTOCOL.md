@@ -310,10 +310,11 @@ When the diff-validator catches a Tier-3 file in a declared Tier-1 PR mid-flight
 - **Tests**: real assertions vs. smoke checks, mock isolation (esp. vitest cross-worker race per class #11), coverage of error states
 - **Migrations / schema** (Tier-3 only): never reaches reviewer — SIGNOFFS council instead
 
-**Failure modes (anticipated)**:
-- Reviewer agent runs the same Bash `cd <parent>` pattern that caused EQ-013's branch-HEAD leak. Defense: brief explicitly forbids; agent works in its own worktree pwd.
-- Reviewer's review event posts after PR merges (race on Tier-1 fast-CI flows). Defense: fall back to `gh pr comment <N>` instead of `gh pr review <N>`. Comment still counts toward GitHub activity surface; just not an "approve" badge.
+**Failure modes (anticipated + OBSERVED)**:
+- Reviewer agent runs the same Bash `cd <parent>` pattern that caused EQ-013's branch-HEAD leak. Defense: brief explicitly forbids; agent works in its own worktree pwd. **VALIDATED LIVE** on RV-001/002/003/004 — all four reviewers honored the worktree pwd discipline.
+- Reviewer's review event posts after PR merges (race on Tier-1 fast-CI flows). Defense: fall back to `gh pr comment <N>` instead of `gh pr review <N>`. Comment still counts toward GitHub activity surface; just not an "approve" badge. **OBSERVED on all 4 reviewers so far** — `gh pr review --approve` is blocked when the reviewer's GH auth identity matches the PR author (`bajajvinamr`). All reviewers correctly fell back to `gh pr comment`.
 - Reviewer finds 0 issues every time → review noise without signal. Mitigation: rotate review focus per-surface; if signal-to-noise stays low across 10 dispatches, downgrade to path-set-only (Option B fallback).
+- **Reviewer flags forward-references as missing without verifying file existence** (NEW class — observed RV-004 on PR #182, 2026-05-11). RV-004 claimed `docs/code-review-practices.md` and `packages/shared/src/display-dictionary.ts` "do not exist in the repo" — both actually exist on `origin/main` (verified via `git ls-tree origin/main <path>`). The reviewer's worktree may have been based on a stale snapshot, or the agent inferred existence from prose without grep. **Defense — added to all future reviewer briefs**: when reviewing a template, doc, or any artifact that cites other files by path, you MUST verify each cited path exists on `origin/main` (`git ls-tree origin/main <path>` returns a blob) BEFORE flagging it as missing. False-positive forward-reference claims are NOISE that erodes the protocol's signal-to-noise ratio. Telemetry: log `reviewer_false_positives` counter and treat >20% rate across a 10-dispatch window as a halt signal requiring brief upgrade.
 
 **Telemetry**:
 - Reviewer findings logged in STATE.md cycle row.
