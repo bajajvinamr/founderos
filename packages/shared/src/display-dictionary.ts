@@ -16,8 +16,15 @@ export const DISPLAY_DICTIONARY = {
   workspace:    { founder: "Knowledge base",  engineer: "Workspace" },
   claim:        { founder: "Activate",        engineer: "Claim" },
   wakeup:       { founder: "Start work",      engineer: "Wakeup" },
-  routine:      { founder: "Schedule",        engineer: "Routine" },
-  routines:     { founder: "Schedules",       engineer: "Routines" },
+  // P3 Wave 2 (W23): Routines renamed to Cadences. Keep old keys present so
+  // any existing consumer resolves; both old + new keys now return the new copy
+  // in BOTH founder and engineer modes (engineer-mode jargon is also renamed —
+  // there's no engineering term left for the old "Routine" concept). Wave 3
+  // will land the App.tsx route rename atomically.
+  routine:      { founder: "Cadence",          engineer: "Cadence" },
+  routines:     { founder: "Cadences",         engineer: "Cadences" },
+  cadence:      { founder: "Cadence",          engineer: "Cadence" },
+  cadences:     { founder: "Cadences",         engineer: "Cadences" },
   audit:        { founder: "History",         engineer: "Audit log" },
   byo_runner:   { founder: "Run on my computer", engineer: "BYO Runner" },
 
