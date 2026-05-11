@@ -53,7 +53,7 @@ export function redactHomePathUserSegmentsInValue<T>(value: T, opts?: HomePathRe
     return value;
   }
 
-  const redacted: Record<string, unknown> = {};
+  const redacted: Record<string, unknown> = Object.create(null);
   for (const [key, entry] of Object.entries(value)) {
     redacted[key] = redactHomePathUserSegmentsInValue(entry, opts);
   }

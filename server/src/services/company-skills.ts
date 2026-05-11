@@ -403,9 +403,10 @@ function parseYamlBlock(
       ) {
         const key = remainder.slice(0, inlineObjectSeparator).trim();
         const rawValue = remainder.slice(inlineObjectSeparator + 1).trim();
-        const nextObject: Record<string, unknown> = {
-          [key]: parseYamlScalar(rawValue),
-        };
+        const nextObject: Record<string, unknown> = Object.create(null);
+        if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+          nextObject[key] = parseYamlScalar(rawValue);
+        }
         if (index < lines.length && lines[index]!.indent > indentLevel) {
           const nested = parseYamlBlock(lines, index, indentLevel + 2);
           if (isPlainRecord(nested.value)) {
@@ -421,7 +422,7 @@ function parseYamlBlock(
     return { value: values, nextIndex: index };
   }
 
-  const record: Record<string, unknown> = {};
+  const record: Record<string, unknown> = Object.create(null);
   while (index < lines.length) {
     const line = lines[index]!;
     if (line.indent < indentLevel) break;
@@ -437,6 +438,9 @@ function parseYamlBlock(
     const key = line.content.slice(0, separatorIndex).trim();
     const remainder = line.content.slice(separatorIndex + 1).trim();
     index += 1;
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      continue;
+    }
     if (!remainder) {
       const nested = parseYamlBlock(lines, index, indentLevel + 2);
       record[key] = nested.value;

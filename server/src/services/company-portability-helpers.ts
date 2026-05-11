@@ -1400,7 +1400,8 @@ export function normalizeFileMap(
   rootPath?: string | null,
 ): Record<string, CompanyPortabilityFileEntry> {
   const normalizedRoot = rootPath ? normalizePortablePath(rootPath) : null;
-  const out: Record<string, CompanyPortabilityFileEntry> = {};
+  const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+  const out: Record<string, CompanyPortabilityFileEntry> = Object.create(null);
   for (const [rawPath, content] of Object.entries(files)) {
     let nextPath = normalizePortablePath(rawPath);
     if (normalizedRoot && nextPath === normalizedRoot) {
@@ -1410,6 +1411,7 @@ export function normalizeFileMap(
       nextPath = nextPath.slice(normalizedRoot.length + 1);
     }
     if (!nextPath) continue;
+    if (PROTO_KEYS.has(nextPath)) continue;
     out[nextPath] = content;
   }
   return out;

@@ -1713,6 +1713,11 @@ export function agentRoutes(db: Db) {
       return;
     }
 
+    const PROTO_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+    if (PROTO_KEYS.has(adapterConfigKey)) {
+      res.status(422).json({ error: "Invalid adapterConfigKey." });
+      return;
+    }
     const nextAdapterConfig: Record<string, unknown> = { ...existingAdapterConfig };
     if (req.body.path === null) {
       delete nextAdapterConfig[adapterConfigKey];

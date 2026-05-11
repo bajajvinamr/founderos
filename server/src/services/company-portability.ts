@@ -249,9 +249,9 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
     const companyPath = parsed.companyPath === "COMPANY.md"
       ? "COMPANY.md"
       : normalizePortablePath(path.posix.relative(parsed.basePath || ".", parsed.companyPath));
-    const files: Record<string, CompanyPortabilityFileEntry> = {
+    const files: Record<string, CompanyPortabilityFileEntry> = Object.assign(Object.create(null), {
       [companyPath]: companyMarkdown,
-    };
+    });
     const apiBase = gitHubApiBase(parsed.hostname);
     const tree = await fetchJson<{ tree?: Array<{ path: string; type: string }> }>(
       `${apiBase}/repos/${parsed.owner}/${parsed.repo}/git/trees/${ref}?recursive=1`,
