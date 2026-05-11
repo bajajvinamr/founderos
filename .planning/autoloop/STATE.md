@@ -28,9 +28,9 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 11.7
-- **last_cycle_at**: 2026-05-11T11:09:00Z
-- **next_wake_at**: 2026-05-11T11:34:00Z  <!-- +1500s — EQ-008 dispatched (Tier-2), #174 + #175 rebased -->
+- **cycle**: 12
+- **last_cycle_at**: 2026-05-11T11:34:00Z
+- **next_wake_at**: 2026-05-11T11:59:00Z  <!-- +1500s — HOLD cycle: EQ-008 in-flight, #174/#175 awaiting E2E + test -->
 
 ## Concurrency Tracking
 
@@ -93,6 +93,7 @@
 | 10.5-11 | 10:38Z | **#172 merged** (3rd autoloop ship, BL-002 P2.a copy); EQ-006 dispatched (BL-012 P4.a viewMode) |
 | 11.5 | 11:02Z | EQ-006 returned with PR #174 (no Tier-3 touches via existing Settings page); EQ-007 dispatched (BL-003 P2.b ProviderTile) |
 | 11.7 | 11:09Z | **#173 merged** (4th autoloop ship, BL-023 P8.c Quick Wins); EQ-007 returned with PR #175; EQ-008 dispatched (BL-022 P8.b Haiku **Tier-2** — NO auto-merge) |
+| 12 | 11:34Z | **HOLD cycle** — #174/#175 E2E + test in-progress (all other checks green, mergeable); EQ-008 actively implementing service file; no parallel dispatch (BL-013 dep on unmerged #174); worktree-leak invariant validated 3rd time |
 
 ## Last Action Log
 
@@ -135,4 +136,9 @@
 11.7: 2026-05-11T11:08:30Z | validate  | PR #175 diff-validator PASS — 4 files all under ui/src/components/onboarding/* — zero Tier-3 path touches
 11.7: 2026-05-11T11:09:00Z | promote   | BL-022 → EQ-008 (**Tier-2**, P8.b "What we shipped yesterday" Haiku widget; touches /server/src/services/ + new route surface, lives in Settings shell to avoid nav-edit)
 11.7: 2026-05-11T11:09:00Z | dispatch  | EQ-008 to general-purpose agent (worktree, background) — id a3960fd3433787f46 — **NO auto-merge per Tier-2 policy** (opens PR for user review at land time)
+12: 2026-05-11T11:34:00Z | wake      | cycle 12 fire — wake-prompt operated from stale cycle-11 state, reconciled to actual cycle-11.7-closed state
+12: 2026-05-11T11:34:00Z | ci-check  | #174 + #175 both MERGEABLE; install/typecheck/lint/CodeQL/gitleaks/audit/migration/schema/bundle/file-size/PR Info/PR Lint/Vercel all SUCCESS; E2E critical flows + test (+ coverage) IN_PROGRESS
+12: 2026-05-11T11:34:00Z | agent-probe | EQ-008 (a3960fd3433787f46) actively implementing — research phase complete (constants, queryKeys, test pattern recon), service file write in progress per partial output 11:19:42Z
+12: 2026-05-11T11:34:00Z | invariant | worktree-leak vinamr-invariants pattern validated 3rd consecutive time — `git status --short` on parent clean while agent at `agent-a3960fd3433787f46` builds on `feat/bl-022-yesterday-widget-haiku` (locked)
+12: 2026-05-11T11:34:00Z | hold      | NO parallel dispatch this cycle — BL-013 depends on unmerged #174 (BL-012). Dispatching on un-shipped dep risks worktree-base drift; wait for #174 to land. open_prs_max also already temporarily over (3 vs 2).
 ```
