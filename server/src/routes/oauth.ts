@@ -27,6 +27,34 @@ function getPublicUrl(): string {
   return (process.env.FOUNDEROS_PUBLIC_URL ?? "").replace(/\/$/, "");
 }
 
+/**
+ * Validate that a returnUrl is a same-origin path. Rejects absolute URLs,
+ * protocol-relative URLs (`//evil.com/path`), URL schemes, Windows-style
+ * paths, header-injection (CR/LF), and missing/empty input. Falls back to
+ * `"/"` on any reject — graceful degradation, no throw.
+ *
+ * Closes CodeQL `js/server-side-unvalidated-url-redirection` (cluster P,
+ * alerts #7-#10): without validation, an attacker-controlled `returnUrl`
+ * could leak the OAuth `code` to an external origin via Referer.
+ */
+export function validateReturnUrl(raw: string | undefined): string {
+  if (typeof raw !== "string") return "/";
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return "/";
+  // Reject header-injection (CR/LF) before further checks.
+  if (/[\r\n]/.test(trimmed)) return "/";
+  // Reject Windows-style backslash paths (parsed as `\\evil.com\path` by some
+  // clients into a protocol-relative redirect).
+  if (trimmed.includes("\\")) return "/";
+  // Reject URL schemes like `javascript:`, `https:`, `data:` etc.
+  // Pattern: leading letters (alphanum + `+-.`) followed by `:`.
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) return "/";
+  // Must start with `/` AND not start with `//` (protocol-relative redirect).
+  if (!trimmed.startsWith("/")) return "/";
+  if (trimmed.startsWith("//")) return "/";
+  return trimmed;
+}
+
 export function oauthRoutes(db: Db) {
   const router = Router();
   const svc = integrationService(db);
@@ -38,7 +66,12 @@ export function oauthRoutes(db: Db) {
   router.get("/oauth/:kind/start", oauthFlowLimiter, (req, res) => {
     const { kind } = req.params as { kind: string };
     const companyId = req.query.companyId as string | undefined;
-    const returnUrl = (req.query.returnUrl as string | undefined) ?? "/integrations";
+    // Validate at sign-time so we never embed an attacker-controlled URL into
+    // the signed state. Defaults to "/integrations" when missing/empty/invalid.
+    const rawReturnUrl = req.query.returnUrl as string | undefined;
+    const returnUrl = rawReturnUrl && rawReturnUrl.trim().length > 0
+      ? validateReturnUrl(rawReturnUrl)
+      : "/integrations";
 
     if (!isOAuthKind(kind)) {
       res.status(400).json({ error: "unknown_kind", kind });
@@ -134,7 +167,12 @@ export function oauthRoutes(db: Db) {
       return;
     }
 
-    const { userId: stateUserId, companyId, returnUrl } = stateResult.payload;
+    const { userId: stateUserId, companyId, returnUrl: rawReturnUrl } = stateResult.payload;
+    // Defense in depth: even though state is HMAC-signed, validate again at
+    // the redirect boundary. If anything ever bypasses sign-time validation
+    // (alternative state flows, future code paths), we still reject open
+    // redirects here. CodeQL js/server-side-unvalidated-url-redirection.
+    const returnUrl = validateReturnUrl(rawReturnUrl);
 
     // Council 2026-05-03 P2 (Gemini R2) — enforce that the user completing
     // the callback is the same one that initiated the flow. Without this
