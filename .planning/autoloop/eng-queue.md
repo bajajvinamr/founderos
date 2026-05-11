@@ -41,13 +41,13 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 
 ---
 
-## [EQ-003] P8.a — Dashboard widget removal  (from BL-021)
+## [EQ-003] P8.a — Dashboard widget removal  (from BL-021)  ✅ PR OPENED + auto-merge enrolled
 
-- **branch**: feat/bl-021-dashboard-widget-removal (or agent-self-named)
-- **agent**: dispatch-cycle-8-eq-003 (general-purpose, isolation=worktree, background)
+- **branch**: feat/bl-021-dashboard-widget-removal (agent created explicitly after worktree auto-named to worktree-agent-ab380f32c4636bb8f — vinamr-invariant validated again)
+- **agent**: cycle-8 dispatch ab380f32c4636bb8f (completed 2026-05-11T01:26:30Z, ~8.5min)
 - **dispatched_at**: 2026-05-11T01:18:00Z
-- **pr**: null
-- **tier_declared**: 1
-- **status**: dispatched
-- **last_update**: 2026-05-11T01:18:00Z
-- **notes**: Touches ui/src/pages/Dashboard.tsx (remove Run Activity Chart, raw cost widget, activity feed) and possibly Setup route additions for Permission Coach move. Tier-1 by path (no nav/schema/contract files). Auto-merge enrolled after diff validator passes.
+- **pr**: #171 — auto-merge enrolled SQUASH; BLOCKED on CI (13 success / 0 failure / 7 running)
+- **tier_declared**: 1 → actual Tier-1 (diff-validator confirmed: 2 files under ui/src/pages/* — zero forbidden-path touches)
+- **status**: pr_opened
+- **last_update**: 2026-05-11T01:27:00Z
+- **notes**: 2 files / +144 / −173 (net cleanup). Dashboard.tsx removes RunActivityChart, "Month spend" MetricCard, Recent Activity feed, PermissionCoachCard + dead-code cleanup (animation state, entity maps, projectsApi query). Dashboard.test.tsx new — 6 assertions (4 negative for removed widgets, 2 positive preserving FounderBriefing + activityApi.list which The Morning Brief still consumes). Typecheck clean across 24 workspace packages; 24/24 ui/src/pages tests pass; lint clean. **Permission Coach relocation NOT done** — pragmatic-option path: removal-only, TODO comment left, component file untouched, relocation needs Tier-3 nav-structure edit → see SIG-006. No worktree leak observed this dispatch (third consecutive — agent harness behavior may be improving for branch-explicit operations).

@@ -27,6 +27,7 @@ User reviews each entry, edits `status:`, and the next wake cycle acts.
 | SIG-003 | P1 | tier-3-council | BL-019 (P6.a Composio catalog) | none directly (P6 isolated) | 2026-05-25T00:00Z | pending | `packages/shared/src/constants.ts` is cross-service contract — council before merge |
 | SIG-004 | P1 | tier-3-council | BL-020 (P7 IA collapse) | depends on BL-007 + BL-016 | 2026-06-01T00:00Z | pending | Largest one-way door in plan. Council + feature flag VITE_FOUNDEROS_SIMPLIFIED_NAV |
 | SIG-005 | P0 | tier-3-council | BL-001 actual bug (B2 bootstrap; CLAUDE.md note stale) | Anthropic/Gemini/OpenAI **API** runtime on Fly (currently collapse to claude_local) | 2026-05-18T00:00Z | pending | Coordinated 7-file Tier-3 dispatch spanning shared constants + new migration + new adapter package |
+| SIG-006 | P2 | tier-3-council | EQ-003 follow-up (Permission Coach relocation) | none (BL-021 dashboard cleanup shipped without it) | 2026-06-01T00:00Z | pending | Move PermissionCoachCard from Dashboard to a Setup-area page — touches Sidebar.tsx + company-routes.ts (Tier-3 nav-structure). Component file already exists, near-zero-effort once council approves the route registration. |
 
 ---
 
@@ -173,6 +174,29 @@ If `expires_at` passes with `status: pending`:
   - `server/src/__tests__/onboarding-adapter-type.test.ts:257-260, 683-685` (locked-in assertions to flip)
   - `packages/adapters/gemini-api/src/index.ts` (reference shape for new `anthropic-api` adapter package)
   - `CLAUDE.md` (the "Onboarding adapter mismatch" note — needs deletion/correction post-fix)
+- **status**: pending
+- **resolved_at**: null
+- **resolution_note**: null
+
+## [SIG-006] EQ-003 follow-up — Permission Coach relocation to Setup
+
+- **type**: tier-3-council
+- **priority**: P2
+- **decision_required**: approve
+- **blocking**: none — BL-021 dashboard cleanup shipped without it (PR #171); Permission Coach is just removed-from-dashboard with a TODO. Component file untouched.
+- **blast_radius**: `ui/src/components/Sidebar.tsx` (add Setup-area menu item), `ui/src/lib/company-routes.ts` (register route or sub-route). Both are explicit Tier-3 forbidden paths (primary nav structure). Component file `ui/src/components/PermissionCoachCard.tsx` is reused as-is.
+- **ci_state**: n/a
+- **merge_state**: n/a
+- **source**: EQ-003 dispatch return (autoloop-cycle-8)
+- **recommended_action**: Bundle with BL-007 (SIG-002) when council approves the Sidebar CTA rework. Both touch the same Tier-3 nav files — one Tier-3 dispatch can land both. Defer until then.
+- **expires_at**: 2026-06-01T00:00Z
+- **context**: BL-021 dispatch (EQ-003) needed to remove PermissionCoachCard from the dashboard. The "move to Setup" part of the backlog item required editing Sidebar.tsx + company-routes.ts (both Tier-3 forbidden by path rules — primary nav structure). Agent took the pragmatic-option path: dashboard removal only, TODO comment left in Dashboard.tsx, component file preserved. The relocation is now a clean ~5-line follow-up once council approves the Sidebar/route edits.
+- **proposed**: When the next Tier-3 nav-edit window opens (e.g., SIG-002 BL-007 Sidebar CTA approval), bundle this relocation as part of the same PR. Saves a separate Tier-3 cycle.
+- **alternatives**:
+  - **(a)** Leave Permission Coach permanently un-relocated. Some founders may never discover the feature. Acceptable if it's not driving meaningful engagement.
+  - **(b)** Council a dedicated Tier-3 PR just for this 5-line nav edit. Wasteful of council bandwidth.
+  - **(c)** Move PermissionCoachCard to a non-nav Setup landing component (e.g., add a section to an existing settings page that already has nav). Stays Tier-1 IF such a page exists; would require investigation.
+- **artifacts**: `ui/src/pages/Dashboard.tsx` (has TODO comment), `ui/src/components/PermissionCoachCard.tsx` (intact), `ui/src/components/Sidebar.tsx` (would add menu item), `ui/src/lib/company-routes.ts` (would register sub-route)
 - **status**: pending
 - **resolved_at**: null
 - **resolution_note**: null

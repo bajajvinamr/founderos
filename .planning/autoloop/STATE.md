@@ -34,10 +34,16 @@
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- BL-021 dispatched this cycle; EQ-001 abandoned, EQ-002 merged -->
+- **eng_dispatches_in_flight**: 0  <!-- EQ-003 completed, PR opened, auto-merge enrolled -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 2  <!-- #163 #169 cascade + 0 autoloop -->
-- **open_prs_max**: 2
+- **open_prs**: 3  <!-- #163 #169 cascade + #171 autoloop -->
+- **open_prs_max**: 2  <!-- temporarily over; cascade in flight -->
+- **autoloop_prs_open**: 1  <!-- #171 -->
+- **autoloop_prs_merged**: 1  <!-- #170 -->
+- **autoloop_dispatches_completed**: 3  <!-- EQ-001 (escalated), EQ-002 (shipped), EQ-003 (PR opened) -->
+- **autoloop_dispatches_escalated**: 1  <!-- EQ-001 → SIG-005 -->
+- **autoloop_dispatches_shipped**: 1  <!-- EQ-002 -->
+- **autoloop_dispatches_in_pr**: 1  <!-- EQ-003 / #171 awaiting CI -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -58,11 +64,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 1   <!-- #170 (BL-004) -->
+- **prs_opened**: 2   <!-- #170 (BL-004), #171 (BL-021) -->
 - **prs_merged**: 1   <!-- #170 -->
-- **signoffs_pending**: 5   <!-- SIG-001..005 -->
+- **signoffs_pending**: 6   <!-- SIG-001..006 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 20   <!-- minus EQ-001 abandoned-but-escalated-via-SIG-005, EQ-002 merged, EQ-003 dispatched -->
+- **backlog_items_remaining**: 19   <!-- minus EQ-001 escalated, EQ-002 merged, EQ-003 in PR, BL-021 closed-via-EQ-003 -->
 
 ## Drift Detection State
 
@@ -92,4 +98,6 @@
 8: 2026-05-11T01:17:00Z | log          | CL-005 cycle-7 dispatch outcomes — diff-validator + worktree-leak invariants validated
 8: 2026-05-11T01:18:00Z | promote      | BL-021 → EQ-003 (Tier-1, P8.a dashboard widget removal)
 8: 2026-05-11T01:18:00Z | dispatch     | EQ-003 to general-purpose agent (worktree, background)
+8: 2026-05-11T01:27:00Z | agent-return | EQ-003 PR #171 opened, auto-merge enrolled SQUASH, awaiting CI
+8: 2026-05-11T01:27:00Z | signoff      | SIG-006 Permission Coach relocation follow-up (Tier-3, P2, bundle with SIG-002)
 ```
