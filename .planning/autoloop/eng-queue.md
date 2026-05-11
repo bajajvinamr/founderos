@@ -77,6 +77,18 @@ Items the chief-of-staff has drained from `product-backlog.md`, in dispatch orde
 - **status**: dispatched
 - **last_update**: 2026-05-11T10:38:00Z
 - **notes**: Unblocked by #172 (BL-002) merge. Adds write-side of viewMode to complement #169's read-side useDisplay hook. Files: use-display.ts setter, RunTranscriptView.tsx data-view-mode attribute (BL-013 hook-point), Settings toggle (NEW page if needed; STOP if route-registration requires Tier-3 nav-structure edits). NO transcript rendering changes — that's BL-013 (P4.b).
+- **Return ~7-8min** ✅: PR #174 opened, auto-merge enrolled SQUASH at 11:00:37Z. 6 files / +427 / -4 across `ui/src/components/transcript/*`, `ui/src/lib/use-display.test.ts`, `ui/src/pages/InstanceExperimentalSettings.{ts,test.ts}`. Agent appended to existing `/instance/settings/experimental` page rather than creating new route (Tier-3 forbidden path avoided). Hand-off seam: `<div data-view-mode={viewMode}>` wraps all RunTranscriptView render branches — BL-013 uses this to fork rendering on mode. 285 targeted tests pass, typecheck clean, no main checkout leak. **useDisplayMode already existed in use-display.ts** (read+setter shape was always there since #169) — agent noticed and used directly rather than duplicating.
+
+## [EQ-007] P2.b — ProviderTile founder labels + brand logos  (from BL-003)
+
+- **branch**: feat/bl-003-provider-tile-founder-labels (or agent-self-named)
+- **agent**: dispatch-cycle-11.5-eq-007 (general-purpose, isolation=worktree, background) — id a9e151ec034cd9385
+- **dispatched_at**: 2026-05-11T11:02:00Z (intra-phase parallel to #173, #174 — different files)
+- **pr**: null
+- **tier_declared**: 1
+- **status**: dispatched
+- **last_update**: 2026-05-11T11:02:00Z
+- **notes**: Unblocked by #172 (BL-002) merge — same dep as BL-012, just hadn't been scanned. Intra-phase parallel safety: BL-003 touches ProviderTile/ProviderChooser, no overlap with in-flight #173 (Dashboard widgets) or #174 (transcript + Settings). New display-dictionary keys for 6 provider labels + inline-SVG brand logos for Anthropic/Google/OpenAI families. Auto-merge enrolled after diff-validator passes.
 
 ## [EQ-004] P2.a — Step 4 onboarding copy uses DisplayDictionary  (from BL-002)  ✅ PR OPENED + auto-merge enrolled
 

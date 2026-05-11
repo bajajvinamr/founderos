@@ -34,18 +34,18 @@
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 1  <!-- EQ-006 just dispatched -->
+- **eng_dispatches_in_flight**: 1  <!-- EQ-007 just dispatched; EQ-006 returned with PR #174 -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 2  <!-- #163 (close-rec) + #173 (EQ-005 rebased) -->
-- **open_prs_max**: 2
-- **autoloop_prs_open**: 1  <!-- #173 -->
+- **open_prs**: 3  <!-- #163 (close-rec) + #173 + #174 -->
+- **open_prs_max**: 2  <!-- temporarily over while cascade-flagged #163 sits open -->
+- **autoloop_prs_open**: 2  <!-- #173, #174 -->
 - **autoloop_prs_merged**: 3  <!-- #170, #171, #172 -->
-- **autoloop_dispatches_completed**: 5
+- **autoloop_dispatches_completed**: 6
 - **autoloop_dispatches_escalated**: 1
-- **autoloop_dispatches_shipped**: 3  <!-- EQ-002 #170, EQ-003 #171, EQ-004 #172 -->
-- **autoloop_dispatches_in_pr**: 1  <!-- EQ-005/#173 -->
-- **autoloop_dispatches_active**: 1  <!-- EQ-006 -->
-- **avg_round_trip_minutes**: ~8  <!-- EQ-002: 8.5, EQ-003: 8.5, EQ-004: 5.5, EQ-005: ~9 -->
+- **autoloop_dispatches_shipped**: 3
+- **autoloop_dispatches_in_pr**: 2  <!-- EQ-005/#173, EQ-006/#174 -->
+- **autoloop_dispatches_active**: 1  <!-- EQ-007 -->
+- **avg_round_trip_minutes**: ~8  <!-- EQ-002: 8.5, EQ-003: 8.5, EQ-004: 5.5, EQ-005: ~9, EQ-006: ~7.8 -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
 - **branch_refresh_strategy**: parallel
@@ -66,11 +66,11 @@
 
 ## Outputs Counter
 
-- **prs_opened**: 4   <!-- #170, #171, #172, #173 -->
+- **prs_opened**: 5   <!-- #170, #171, #172, #173, #174 -->
 - **prs_merged**: 3   <!-- #170, #171, #172 -->
 - **signoffs_pending**: 7   <!-- SIG-001..007 -->
 - **backlog_items_total**: 23
-- **backlog_items_remaining**: 14   <!-- minus EQ-001 escalated, 002/003/004 merged, 005 in PR, 006 dispatched -->
+- **backlog_items_remaining**: 13   <!-- minus EQ-001 escalated, EQ-002/003/004 merged, 005/006 in PR, 007 dispatched -->
 
 ## Drift Detection State
 
@@ -120,4 +120,8 @@
 11: 2026-05-11T10:37:00Z | rebase    | #173 onto post-#172 main (was BEHIND)
 11: 2026-05-11T10:38:00Z | promote   | BL-012 → EQ-006 (Tier-1, P4.a viewMode infrastructure)
 11: 2026-05-11T10:38:00Z | dispatch  | EQ-006 to general-purpose agent (worktree, background) — id a28d2743442cc9a5d
+11.5: 2026-05-11T11:00:37Z | agent-return | EQ-006 PR #174 opened, auto-merge enrolled SQUASH, ~7.8min round-trip, 6 files / +427 / -4. Settings appended to existing /instance/settings/experimental — no route registration needed.
+11.5: 2026-05-11T11:01:00Z | validate  | PR #174 diff-validator PASS — 6 files in ui/src/components/transcript/* + ui/src/lib/* + ui/src/pages/InstanceExperimentalSettings.* — zero Tier-3 path touches
+11.5: 2026-05-11T11:02:00Z | promote   | BL-003 → EQ-007 (Tier-1, P2.b ProviderTile founder labels) — intra-phase parallel; dep BL-002 met
+11.5: 2026-05-11T11:02:00Z | dispatch  | EQ-007 to general-purpose agent (worktree, background) — id a9e151ec034cd9385
 ```
