@@ -66,16 +66,26 @@ describe("<ProviderChooser /> default selection (BL-004)", () => {
     }
   });
 
-  it("describes Claude Code as a developer-only path", () => {
+  it("describes Claude Code as the developer-only path", () => {
     act(() => {
       root.render(<ProviderChooser selectedId={null} onSelect={() => {}} />);
     });
 
-    // The chooser surface should communicate that Claude Code is for
-    // developers — the prompt's "for developers — requires Claude Code
-    // CLI installed on your laptop" copy.
+    // The chooser surface should communicate that Claude Code is the
+    // local/developer path. Two signals make this contract:
+    //   1. founder-mode description references the Claude Code app
+    //      (post-BL-005 default copy: "Use your existing Claude Code app
+    //      …")
+    //   2. the requirement line still names "Claude Code CLI on your
+    //      laptop" verbatim — unchanged by BL-005, BL-005 only touches
+    //      descriptions.
+    //
+    // Pre-BL-005 this test pinned "For developers" verbatim — that
+    // string is now the engineer-mode fallback. Asserting on the more
+    // durable "Claude Code"-app framing avoids re-breaking the test the
+    // next time copy gets polished.
     const text = container.textContent ?? "";
-    expect(text).toContain("For developers");
+    expect(text.toLowerCase()).toContain("claude code app");
     expect(text.toLowerCase()).toContain("claude code cli");
   });
 });
