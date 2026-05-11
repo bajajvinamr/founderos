@@ -71,6 +71,7 @@ const LegalPrivacy = lazy(() => import("./pages/LegalPrivacy").then((m) => ({ de
 const PluginManager = lazy(() => import("./pages/PluginManager").then((m) => ({ default: m.PluginManager })));
 const PluginSettings = lazy(() => import("./pages/PluginSettings").then((m) => ({ default: m.PluginSettings })));
 const AdapterManager = lazy(() => import("./pages/AdapterManager").then((m) => ({ default: m.AdapterManager })));
+const AiConnections = lazy(() => import("./pages/AiConnections").then((m) => ({ default: m.AiConnections })));
 const PluginPage = lazy(() => import("./pages/PluginPage").then((m) => ({ default: m.PluginPage })));
 const IssueChatUxLab = lazy(() => import("./pages/IssueChatUxLab").then((m) => ({ default: m.IssueChatUxLab })));
 const RunTranscriptUxLab = lazy(() => import("./pages/RunTranscriptUxLab").then((m) => ({ default: m.RunTranscriptUxLab })));
@@ -571,6 +572,7 @@ export function App() {
             <Route path="plugins" element={<PluginManager />} />
             <Route path="plugins/:pluginId" element={<PluginSettings />} />
             <Route path="adapters" element={<AdapterManager />} />
+            <Route path="ai-connections" element={<AiConnections />} />
           </Route>
           <Route path="settings/notifications" element={<Layout />}>
             <Route index element={<NotificationsSettings />} />
