@@ -29,10 +29,11 @@
 
 ## Cycle Bookkeeping
 
-- **cycle**: 24
-- **last_cycle_at**: 2026-05-11T16:00:30Z  <!-- 6th stale-wake-fire (cycle-22 prompt) — superseded cycle 23 monitor; defense reliable -->
-- **next_wake_at**: 2026-05-11T16:25:00Z  <!-- +1500s — catches #182 rerun completion + any user merges -->
-- **stale_wake_fires_session_total**: 6  <!-- cycles 12, 13.1, 14, 17.1, 23, 24; pattern stable; probe-before-trust defense works at ~30s/cycle cost -->
+- **cycle**: 25
+- **last_cycle_at**: 2026-05-11T16:25:30Z
+- **next_wake_at**: 2026-05-11T17:10:00Z  <!-- +2700s (45min) — extended idle interval; both PRs CLEAN + user-gated; cycle 24 → 25 saw zero state change so back off -->
+- **stale_wake_fires_session_total**: 6
+- **idle_monitor_cycles_consecutive**: 2  <!-- cycles 24 + 25 both observed no state change beyond cycle 23 close -->
 
 ## Concurrency Tracking
 
@@ -293,4 +294,7 @@
 24: 2026-05-11T16:00:30Z | ci-probe | **#181: mergeStateStatus = CLEAN** (was BLOCKED at cycle 23) — all CI passed, no branch-protection blockers, ready for one-click user merge. **#182: 1 pending + 0 failed** — flake #11 rerun in progress, trajectory healthy.
 24: 2026-05-11T16:00:45Z | no-dispatch | NO new dispatch — both PRs gated on user-merge or rerun completion. Autoloop has no productive work this cycle.
 24: 2026-05-11T16:01:00Z | stale-wake-counter | session-total stale-wake-fires: 6 (~30% rate). Probe-before-trust defense remains reliable at ~30s/cycle cost. No protocol change needed.
+25: 2026-05-11T16:25:15Z | wake | cycle 23-scheduled wake fired on-time at 16:24Z; cycle 24 had already executed via earlier stale-wake interception so this is cycle 25
+25: 2026-05-11T16:25:30Z | ci-probe | both PRs UNCHANGED since cycle 24: #181 CLEAN ready-for-merge; #182 CLEAN with 1 pending non-required check (rerun completed in background between cycles 24 and 25). 2 consecutive idle-monitor cycles — autoloop has zero productive work while user is async.
+25: 2026-05-11T16:25:45Z | back-off | extending wake interval to +2700s (45min, was +1500s standard) per "back off when nothing to do" heuristic. Cost-of-stale-wake unchanged (~30s); latency cost (slower noticing of user merge) acceptable since user-merge is the gating event, not autoloop work.
 ```
