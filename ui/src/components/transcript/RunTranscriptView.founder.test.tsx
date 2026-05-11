@@ -251,4 +251,81 @@ describe("RunTranscriptView — founder mode gating (BL-013 P4.b)", () => {
 
     expect(handle.container.textContent).toContain("claude-haiku-4-5");
   });
+
+  // ── BL-014 (P4.c): founder-mode tool action summaries ────────
+  //
+  // P4.b hid raw tool blocks entirely. P4.c replaces that "hide entirely"
+  // with a single-line founder summary so the founder sees motion without
+  // engineer-language tool names or argument lists.
+  it("founder mode renders a tool action summary line in place of the raw card", () => {
+    render(handle, [
+      {
+        kind: "tool_call",
+        ts: TS,
+        name: "Read",
+        toolUseId: "tu_sum_1",
+        input: { path: "RAW_TOOL_INPUT_SHOULD_NOT_LEAK.txt" },
+      },
+      {
+        kind: "tool_result",
+        ts: TS,
+        toolUseId: "tu_sum_1",
+        toolName: "Read",
+        content: "RAW_TOOL_RESULT_SHOULD_NOT_LEAK",
+        isError: false,
+      },
+    ]);
+
+    // Founder summary present.
+    expect(handle.container.textContent).toContain("Reading a file…");
+    // Engineer-language tool name + raw payload absent.
+    expect(handle.container.textContent).not.toContain("RAW_TOOL_INPUT_SHOULD_NOT_LEAK");
+    expect(handle.container.textContent).not.toContain("RAW_TOOL_RESULT_SHOULD_NOT_LEAK");
+    // The data-attribute marker confirms it's the founder summary row, not
+    // the engineer tool card.
+    expect(handle.container.querySelector("[data-founder-tool-summary]")).not.toBeNull();
+  });
+
+  it("founder mode summarizes a shell command_execution as 📂 Browsing files…", () => {
+    render(handle, [
+      {
+        kind: "tool_call",
+        ts: TS,
+        name: "command_execution",
+        toolUseId: "tu_cmd_1",
+        input: { command: "ls -la" },
+      },
+    ]);
+
+    expect(handle.container.textContent).toContain("Browsing files…");
+    // The raw command string must not leak in founder mode.
+    expect(handle.container.textContent).not.toContain("ls -la");
+  });
+
+  it("engineer mode still shows the raw tool card (parity with #178)", () => {
+    localStorage.setItem(STORAGE_KEY, "engineer");
+    render(handle, [
+      {
+        kind: "tool_call",
+        ts: TS,
+        name: "Read",
+        toolUseId: "tu_eng_sum",
+        input: { path: "ENGINEER_VISIBLE.txt" },
+      },
+      {
+        kind: "tool_result",
+        ts: TS,
+        toolUseId: "tu_eng_sum",
+        toolName: "Read",
+        content: "ENGINEER_RESULT_BODY",
+        isError: false,
+      },
+    ]);
+
+    // Engineer card surfaces the humanized tool name in its header.
+    expect(handle.container.textContent).toContain("Read");
+    // And the founder summary marker MUST be absent — engineer mode never
+    // renders the one-liner row.
+    expect(handle.container.querySelector("[data-founder-tool-summary]")).toBeNull();
+  });
 });
