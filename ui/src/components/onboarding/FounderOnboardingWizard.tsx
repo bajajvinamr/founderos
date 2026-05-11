@@ -10,15 +10,16 @@ import { formatBootstrapError } from "@/lib/onboarding-bootstrap-error";
 import { useDialog } from "@/context/DialogContext";
 import { useCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useDisplay } from "@/lib/use-display";
 import { Step1Vision } from "./steps/Step1Vision.js";
 import { Step2Bottleneck } from "./steps/Step2Bottleneck.js";
 import { Step3Team } from "./steps/Step3Team.js";
-import { Step4Plugin, type ValidationState } from "./steps/Step4Plugin.js";
 import { Step5Departments } from "./steps/Step5Departments.js";
 import { Step5MeetTeam } from "./steps/Step5MeetTeam.js";
 import { Step6FirstDecision } from "./steps/Step6FirstDecision.js";
 import { Step7Telemetry } from "./steps/Step7Telemetry.js";
 import { ProviderChooser, type ProviderOption } from "./ProviderChooser.js";
+import { AdapterValidationPanel } from "./AdapterValidationPanel.js";
 import {
   buildAutoCharters,
   buildFirstDecisions,
@@ -27,6 +28,8 @@ import {
   DEFAULT_AUTONOMY_LEVEL,
   DEFAULT_INTEGRATION_STATE,
   DEFAULT_NON_CORE_DEPARTMENTS,
+  INTEGRATION_KEYS,
+  INTEGRATION_LABELS,
   type AutonomyLevel,
   type Bottleneck,
   type IntegrationKey,
@@ -44,31 +47,61 @@ type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 const TOTAL_STEPS = 8;
 
 /**
- * S7.C.1 — Bridge between the chooser's six-tile registry and the
- * legacy three-value `AdapterChoice` enum. The chooser surfaces
- * Claude Code (subscription) and Anthropic API (api_key) as live
- * tiles; both resolve to the existing adapter slots. Coming-soon
- * tiles never call this path — they're disabled at the tile level.
+ * S7.C.1 (fix: PR provider-routing) — Bridge between the chooser's six-tile
+ * registry and the canonical `OnboardingAdapterChoice` enum.
+ *
+ * Previously only `claude_code` and `anthropic_api` had non-null mappings;
+ * the four remaining live tiles (`gemini_cli`, `google_api`, `codex_cli`,
+ * `openai_api`) returned null, causing the click handler's early-return guard
+ * (`if (nextChoice === null) return;`) to silently swallow the selection.
+ * The draft retained its default `adapterChoice: "anthropic_api"` regardless
+ * of what the founder clicked — confirmed by three independent audits.
+ *
+ * This patch maps every live tile ID to its canonical adapter choice so
+ * `patchDraft` is called on all six tiles. Tile IDs match the `id` field in
+ * `ProviderChooser.PROVIDER_OPTIONS`; canonical choice values are the
+ * `ONBOARDING_ADAPTER_CHOICES` from `@founderos/shared`.
+ *
+ * Note: `google_api` is accepted here (tile is live) but throws a clear
+ * "not yet implemented" error on the server (S7 Phase 4). The founder
+ * sees a proper bootstrap error rather than a silent wrong-provider boot.
  */
-function mapProviderToAdapter(
+/** @internal Exported for unit testing — not part of the public component API. */
+export function mapProviderToAdapter(
   option: ProviderOption,
 ): OnboardingDraft["adapterChoice"] | null {
   if (option.status !== "live") return null;
-  if (option.id === "claude_code") return "claude_local";
-  if (option.id === "anthropic_api") return "anthropic_api";
-  return null;
+  switch (option.id) {
+    case "claude_code":   return "claude_local";
+    case "anthropic_api": return "anthropic_api";
+    case "gemini_cli":    return "gemini_local";
+    case "google_api":    return "google_api";
+    case "codex_cli":     return "codex_local";
+    case "openai_api":    return "openai_api";
+    default:              return null;
+  }
 }
 
-function mapAdapterToProviderId(
+/** @internal Exported for unit testing — not part of the public component API. */
+export function mapAdapterToProviderId(
   choice: OnboardingDraft["adapterChoice"],
   // anthropicKey is unused today but kept in the signature so a future
   // S7.C.3 patch can disambiguate `claude_local`-with-key from
   // `claude_local`-CLI without an API change.
   _anthropicKey: string,
 ): string | null {
-  if (choice === "claude_local") return "claude_code";
-  if (choice === "anthropic_api") return "anthropic_api";
-  return null;
+  // BL-004 — `choice` is null on first paint of Step 4 (no tile selected
+  // yet). ProviderChooser renders no aria-pressed tile in that state.
+  if (choice === null) return null;
+  switch (choice) {
+    case "claude_local":  return "claude_code";
+    case "anthropic_api": return "anthropic_api";
+    case "gemini_local":  return "gemini_cli";
+    case "google_api":    return "google_api";
+    case "codex_local":   return "codex_cli";
+    case "openai_api":    return "openai_api";
+    default:              return null;
+  }
 }
 
 function buildInitialDraft(): OnboardingDraft {
@@ -78,8 +111,18 @@ function buildInitialDraft(): OnboardingDraft {
     team: "solo",
     cofounderName: "",
     cofounderEmail: "",
-    adapterChoice: "claude_local",
+    // BL-004 (P2.c, audit finding) — null until the founder explicitly
+    // clicks a tile. The prior default of "anthropic_api" biased analytics
+    // ("most founders pick Anthropic" — they didn't, the tile was just
+    // pre-selected). Removing the default forces an honest choice; Step 4's
+    // Continue button is gated on `canAdvance(4)` rejecting null below.
+    adapterChoice: null,
     anthropicKey: "",
+    // Step 4 advance-gate (2026-05-12) — both fields stay null/false
+    // until the founder validates their chosen adapter. See
+    // `AdapterValidationPanel` and `canAdvance(4)` below.
+    adapterValidated: false,
+    validatedFor: null,
     integrations: { ...DEFAULT_INTEGRATION_STATE },
     nonCoreDepartments: [...DEFAULT_NON_CORE_DEPARTMENTS],
     autonomyLevel: DEFAULT_AUTONOMY_LEVEL,
@@ -103,9 +146,16 @@ export function FounderOnboardingWizard() {
 
   const [step, setStep] = useState<Step>(1);
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft());
-  const [validation, setValidation] = useState<ValidationState>({ status: "idle" });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // BL-002 (P2.a, founder-language sweep) — Step 4 H1 + subtitle are now
+  // driven by the DisplayDictionary so they switch between founder and
+  // engineer voice based on `founderos.viewMode` in localStorage. The keys
+  // live in `packages/shared/src/display-dictionary.ts`; the hook reads
+  // viewMode + returns the active label.
+  const step4Headline = useDisplay("onboarding.step4.headline");
+  const step4Subtitle = useDisplay("onboarding.step4.subtitle");
 
   // Server-generated decisions: real Claude call that uses the founder's
   // vision + bottlenecks + team to produce 3 tailored cards. Fetched lazily
@@ -170,7 +220,6 @@ export function FounderOnboardingWizard() {
     if (!onboardingOpen) {
       setStep(1);
       setDraft(buildInitialDraft());
-      setValidation({ status: "idle" });
       setSubmitError(null);
       setSubmitting(false);
     }
@@ -184,14 +233,17 @@ export function FounderOnboardingWizard() {
     if (current === 1) return draft.vision.trim().length >= 10;
     if (current === 2) return draft.bottlenecks.length >= 1;
     if (current === 3) return true;
+    // BL-004 — Step 4 (provider chooser) requires an explicit tile click.
+    // Default is null; Continue stays disabled until the founder picks.
+    // 2026-05-12 — gate also requires the founder to validate the chosen
+    // adapter. `validatedFor === adapterChoice` defends against a race
+    // where the founder validates tile A then switches to tile B.
     if (current === 4) {
-      // claude_local + skip don't require a validated key; only anthropic_api does.
-      if (draft.adapterChoice === "claude_local" || draft.adapterChoice === "skip") return true;
-      // Live debounced validation surfaces "valid" on a healthy key, or
-      // "skipped" when the user opts past a transport/rate-limit
-      // failure. Both unblock Next; bootstrap will re-validate at
-      // submit-time as belt-and-suspenders.
-      return validation.status === "valid" || validation.status === "skipped";
+      return (
+        draft.adapterChoice !== null &&
+        draft.adapterValidated &&
+        draft.validatedFor === draft.adapterChoice
+      );
     }
     if (current === 5) return true; // Departments — core 5 are always-on, no further gate
     if (current === 6) return true;
@@ -203,6 +255,29 @@ export function FounderOnboardingWizard() {
   async function handleFinish() {
     setSubmitting(true);
     setSubmitError(null);
+    // BL-004 — Step 4's `canAdvance` gate enforces non-null adapterChoice
+    // before the wizard reaches Step 8. This is a defense-in-depth check:
+    // if the user somehow lands here with no choice, fail fast rather than
+    // POST null to the server's Zod validator (which would 400 anyway).
+    if (draft.adapterChoice === null) {
+      setSubmitError("Please choose an AI provider on Step 4 before launching.");
+      setSubmitting(false);
+      return;
+    }
+    // 2026-05-12 — defense in depth: Step 4's canAdvance() already
+    // refuses to advance without validation, but reject again here in
+    // case the validation gate was bypassed via stale state.
+    if (
+      !draft.adapterValidated ||
+      draft.validatedFor !== draft.adapterChoice
+    ) {
+      setSubmitError(
+        "Please validate your AI provider on Step 4 before launching.",
+      );
+      setSubmitting(false);
+      return;
+    }
+    const adapterChoice = draft.adapterChoice;
     try {
       const payload = {
         vision: draft.vision.trim(),
@@ -215,8 +290,8 @@ export function FounderOnboardingWizard() {
                 email: draft.cofounderEmail.trim() || null,
               }
             : null,
-        adapterChoice: draft.adapterChoice,
-        anthropicKey: draft.adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
+        adapterChoice,
+        anthropicKey: adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
         integrations: draft.integrations,
         nonCoreDepartments: draft.nonCoreDepartments,
         autonomyLevel: draft.autonomyLevel,
@@ -362,19 +437,22 @@ export function FounderOnboardingWizard() {
               )}
               {step === 4 && (
                 <div className="space-y-8">
-                  {/*
-                    S7.C.1 — Multi-provider chooser inserted ahead of the
-                    legacy adapter list. Six tiles, two live; selection
-                    drives the same `adapterChoice` slot Step4Plugin
-                    already manages so existing key validation + bootstrap
-                    pipeline keeps working unchanged.
+                  <div>
+                    <h2
+                      className="text-2xl font-semibold tracking-tight"
+                      data-testid="onboarding-step4-headline"
+                    >
+                      {step4Headline}
+                    </h2>
+                    <p
+                      className="mt-2 text-sm text-muted-foreground"
+                      data-testid="onboarding-step4-subtitle"
+                    >
+                      {step4Subtitle}
+                    </p>
+                  </div>
 
-                    The `Step4Plugin` block below stays in place for now:
-                    its inline key field will be replaced by S7.C.2's
-                    drawer in the next ticket. The integrations toggles
-                    inside Step4Plugin remain in scope here (only the
-                    adapter selection migrates to the chooser).
-                  */}
+                  {/* Provider chooser — six tiles, two live */}
                   <ProviderChooser
                     selectedId={mapAdapterToProviderId(
                       draft.adapterChoice,
@@ -383,31 +461,82 @@ export function FounderOnboardingWizard() {
                     onSelect={(option) => {
                       const nextChoice = mapProviderToAdapter(option);
                       if (nextChoice === null) return;
-                      patchDraft({ adapterChoice: nextChoice });
-                      // Switching tile clears any in-flight key validation
-                      // so the founder re-enters credentials for the new
-                      // option. Mirrors Step4Plugin's existing behaviour.
-                      if (nextChoice !== "anthropic_api") {
-                        setValidation({ status: "idle" });
-                      }
+                      // 2026-05-12 — switching tiles ALWAYS resets the
+                      // validation gate, even if the founder lands back
+                      // on the same tile (`patchDraft` is a no-op on
+                      // unchanged fields, so re-selecting is harmless).
+                      patchDraft({
+                        adapterChoice: nextChoice,
+                        adapterValidated: false,
+                        validatedFor: null,
+                      });
                     }}
                   />
-                  <Step4Plugin
-                    adapterChoice={draft.adapterChoice}
-                    anthropicKey={draft.anthropicKey}
-                    integrations={draft.integrations}
-                    validation={validation}
-                    onAdapterChoiceChange={(choice) =>
-                      patchDraft({ adapterChoice: choice })
-                    }
-                    onAnthropicKeyChange={(key) =>
-                      patchDraft({ anthropicKey: key })
-                    }
-                    onIntegrationsChange={(
-                      next: Record<IntegrationKey, boolean>,
-                    ) => patchDraft({ integrations: next })}
-                    onValidationChange={setValidation}
-                  />
+
+                  {draft.adapterChoice !== null && (
+                    <AdapterValidationPanel
+                      adapterChoice={draft.adapterChoice}
+                      apiKey={draft.anthropicKey}
+                      onApiKeyChange={(next) =>
+                        patchDraft({ anthropicKey: next })
+                      }
+                      validated={
+                        draft.adapterValidated &&
+                        draft.validatedFor === draft.adapterChoice
+                      }
+                      onValidated={(next) =>
+                        patchDraft({
+                          adapterValidated: next,
+                          validatedFor: next ? draft.adapterChoice : null,
+                        })
+                      }
+                    />
+                  )}
+
+                  {/* Integrations toggles */}
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                      Integrations (optional)
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {INTEGRATION_KEYS.map((key) => {
+                        const enabled = draft.integrations[key];
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              patchDraft({
+                                integrations: {
+                                  ...draft.integrations,
+                                  [key]: !draft.integrations[key],
+                                },
+                              });
+                            }}
+                            className={cn(
+                              "text-left rounded-md border px-3.5 py-3 transition-colors",
+                              enabled
+                                ? "border-foreground bg-accent"
+                                : "border-border hover:bg-accent/40",
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium">
+                                {INTEGRATION_LABELS[key]}
+                              </p>
+                              <span className="text-[10px] font-semibold text-muted-foreground">
+                                {enabled ? "CONNECT LATER" : "SKIP"}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Toggling marks the integration for setup on the Integrations page.
+                      Nothing is connected until you authenticate there.
+                    </p>
+                  </div>
                 </div>
               )}
               {step === 5 && (

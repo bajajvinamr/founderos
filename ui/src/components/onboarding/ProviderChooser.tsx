@@ -2,14 +2,13 @@
  * S7.C.1 — Multi-provider chooser tile grid for the onboarding wizard.
  *
  * Renders six provider tiles (Claude Code, Anthropic API, Gemini CLI,
- * Google API, Codex CLI, OpenAI API) in a responsive grid:
+ * Gemini API, Codex CLI, OpenAI API) in a responsive grid:
  *   desktop (>= md):  3 columns × 2 rows
  *   tablet  (>= sm):  2 columns × 3 rows
  *   mobile  (<  sm):  1 column  × 6 rows
  *
- * Two tiles are LIVE at S7.0 ship; four are COMING SOON with `S7.B.x`
- * ETAs surfaced via tooltip on hover/focus. Coming-soon tiles are
- * `aria-disabled="true"` and `tabIndex={-1}` so keyboard nav skips them.
+ * All six tiles are LIVE and selectable. The chooser is purely a selection
+ * surface; the wizard owns routing logic and downstream draft persistence.
  *
  * Out of scope for this ticket:
  *   - Inline key-entry drawer (S7.C.2 owns ProviderKeyDrawer)
@@ -21,8 +20,9 @@
  * routing logic and downstream draft persistence.
  */
 
-import { Cloud, Cpu, Key, Sparkles, Terminal, Zap } from "lucide-react";
+import type { DisplayKey } from "@founderos/shared";
 import type { ComponentType } from "react";
+import { PROVIDER_BRAND_LOGOS } from "./brand-logos.js";
 import { ProviderTile } from "./ProviderTile.js";
 
 export type ProviderAdapterType =
@@ -38,10 +38,41 @@ export type ProviderStatus = "live" | "coming-soon";
 export interface ProviderOption {
   /** Stable id used in tests, telemetry, and the draft row. */
   id: string;
-  /** User-facing display name on the tile. */
+  /**
+   * User-facing display name on the tile.
+   *
+   * BL-003 (P2.b) — this is now the ENGINEER-mode fallback only. When
+   * `displayKey` is set, the tile reads the active label from
+   * `DisplayDictionary` based on `founderos.viewMode`. `label` is still
+   * the canonical engineer string so a missing dictionary entry or a
+   * `viewMode === "engineer"` setting always produces the technical
+   * name even without the lookup.
+   */
   label: string;
+  /**
+   * Optional DisplayDictionary key for this provider's tile label.
+   * BL-003 (P2.b) — when set, ProviderTile resolves the user-facing
+   * label via `useDisplay(displayKey)` and falls back to `label` if
+   * the dictionary entry is missing. Engineer viewMode renders the
+   * engineer side of the dictionary entry which equals `label` by
+   * convention, so engineer-mode founders still see "Anthropic API"
+   * etc. — satisfying BL-003 done_criteria #2.
+   */
+  displayKey?: DisplayKey;
   /** One-line description, ~6-12 words. */
   description: string;
+  /**
+   * Optional DisplayDictionary key for this tile's description.
+   * BL-005 (P2.d) — when set, ProviderTile resolves the user-facing
+   * description via `useDisplay(descriptionKey)` and falls back to
+   * `description` if the dictionary entry is missing. Engineer
+   * viewMode renders the engineer side of the dictionary entry which
+   * equals `description` by convention, so engineer-mode founders still
+   * see the pre-BL-005 technical copy ("Bring your own Anthropic API
+   * key for hosted deployments.", etc.) — mirrors the BL-003 label
+   * pattern.
+   */
+  descriptionKey?: DisplayKey;
   /**
    * Plain-English "what this requires" line shown under the description.
    * Tells the founder up-front what they need (CLI / key / signup) so the
@@ -50,7 +81,7 @@ export interface ProviderOption {
    */
   requirement: string;
   status: ProviderStatus;
-  /** Engineering-ticket reference (e.g., "S7.B.2") — only set when coming-soon. */
+  /** Engineering-ticket reference (e.g., "S7.B.2") — only set when coming-soon. Removed in Phase D. */
   etaPhase?: string;
   /** Internal adapter enum (4 values, NOT 6 — see PRD §1). */
   adapterType: ProviderAdapterType;
@@ -66,8 +97,14 @@ export interface ProviderOption {
 export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "claude_code",
+    // Engineer fallback / canonical technical name. Founder copy
+    // ("Claude (subscription)") comes from DisplayDictionary key
+    // `claude_local` via `displayKey` below.
     label: "Claude Code",
-    description: "Use your existing Claude subscription via the local CLI.",
+    displayKey: "claude_local",
+    description:
+      "For developers — requires Claude Code CLI installed on your laptop.",
+    descriptionKey: "provider.claude_code.description",
     requirement: "Requires Claude Code CLI installed on your laptop.",
     status: "live",
     adapterType: "claude_local",
@@ -76,7 +113,9 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "anthropic_api",
     label: "Anthropic API",
+    displayKey: "anthropic_api",
     description: "Bring your own Anthropic API key for hosted deployments.",
+    descriptionKey: "provider.anthropic_api.description",
     requirement:
       "Requires an Anthropic API key (get one at console.anthropic.com).",
     status: "live",
@@ -86,54 +125,58 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "gemini_cli",
     label: "Gemini CLI",
+    displayKey: "gemini_local",
     description: "Use your Google AI subscription via the local CLI.",
+    descriptionKey: "provider.gemini_cli.description",
     requirement: "Requires Google AI Studio account and Gemini CLI on your laptop.",
-    status: "coming-soon",
-    etaPhase: "S7.B.2",
+    status: "live",
     adapterType: "gemini_local",
     authMode: "subscription",
   },
   {
     id: "google_api",
-    label: "Google API",
-    description: "Bring your own Google AI API key for hosted deployments.",
-    requirement: "Requires a Google AI API key (aistudio.google.com/apikey).",
-    status: "coming-soon",
-    etaPhase: "S7.B.2",
+    label: "Gemini API",
+    displayKey: "gemini_api",
+    description: "Bring your own Gemini API key for hosted deployments.",
+    descriptionKey: "provider.google_api.description",
+    requirement: "Requires a Gemini API key (aistudio.google.com/apikey).",
+    status: "live",
     adapterType: "gemini_local",
     authMode: "api_key",
   },
   {
     id: "codex_cli",
     label: "Codex CLI",
+    displayKey: "codex_local",
     description: "Use your OpenAI subscription via the local Codex CLI.",
+    descriptionKey: "provider.codex_cli.description",
     requirement: "Requires GitHub Codex CLI installed on your laptop.",
-    status: "coming-soon",
-    etaPhase: "S7.B.1",
+    status: "live",
     adapterType: "codex_local",
     authMode: "subscription",
   },
   {
     id: "openai_api",
     label: "OpenAI API",
+    displayKey: "openai_api",
     description: "Bring your own OpenAI API key (GPT-4o / o3).",
+    descriptionKey: "provider.openai_api.description",
     requirement: "Requires an OpenAI API key (platform.openai.com/api-keys).",
-    status: "coming-soon",
-    etaPhase: "S7.B.4",
+    status: "live",
     adapterType: "openai_api",
     authMode: "api_key",
   },
 ];
 
-/** Per-tile glyph. Cosmetic only — registry order is the contract. */
-const ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  claude_code: Terminal,
-  anthropic_api: Key,
-  gemini_cli: Sparkles,
-  google_api: Cloud,
-  codex_cli: Cpu,
-  openai_api: Zap,
-};
+/**
+ * Per-tile glyph. BL-003 (P2.b) — replaces the prior lucide icon set
+ * with brand-family marks (Anthropic / OpenAI / Google) so the tiles
+ * carry the brand the founder is actually choosing, not a generic
+ * shape. Three logos cover all six tiles via the family map in
+ * `brand-logos.tsx`.
+ */
+const ICONS: Record<string, ComponentType<{ className?: string }>> =
+  PROVIDER_BRAND_LOGOS;
 
 interface Props {
   /** Currently-selected option id, or null if no selection yet. */
@@ -155,10 +198,9 @@ export function ProviderChooser({ selectedId, onSelect }: Props) {
           Pick your AI provider
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Two providers run agents today (Claude Code + Anthropic API). The
-          other four are coming soon — they're shown so you can plan, but
-          they can't be selected yet. Each tile lists exactly what it
-          requires.
+          Six AI providers are available: Claude Code, Anthropic API, Gemini CLI,
+          Gemini API, Codex CLI, and OpenAI API. Each tile lists exactly what it
+          requires so you can make an informed choice.
         </p>
       </div>
 

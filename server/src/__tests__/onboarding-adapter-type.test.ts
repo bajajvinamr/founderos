@@ -75,6 +75,25 @@ vi.mock("../services/subscription.js", () => ({
   }),
 }));
 
+// S8 P0.1 Phase 1D — onboarding route now mirrors the validated Anthropic
+// key into the instance keystore so the server-side claude_local handler
+// (Phase 1C) can read it via getDecryptedKey('anthropic', 'api'). Mocked
+// here so the route can resolve the dynamic import without a real DB.
+const mockInstanceApiKeysSetKey = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    family: "anthropic",
+    executionMode: "api",
+    keyHint: "…7890",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+);
+vi.mock("../services/instance-api-keys.js", () => ({
+  instanceApiKeysService: () => ({
+    setKey: mockInstanceApiKeysSetKey,
+  }),
+}));
+
 vi.mock("../services/index.js", () => ({
   companyService: () => mockCompanyService,
   accessService: () => mockAccessService,
@@ -324,10 +343,15 @@ describe("onboarding bootstrap — adapterType is always claude_local", () => {
 });
 
 // ---------------------------------------------------------------------------
-// BYO-107 — flag-on path: every adapterChoice maps to byo_runner
+// QW1 — BYO runner flag: preserves provider choice, marks transport
+//
+// FOUNDEROS_BYO_RUNNER_ENABLED=1 must NOT collapse adapterChoice to
+// "byo_runner". The runner needs the concrete adapter type (codex_local,
+// gemini_local, claude_local, etc.) to dispatch to the right CLI at claim
+// time. Instead, adapter_config gains transport: "local_runner" as the signal.
 // ---------------------------------------------------------------------------
 
-describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_RUNNER_ENABLED=1", () => {
+describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 multi-provider)", () => {
   let savedFlag: string | undefined;
 
   beforeEach(() => {
@@ -342,7 +366,42 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedFlag;
   });
 
-  it("maps adapterChoice=claude_local → byo_runner", async () => {
+  it("adapterChoice=codex_local + BYO flag → adapter_type=codex_local, NOT byo_runner", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("codex_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "codex_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      // transport: "local_runner" is set so the runner claims the job.
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("adapterChoice=gemini_local + BYO flag → adapter_type=gemini_local, NOT byo_runner", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("gemini_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "gemini_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("adapterChoice=claude_local + BYO flag → adapter_type=claude_local (regression baseline)", async () => {
+    // claude_local is the baseline: it should still be preserved (not
+    // collapsed to byo_runner) and gets transport: "local_runner" too.
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
@@ -352,11 +411,15 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
   });
 
-  it("maps adapterChoice=anthropic_api → byo_runner (key still stored as secret)", async () => {
+  it("adapterChoice=anthropic_api + BYO flag → adapter_type=claude_local (key still stored as secret)", async () => {
+    // anthropic_api collapses to claude_local via mapOnboardingChoiceToAdapter —
+    // the Anthropic key is still stored as a company secret upstream.
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
     mockSecretService.create.mockResolvedValue({ id: "secret-uuid-byo" });
@@ -371,11 +434,14 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      // anthropic_api → claude_local (mapOnboardingChoiceToAdapter) with transport
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
   });
 
-  it("maps adapterChoice=skip → byo_runner", async () => {
+  it("adapterChoice=skip + BYO flag → adapter_type=claude_local (skip defers to claude_local)", async () => {
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
@@ -385,7 +451,26 @@ describe("onboarding bootstrap — adapterType is byo_runner when FOUNDEROS_BYO_
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      expect(payload).toMatchObject({ adapterType: "byo_runner" });
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("BYO flag OFF → no transport in adapterConfig (flag-off baseline)", async () => {
+    // Restore the BYO flag to OFF for this test only.
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("codex_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "codex_local" });
+      // No transport key when BYO is off — adapterConfig only has env.
+      expect(payload.adapterConfig).not.toHaveProperty("transport");
     }
   });
 });
@@ -511,19 +596,23 @@ describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
     expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 
-  it("accepts adapterChoice=google_api when key is provided (Phase 4 placeholder)", async () => {
-    // S7 Phase 4 ships the Google API agent runtime. Until then the
-    // Zod schema accepts the choice + the key gate enforces a
-    // non-empty key. mapOnboardingChoiceToAdapter throws for
-    // google_api, but bootstrap-bootstrap currently collapses to
-    // claude_local pre-S7.2, so this still returns 201.
+  it("rejects adapterChoice=google_api with 500 (S8 P0.1 — throw surfaces)", async () => {
+    // S8 P0.1 Phase 1D — the bootstrap dev/local path now routes through
+    // mapOnboardingChoiceToAdapter (PR #148), which throws "google_api
+    // adapter is not yet implemented (S7 Phase 4)" instead of silently
+    // collapsing to claude_local. The Zod schema still accepts the
+    // choice + the key gate still enforces a non-empty key (asserted
+    // in the sibling test below). Live wiring lands with the S7.B
+    // Google API tile.
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
       .send(makePayload("google_api", "AIza-google-test-key-1234567890"));
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(500);
     expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
+    // No agent rows persisted on the throw.
+    expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 
   it("rejects adapterChoice=google_api when key is missing (auth_mode='api' gate)", async () => {
@@ -544,5 +633,218 @@ describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
 
     expect(res.status).toBe(400);
     expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S8 P0.1 Phase 1D — hosted-mode tri-branch adapter resolution
+//
+// FOUNDEROS_HOSTED_AGENTS_ENABLED=1 takes precedence over BYO_RUNNER for
+// the anthropic_api choice — the cloud runs server-side execution off the
+// founder's pasted key, no laptop runner. Both flags off falls through to
+// `mapOnboardingChoiceToAdapter` (the PR #148 dev/local path).
+// ---------------------------------------------------------------------------
+
+describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", () => {
+  let savedHosted: string | undefined;
+  let savedByo: string | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    savedHosted = process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED;
+    savedByo = process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    delete process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED;
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+  });
+
+  afterEach(() => {
+    if (savedHosted === undefined) delete process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED;
+    else process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED = savedHosted;
+    if (savedByo === undefined) delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+    else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedByo;
+  });
+
+  it("hosted=ON + anthropic_api → adapter_type=claude_local (server-side path)", async () => {
+    process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED = "1";
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({ valid: true });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    expect(calls.length).toBe(4);
+    for (const [, payload] of calls) {
+      // Hosted mode routes anthropic_api to claude_local — the server-side
+      // handler reads the key from instance_api_keys (written by the route
+      // post-validation) and dispatches via the Anthropic SDK in-process.
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+    }
+    // The route ALSO writes the validated key into the instance keystore
+    // — Phase 1C handler reads from there.
+    expect(mockInstanceApiKeysSetKey).toHaveBeenCalledTimes(1);
+    expect(mockInstanceApiKeysSetKey).toHaveBeenCalledWith({
+      family: "anthropic",
+      executionMode: "api",
+      value: "sk-ant-test-key-1234567890",
+    });
+  });
+
+  it("hosted=ON dominates BYO=ON for anthropic_api (precedence test)", async () => {
+    process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED = "1";
+    process.env.FOUNDEROS_BYO_RUNNER_ENABLED = "1";
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({ valid: true });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    for (const [, payload] of calls) {
+      // Hosted wins — anthropic_api goes to server-side claude_local even
+      // though BYO is also enabled.
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+    }
+  });
+
+  it("hosted=OFF + BYO=ON → adapter_type=claude_local with transport:local_runner (QW1 fix)", async () => {
+    // QW1 multi-provider fix: BYO flag preserves the provider choice instead
+    // of collapsing to byo_runner. anthropic_api → claude_local via
+    // mapOnboardingChoiceToAdapter, and transport: "local_runner" is set.
+    process.env.FOUNDEROS_BYO_RUNNER_ENABLED = "1";
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({ valid: true });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    for (const [, payload] of calls) {
+      // BYO path now preserves the provider (claude_local for anthropic_api).
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload.adapterType).not.toBe("byo_runner");
+      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+    }
+  });
+
+  it("hosted=ON + claude_local choice → falls through to mapOnboardingChoiceToAdapter", async () => {
+    // Hosted-mode short-circuit ONLY fires for adapterChoice=anthropic_api.
+    // A founder who picks the CLI tile (claude_local) on a hosted instance
+    // still gets claude_local mapping via the dev/local path — same end
+    // result for this choice but exercises the third branch deliberately.
+    process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED = "1";
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("claude_local"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    for (const [, payload] of calls) {
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+    }
+    // No instance-api-keys write — no key was provided / validated.
+    expect(mockInstanceApiKeysSetKey).not.toHaveBeenCalled();
+  });
+
+  it("both flags OFF + anthropic_api → mapOnboardingChoiceToAdapter path (claude_local)", async () => {
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({ valid: true });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    const calls = mockAgentService.create.mock.calls;
+    for (const [, payload] of calls) {
+      // Pre-PR-148 dev/local path collapses anthropic_api → claude_local.
+      expect(payload).toMatchObject({ adapterType: "claude_local" });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S8 P0.1 Phase 1D — onboarding route writes validated key into
+// instance_api_keys (the Phase 1C handler reads from there).
+// ---------------------------------------------------------------------------
+
+describe("onboarding route — instance_api_keys vault write (S8 P0.1)", () => {
+  let savedHosted: string | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    savedHosted = process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED;
+    delete process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED;
+    delete process.env.FOUNDEROS_BYO_RUNNER_ENABLED;
+  });
+
+  afterEach(() => {
+    if (savedHosted === undefined) delete process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED;
+    else process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED = savedHosted;
+  });
+
+  it("writes the validated Anthropic key into instance_api_keys", async () => {
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({ valid: true });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-test-key-1234567890"));
+
+    expect(res.status).toBe(201);
+    expect(mockInstanceApiKeysSetKey).toHaveBeenCalledTimes(1);
+    expect(mockInstanceApiKeysSetKey).toHaveBeenCalledWith({
+      family: "anthropic",
+      executionMode: "api",
+      value: "sk-ant-test-key-1234567890",
+    });
+  });
+
+  it("does NOT write to instance_api_keys when key validation fails", async () => {
+    const app = await createApp();
+    mockValidateAnthropicKey.mockResolvedValue({
+      valid: false,
+      reason: "invalid_key",
+    });
+
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("anthropic_api", "sk-ant-bad-key-1234567890"));
+
+    expect(res.status).toBe(422);
+    // Validation runs first; vault write is skipped on rejection.
+    expect(mockInstanceApiKeysSetKey).not.toHaveBeenCalled();
+    // Bootstrap also did not run — no agent rows.
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("does NOT write to instance_api_keys for non-anthropic_api adapter choices", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("claude_local"));
+
+    expect(res.status).toBe(201);
+    // claude_local choice never triggers the validate→store path.
+    expect(mockInstanceApiKeysSetKey).not.toHaveBeenCalled();
+  });
+
+  it("does NOT write to instance_api_keys when adapterChoice=skip", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/onboarding/bootstrap")
+      .send(makePayload("skip"));
+
+    expect(res.status).toBe(201);
+    expect(mockInstanceApiKeysSetKey).not.toHaveBeenCalled();
   });
 });
