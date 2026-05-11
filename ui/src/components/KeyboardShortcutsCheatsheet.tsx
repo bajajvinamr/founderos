@@ -10,7 +10,35 @@ interface ShortcutSection {
   shortcuts: ShortcutEntry[];
 }
 
+// P3 Wave 1 — updated shortcut sheet for the Ask-First shell.
+// Source: 01-shell-revised.md §10.4 + 05-design-system.md §5.
+//
+// Two new entries surface the AskBar reflex (⌘K, ⌘+Enter); the Inbox
+// shortcut block survives because the Inbox surface still exists for now
+// (Wave 2 collapses it into Today). The `g <letter>` chord block is the
+// universal list shortcut row from 05-design-system §5.1 — F-18 deferred
+// the previous spec's chord to P4, so this block is the resolved version.
 const sections: ShortcutSection[] = [
+  {
+    title: "AskBar",
+    shortcuts: [
+      { keys: ["⌘", "K"], label: "Open AskBar from anywhere" },
+      { keys: ["Esc"], label: "Close AskBar (typed query preserved)" },
+      { keys: ["⌘", "Enter"], label: "Ask the team this — submit typed query" },
+      { keys: ["↑"], label: "Previous suggestion" },
+      { keys: ["↓"], label: "Next suggestion" },
+    ],
+  },
+  {
+    title: "Go to (chrome)",
+    shortcuts: [
+      { keys: ["g", "t"], label: "Today" },
+      { keys: ["g", "w"], label: "Work" },
+      { keys: ["g", "m"], label: "Team" },
+      { keys: ["g", "l"], label: "Library" },
+      { keys: ["g", "s"], label: "Settings" },
+    ],
+  },
   {
     title: "Inbox",
     shortcuts: [

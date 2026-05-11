@@ -30,6 +30,14 @@ const BOARD_ROUTE_ROOTS = new Set([
   "onboarding",
   "integrations",
   "permissions",
+  // P3 Wave 1 (Ask-First shell) — the 4 founder-language top-level sections
+  // for the new IA. Per 01-shell-revised.md §7.3 — register here BEFORE
+  // App.tsx wires the routes, otherwise the router treats `today` etc. as
+  // unknown company prefixes and renders "No company matches prefix TODAY".
+  "today",
+  "work",
+  "team",
+  "library",
 ]);
 
 const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "docs", "instance", "landing", "legal"]);
