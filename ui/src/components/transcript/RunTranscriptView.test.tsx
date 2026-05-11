@@ -110,4 +110,56 @@ describe("RunTranscriptView", () => {
     expect(html).toContain("<li>posted issue update</li>");
     expect(html).not.toContain("result");
   });
+
+  // BL-012 (P4.a): the view-mode seam. The outer container exposes
+  // data-view-mode so BL-013 (P4.b founder-mode rendering) can branch on it.
+  // No behavior change here — just the attribute presence + default.
+  it("exposes data-view-mode='founder' on the outer container by default", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <RunTranscriptView
+          entries={[
+            {
+              kind: "assistant",
+              ts: "2026-03-12T00:00:00.000Z",
+              text: "Hello",
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(html).toContain('data-view-mode="founder"');
+    expect(html).not.toContain('data-view-mode="engineer"');
+  });
+
+  it("exposes data-view-mode on the empty-state container too", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <RunTranscriptView entries={[]} emptyMessage="Nothing yet." />
+      </ThemeProvider>,
+    );
+
+    expect(html).toContain('data-view-mode="founder"');
+    expect(html).toContain("Nothing yet.");
+  });
+
+  it("exposes data-view-mode on the raw-mode container too", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <RunTranscriptView
+          mode="raw"
+          entries={[
+            {
+              kind: "assistant",
+              ts: "2026-03-12T00:00:00.000Z",
+              text: "Hello",
+            },
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(html).toContain('data-view-mode="founder"');
+  });
 });
