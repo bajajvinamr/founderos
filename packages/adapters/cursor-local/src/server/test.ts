@@ -18,6 +18,7 @@ import path from "node:path";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "../index.js";
 import { parseCursorJsonl } from "./parse.js";
 import { hasCursorTrustBypassArg } from "../shared/trust.js";
+import { execSync } from "node:child_process";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -86,6 +87,21 @@ export async function readCursorAuthInfo(cursorHome?: string): Promise<CursorAut
   return { email, displayName, userId };
 }
 
+
+/**
+ * Returns true when the given binary name is resolvable in the current PATH.
+ * Uses `which` so it works correctly across platforms. Any error (binary not
+ * found, `which` unavailable) is treated as "not in PATH".
+ */
+function isBinaryInPath(binary: string): boolean {
+  try {
+    execSync(`which ${binary}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const CURSOR_AUTH_REQUIRED_RE =
   /(?:authentication\s+required|not\s+authenticated|not\s+logged\s+in|unauthorized|invalid(?:\s+or\s+missing)?\s+api(?:[_\s-]?key)?|cursor[_\s-]?api[_\s-]?key|run\s+'?agent\s+login'?\s+first|api(?:[_\s-]?key)?(?:\s+is)?\s+required)/i;
 
@@ -96,6 +112,25 @@ export async function testEnvironment(
   const config = parseObject(ctx.config);
   const command = asString(config.command, "agent");
   const cwd = asString(config.cwd, process.cwd());
+
+  // Honest-disable: if the CLI binary is not in PATH, return warn immediately.
+  // On the hosted Fly server (no agent binary), this surfaces a clear message
+  // pointing to the BYO runner instead of failing silently downstream.
+  if (!isBinaryInPath(command)) {
+    checks.push({
+      code: "cursor_local_cli_not_found",
+      level: "warn",
+      message:
+        "Cursor agent CLI is not available on this server. Use 'Connect your own runner' to run Cursor agents from your laptop.",
+      hint: "Install the Cursor agent CLI on your local machine and connect a BYO runner at /settings/runner.",
+    });
+    return {
+      adapterType: ctx.adapterType,
+      status: "warn",
+      checks,
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: true });

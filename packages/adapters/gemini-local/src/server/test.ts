@@ -18,6 +18,7 @@ import {
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "../index.js";
 import { detectGeminiAuthRequired, detectGeminiQuotaExhausted, parseGeminiJsonl } from "./parse.js";
 import { firstNonEmptyLine } from "./utils.js";
+import { execSync } from "node:child_process";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -42,6 +43,21 @@ function summarizeProbeDetail(stdout: string, stderr: string, parsedError: strin
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
+
+/**
+ * Returns true when the given binary name is resolvable in the current PATH.
+ * Uses `which` so it works correctly across platforms. Any error (binary not
+ * found, `which` unavailable) is treated as "not in PATH".
+ */
+function isBinaryInPath(binary: string): boolean {
+  try {
+    execSync(`which ${binary}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function testEnvironment(
   ctx: AdapterEnvironmentTestContext,
 ): Promise<AdapterEnvironmentTestResult> {
@@ -49,6 +65,25 @@ export async function testEnvironment(
   const config = parseObject(ctx.config);
   const command = asString(config.command, "gemini");
   const cwd = asString(config.cwd, process.cwd());
+
+  // Honest-disable: if the CLI binary is not in PATH, return warn immediately.
+  // On the hosted Fly server (no gemini binary), this surfaces a clear message
+  // pointing to the BYO runner instead of failing silently downstream.
+  if (!isBinaryInPath(command)) {
+    checks.push({
+      code: "gemini_local_cli_not_found",
+      level: "warn",
+      message:
+        "Gemini CLI is not available on this server. Use 'Connect your own runner' to run Gemini agents from your laptop.",
+      hint: "Install the Gemini CLI on your local machine and connect a BYO runner at /settings/runner. See https://github.com/google-gemini/gemini-cli for setup instructions.",
+    });
+    return {
+      adapterType: ctx.adapterType,
+      status: "warn",
+      checks,
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: true });

@@ -16,6 +16,7 @@ import {
 import { discoverOpenCodeModels, ensureOpenCodeModelConfiguredAndAvailable } from "./models.js";
 import { parseOpenCodeJsonl } from "./parse.js";
 import { prepareOpenCodeRuntimeConfig } from "./runtime-config.js";
+import { execSync } from "node:child_process";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -49,6 +50,21 @@ function normalizeEnv(input: unknown): Record<string, string> {
   return env;
 }
 
+
+/**
+ * Returns true when the given binary name is resolvable in the current PATH.
+ * Uses `which` so it works correctly across platforms. Any error (binary not
+ * found, `which` unavailable) is treated as "not in PATH".
+ */
+function isBinaryInPath(binary: string): boolean {
+  try {
+    execSync(`which ${binary}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const OPENCODE_AUTH_REQUIRED_RE =
   /(?:auth(?:entication)?\s+required|api\s*key|invalid\s*api\s*key|not\s+logged\s+in|opencode\s+auth\s+login|free\s+usage\s+exceeded)/i;
 
@@ -59,6 +75,25 @@ export async function testEnvironment(
   const config = parseObject(ctx.config);
   const command = asString(config.command, "opencode");
   const cwd = asString(config.cwd, process.cwd());
+
+  // Honest-disable: if the CLI binary is not in PATH, return warn immediately.
+  // On the hosted Fly server (no opencode binary), this surfaces a clear message
+  // pointing to the BYO runner instead of failing silently downstream.
+  if (!isBinaryInPath(command)) {
+    checks.push({
+      code: "opencode_local_cli_not_found",
+      level: "warn",
+      message:
+        "OpenCode CLI is not available on this server. Use 'Connect your own runner' to run OpenCode agents from your laptop.",
+      hint: "Install the OpenCode CLI on your local machine and connect a BYO runner at /settings/runner. See https://opencode.ai for setup instructions.",
+    });
+    return {
+      adapterType: ctx.adapterType,
+      status: "warn",
+      checks,
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: false });

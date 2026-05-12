@@ -16,6 +16,7 @@ import {
 } from "@founderos/adapter-utils/server-utils";
 import { discoverPiModelsCached } from "./models.js";
 import { parsePiJsonl } from "./parse.js";
+import { execSync } from "node:child_process";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -49,6 +50,21 @@ function normalizeEnv(input: unknown): Record<string, string> {
   return env;
 }
 
+
+/**
+ * Returns true when the given binary name is resolvable in the current PATH.
+ * Uses `which` so it works correctly across platforms. Any error (binary not
+ * found, `which` unavailable) is treated as "not in PATH".
+ */
+function isBinaryInPath(binary: string): boolean {
+  try {
+    execSync(`which ${binary}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const PI_AUTH_REQUIRED_RE =
   /(?:auth(?:entication)?\s+required|api\s*key|invalid\s*api\s*key|not\s+logged\s+in|free\s+usage\s+exceeded)/i;
 const PI_STALE_PACKAGE_RE = /pi-driver|npm:\s*pi-driver/i;
@@ -79,6 +95,25 @@ export async function testEnvironment(
   const config = parseObject(ctx.config);
   const command = asString(config.command, "pi");
   const cwd = asString(config.cwd, process.cwd());
+
+  // Honest-disable: if the CLI binary is not in PATH, return warn immediately.
+  // On the hosted Fly server (no pi binary), this surfaces a clear message
+  // pointing to the BYO runner instead of failing silently downstream.
+  if (!isBinaryInPath(command)) {
+    checks.push({
+      code: "pi_local_cli_not_found",
+      level: "warn",
+      message:
+        "Pi CLI is not available on this server. Use 'Connect your own runner' to run Pi agents from your laptop.",
+      hint: "Install the Pi CLI on your local machine and connect a BYO runner at /settings/runner.",
+    });
+    return {
+      adapterType: ctx.adapterType,
+      status: "warn",
+      checks,
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: false });

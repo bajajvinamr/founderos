@@ -14,6 +14,7 @@ import {
   ensurePathInEnv,
   runChildProcess,
 } from "@founderos/adapter-utils/server-utils";
+import { execSync } from "node:child_process";
 import path from "node:path";
 import { detectClaudeLoginRequired, parseClaudeStreamJson } from "./parse.js";
 import { isBedrockModelId } from "./models.js";
@@ -47,7 +48,22 @@ function summarizeProbeDetail(stdout: string, stderr: string): string | null {
   if (!raw) return null;
   const clean = raw.replace(/\s+/g, " ").trim();
   const max = 240;
-  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+  return clean.length > max ? `${clean.slice(0, max - 1)}\u2026` : clean;
+}
+
+/**
+ * Returns true when the given binary name is resolvable in the current PATH.
+ * Uses `which` so it works correctly across platforms where PATH may differ
+ * between the Node process and the user's shell. Any error (binary not found,
+ * `which` not available) is treated as "not in PATH".
+ */
+function isBinaryInPath(binary: string): boolean {
+  try {
+    execSync(`which ${binary}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function testEnvironment(
@@ -57,6 +73,25 @@ export async function testEnvironment(
   const config = parseObject(ctx.config);
   const command = asString(config.command, "claude");
   const cwd = asString(config.cwd, process.cwd());
+
+  // Honest-disable: if the CLI binary is not in PATH, return warn immediately.
+  // On the hosted Fly server (no claude binary), this surfaces a clear message
+  // pointing to the BYO runner instead of failing silently downstream.
+  if (!isBinaryInPath(command)) {
+    checks.push({
+      code: "claude_local_cli_not_found",
+      level: "warn",
+      message:
+        "Claude Code CLI is not available on this server. Use 'Connect your own runner' to run Claude agents from your laptop.",
+      hint: "Install the Claude Code CLI on your local machine and connect a BYO runner at /settings/runner. See https://docs.anthropic.com/en/docs/claude-code for setup instructions.",
+    });
+    return {
+      adapterType: ctx.adapterType,
+      status: "warn",
+      checks,
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
