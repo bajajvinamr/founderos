@@ -251,22 +251,30 @@ describe("mapOnboardingChoiceToAdapter (S7.0.2)", () => {
     expect(mapOnboardingChoiceToAdapter("openai_api")).toBe("openai_api");
   });
 
-  it("maps google_api → gemini_api (backwards-compatible rename in Phase C3)", () => {
-    expect(mapOnboardingChoiceToAdapter("google_api")).toBe("gemini_api");
+  it("throws for google_api (S7 Phase 4 — not yet implemented)", () => {
+    expect(() => mapOnboardingChoiceToAdapter("google_api")).toThrow(
+      /not yet implemented/i,
+    );
   });
 
   it("maps skip → claude_local (preserves pre-S7 default)", () => {
     expect(mapOnboardingChoiceToAdapter("skip")).toBe("claude_local");
   });
 
-  // Exhaustiveness — every value in ONBOARDING_ADAPTER_CHOICES must map
-  // to a non-empty adapter type. Catches new entries that forget to extend
-  // the helper or entries that still throw unsupported errors.
-  it("maps every ONBOARDING_ADAPTER_CHOICES value to a valid adapter type", () => {
+  // Exhaustiveness — every value in ONBOARDING_ADAPTER_CHOICES must EITHER
+  // map to a non-empty adapter type OR explicitly throw a "not yet
+  // implemented" error. Catches new entries that forget to extend the
+  // helper.
+  it("maps every ONBOARDING_ADAPTER_CHOICES value (returns string or throws explicitly)", () => {
     for (const choice of ONBOARDING_ADAPTER_CHOICES) {
-      const mapped = mapOnboardingChoiceToAdapter(choice);
-      expect(typeof mapped).toBe("string");
-      expect(mapped.length).toBeGreaterThan(0);
+      try {
+        const mapped = mapOnboardingChoiceToAdapter(choice);
+        expect(typeof mapped).toBe("string");
+        expect(mapped.length).toBeGreaterThan(0);
+      } catch (err) {
+        // Explicit "not yet implemented" is the only acceptable throw.
+        expect((err as Error).message).toMatch(/not yet implemented/i);
+      }
     }
   });
 });
