@@ -4,14 +4,15 @@
 
 ## Lifecycle
 
-- **status**: `active`
+- **status**: `stopped`
 - **activated_at**: 2026-05-11T12:30:00Z  <!-- Activation 2: user explicitly relaunched after reviewing 7-ship summary and merging #176 + #178 -->
 - **stop_at**: 2026-05-11T20:30:00Z
-- **stopped_at**: null
-- **halt_reason**: null
+- **stopped_at**: 2026-05-12T12:07:01Z
+- **halt_reason**: superseded — manual operator sweep on 2026-05-12 merged all queued PRs (#181, #182, and ~30 others) via admin-bypass; canary recovery + main-typecheck-fix shipped via PR #192. SIG-012/SIG-014 auto-resolved by their underlying PRs landing. No remaining autoloop user-queue items.
 - **activation_mode**: `user-explicit-relaunch`
 - **activation_authority**: user message "Go ahead merge and launch a new autonomous loop like the last one" (2026-05-11T~12:30Z) — supersedes Activation 1 (01:08Z) which had implicitly extended past 09:08Z stop_at on "keep going" momentum
 - **activation_1_summary**: 7 ships (#170-175 + #177) over ~11h; P2 phase complete; #176 + #178 user-approved here and now landing; 10 SIGNOFFS pending (SIG-008/009 marked auto-merge-enrolled)
+- **closure_notes**: Vanta-sync on 2026-05-12 confirmed all autoloop-tracked PRs landed via the manual sweep. No structural loop work remains; future autonomous-loop activations should re-generate this STATE.md from the autoloop scaffold rather than mutate stale counters.
 
 ## Permissions Posture (this run)
 
@@ -37,11 +38,11 @@
 
 ## Concurrency Tracking
 
-- **eng_dispatches_in_flight**: 0  <!-- EQ-015 + EQ-016 both returned cleanly; 0 active eng dispatches -->
+- **eng_dispatches_in_flight**: 0  <!-- closed 2026-05-12; loop stopped -->
 - **eng_dispatches_max**: 2
-- **open_prs**: 3  <!-- #163 long-standing close-rec + #181 (Tier-2, fix-commit pushed + rebased + RV-003 APPROVE-CI-GREEN) + #182 (Tier-2, RV-004 APPROVE) -->
-- **open_prs_max**: 2  <!-- over by 1 (long-standing #163); 2 autoloop PRs both review-passed, both pending CI -->
-- **autoloop_prs_open**: 2  <!-- #181 + #182 — both reviewed APPROVE-equivalent by Sample-N reviewers, both Tier-2 user-merge-only -->
+- **open_prs**: 0  <!-- post-sweep 2026-05-12: #181 + #182 merged via admin-bypass; #163 reverted via #191 then re-targeted by current Vanta-sync work -->
+- **open_prs_max**: 2
+- **autoloop_prs_open**: 0  <!-- post-sweep 2026-05-12 -->
 - **autoloop_prs_merged**: 11
 - **autoloop_dispatches_completed**: 16  <!-- +EQ-015 + EQ-016 -->
 - **autoloop_dispatches_escalated**: 1
@@ -54,7 +55,7 @@
 - **autoloop_reviewer_findings_real_bugs_caught**: 1
 - **autoloop_reviewer_false_positives**: 2  <!-- RV-004 claimed docs/code-review-practices.md + packages/shared/src/display-dictionary.ts missing; both verified present on origin/main -->
 - **avg_round_trip_minutes**: ~9.1
-- **user_queue_pending**: 3  <!-- SIG-010 P3 + SIG-012 (#181 review) + SIG-014 (#182 review); both #181 and #182 have positive reviewer verdicts; user-merge gates -->
+- **user_queue_pending**: 0  <!-- post-sweep 2026-05-12: SIG-010 closed (test failures triaged via PR #191 revert + #192 typecheck-fix); SIG-012 resolved (#181 merged in sweep); SIG-014 resolved (#182 merged in sweep) -->
 - **review_loop_e2e_complete**: 1  <!-- RV-002 found 3 → user authorized fix → EQ-015 dispatched → push → RV-003 verified all 3 fixed; full fix-rereview cycle closed in ~30min -->
 - **last_product_dispatch_at**: null  <!-- still no need; backlog has 21 items pre-seeded -->
 - **product_dispatch_interval_min**: 90
