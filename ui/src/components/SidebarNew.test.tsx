@@ -52,6 +52,10 @@ const mockAuthApi = vi.hoisted(() => ({
   signOut: vi.fn(),
 }));
 
+const mockNotificationsApi = vi.hoisted(() => ({
+  unreadCount: vi.fn(),
+}));
+
 vi.mock("../context/CompanyContext", () => ({
   useCompany: () => companyState,
 }));
@@ -66,6 +70,10 @@ vi.mock("../api/approvals", () => ({
 
 vi.mock("../api/auth", () => ({
   authApi: mockAuthApi,
+}));
+
+vi.mock("../api/notifications", () => ({
+  notificationsApi: mockNotificationsApi,
 }));
 
 // React 19 act() environment hint.
@@ -122,6 +130,7 @@ function mountSidebar(): Mount {
 beforeEach(() => {
   mockApprovalsApi.list.mockResolvedValue([]);
   mockAuthApi.getSession.mockResolvedValue({ user: { id: "u-1", email: "v@example.com", name: "Vinamr" } });
+  mockNotificationsApi.unreadCount.mockResolvedValue({ unreadCount: 0 });
 });
 
 afterEach(() => {

@@ -187,4 +187,7 @@ export const queryKeys = {
     list: (companyId: string) => ["integration-health", companyId] as const,
     kpiFreshness: (companyId: string) => ["kpi-freshness", companyId] as const,
   },
+  notifications: {
+    unreadCount: (companyId: string) => ["notifications", "unread-count", companyId] as const,
+  },
 };

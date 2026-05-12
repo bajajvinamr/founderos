@@ -14,6 +14,7 @@ import { NavLink, useNavigate } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { authApi } from "../api/auth";
 import { approvalsApi } from "../api/approvals";
+import { notificationsApi } from "../api/notifications";
 import { queryKeys } from "../lib/queryKeys";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -94,16 +95,28 @@ export function SidebarNew() {
   });
 
   // Today's badge — count of pending decisions (approvals awaiting
-  // founder call). This is the ONLY chrome badge per §7.4. Inbox/
-  // Approvals badges are gone from sidebar; their counts live inside Today.
+  // founder call) PLUS unread notifications. This is the ONLY chrome
+  // badge per §7.4. Inbox/Approvals badges are gone from sidebar; their
+  // counts live inside Today.
   const { data: pendingApprovals = [] } = useQuery({
     queryKey: queryKeys.approvals.list(selectedCompanyId!, "pending"),
     queryFn: () => approvalsApi.list(selectedCompanyId!, "pending"),
     enabled: !!selectedCompanyId,
   });
-  const todayCount = pendingApprovals.filter(
+  const pendingApprovalsCount = pendingApprovals.filter(
     (a) => a.status === "pending" || a.status === "revision_requested",
   ).length;
+
+  // Poll unread notification count every 30 seconds (TC03 — polling cap).
+  const { data: unreadCountData } = useQuery({
+    queryKey: queryKeys.notifications.unreadCount(selectedCompanyId!),
+    queryFn: () => notificationsApi.unreadCount(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30_000,
+  });
+  const unreadNotificationsCount = unreadCountData?.unreadCount ?? 0;
+
+  const todayCount = pendingApprovalsCount + unreadNotificationsCount;
 
   return (
     <aside className="flex h-full min-h-0 w-60 flex-col border-r border-border bg-background">

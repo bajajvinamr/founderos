@@ -30,6 +30,7 @@ import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
 import { authApi } from "../api/auth";
 import { approvalsApi } from "../api/approvals";
+import { notificationsApi } from "../api/notifications";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,15 @@ export function Sidebar() {
   const pendingApprovalCount = pendingApprovals.filter(
     (a) => a.status === "pending" || a.status === "revision_requested",
   ).length;
+
+  // Poll unread notification count every 30 seconds (TC03 — polling cap).
+  const { data: unreadCountData } = useQuery({
+    queryKey: queryKeys.notifications.unreadCount(selectedCompanyId!),
+    queryFn: () => notificationsApi.unreadCount(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30_000,
+  });
+  const unreadNotificationsCount = unreadCountData?.unreadCount ?? 0;
 
   function openSearch() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
@@ -118,7 +128,7 @@ export function Sidebar() {
             to="/inbox"
             label="Inbox"
             icon={Inbox}
-            badge={inboxBadge.inbox}
+            badge={inboxBadge.inbox + unreadNotificationsCount}
             badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
             alert={inboxBadge.failedRuns > 0}
           />
