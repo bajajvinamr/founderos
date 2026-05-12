@@ -904,6 +904,8 @@ export const INTEGRATION_KINDS = [
   "slack",
   "notion",
   "linkedin",
+  "gmail",
+  "github",
 ] as const;
 export type IntegrationKind = (typeof INTEGRATION_KINDS)[number];
 
@@ -974,6 +976,24 @@ export const INTEGRATION_CATALOG: Record<IntegrationKind, IntegrationCatalogEntr
     keyLabel: "Access token",
     keyHint: "Via LinkedIn Developer app",
     department: "growth",
+    authMethod: "oauth",
+  },
+  gmail: {
+    label: "Gmail",
+    description: "Read inbox, create drafts. Maya and Iris use this.",
+    website: "https://mail.google.com",
+    keyLabel: "OAuth",
+    keyHint: "Connect via OAuth",
+    department: "comms",
+    authMethod: "oauth",
+  },
+  github: {
+    label: "GitHub",
+    description: "Read issues and PRs. Engineering agents use this.",
+    website: "https://github.com",
+    keyLabel: "OAuth",
+    keyHint: "Connect via OAuth",
+    department: "engineering",
     authMethod: "oauth",
   },
 };
