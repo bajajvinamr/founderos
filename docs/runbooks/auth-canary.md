@@ -14,7 +14,7 @@ GitHub issue + Slack `#oncall` page.
 
 | Field | Value |
 |---|---|
-| Email | `canary@founderos.dev` (or a similar address — must be a domain you control) |
+| Email | `bajajvinamr+canary@gmail.com` (or a similar address — must be a domain you control) |
 | Password | Stored in `CANARY_USER_PASSWORD` GitHub secret + Fly secret; rotated quarterly |
 | Email confirmed | Yes — pre-confirmed via Supabase admin API at provisioning |
 | Companies | At least 1 (so post-auth lands on `/{PREFIX}/dashboard`, not the empty state) |
@@ -32,7 +32,7 @@ password is lost.
 #    Run from anywhere with SUPABASE_SERVICE_ROLE_KEY.
 SUPABASE_PROJECT_REF=ggspsiexqppduvsqvpgy
 SUPABASE_SERVICE_ROLE_KEY="<service-role-from-vault>"
-CANARY_EMAIL="canary@founderos.dev"
+CANARY_EMAIL="bajajvinamr+canary@gmail.com"
 CANARY_PW="$(openssl rand -base64 32)"
 
 curl -sX POST \

@@ -204,7 +204,11 @@ function TopBar() {
         <FounderOSLogo size={18} />
         <nav className="hidden md:flex items-center gap-6 font-mono caps text-[10px] text-pulse-muted">
           {navLinks.map((l) => (
-            <a key={l.to} href={l.to} className="hover:text-pulse-bone transition-colors">
+            <a
+              key={l.to}
+              href={l.to}
+              className="min-h-[44px] flex items-center hover:text-pulse-bone transition-colors"
+            >
               {l.label}
             </a>
           ))}

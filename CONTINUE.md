@@ -22,48 +22,46 @@ Prod is **live and healthy** on `founderos.fly.dev`. CI gates are functional aft
 
 ## The 2026-05-10 design audits — Stripe-style + Notion-style
 
-Two complementary audits produced on 2026-05-10, both unshipped:
+Two complementary audits produced on 2026-05-10:
 
 **`.planning/DESIGN-AUDIT-2026-05-10.md` — visual + conversion lens.** Tone of an ex-Stripe designer: copy, type, accessibility, conversion cliffs. Top 10 fixes ranked by impact/effort, all UI-side.
 
 **`.planning/PRODUCT-AUDIT-2026-05-10.md` — product + UX lens.** Tone of an ex-Notion designer: JTBD coverage, glossary land mines, recovery-from-failure. Top 5 P0 actions ranked by ROI per engineering hour.
 
-### Combined P0 fix list (cross-cutting from both audits)
+### Combined fix list status (verified 2026-05-12)
 
-| # | From | File | Change | Est |
-|---|---|---|---|---|
-| 1 | Product | `ui/src/main.tsx` | Top-level React `ErrorBoundary` — currently a render error shows a white screen. Single highest-leverage UX fix | 1 hr |
-| 2 | Design | `ui/src/pages/Auth.tsx:169-170` | Replace "plug in your Anthropic key" with "connect your AI provider" — biggest non-tech conversion cliff | 5 min |
-| 3 | Design | `ui/src/pages/Landing.tsx` (Hero) | Replace "Measurable MRR lift" with "Measurable revenue growth" | 5 min |
-| 4 | Product | `ui/src/App.tsx` + new `RunnerStatusBanner` | Post-onboarding "Your runner is not connected" banner. Doesn't fix execution gap — makes it visible. Uses existing `runner_tokens.lastSeenAt` | 2-3 hr |
-| 5 | Product | `ui/src/pages/Landing.tsx:1089` | Remove false-advertising FAQ item about company export (no export button exists). Or build a minimal export (4 hr) | 30 min |
-| 6 | Product | Sidebar nav + new count endpoint | Notification badge on Inbox nav item, polled 30s. Data layer (S6.6) already exists | 3-4 hr |
-| 7 | Design | `ui/src/pages/Auth.tsx:174-198` | Auth tab buttons `py-1.5 text-xs` → `py-2 text-sm` + `min-h-[40px]` wrapper. Currently 28px touch target | 10 min |
-| 8 | Design | `ui/src/pages/Landing.tsx` TopBar | `min-h-[44px]` on nav `<a>` at `md` breakpoint. Currently 15px at 768px | 10 min |
-| 9 | Product | Onboarding adapter chooser | Rewrite with required-setup-per-tile copy + disable tiles that lack working E2E path | 4-6 hr |
-| 10 | Design | Router catch-all | `<NotFound />` for unknown routes instead of redirect-to-auth | 30 min |
+**6 of 7 cheap audit items already shipped** in the 2 days since the audit. One remaining + bigger P0s still open:
 
-**Roughly:** half a day of copy + accessibility fixes (#2, #3, #5, #7, #8, #10) closes the most glaring landing-page and auth gaps. The bigger P0s (#1, #4, #6, #9) are 1-2 days combined and decisively close the "non-tech founder can use this" gap.
+| # | From | File | Status |
+|---|---|---|---|
+| 1 | Product | `ui/src/main.tsx:8/47/77` | ✅ shipped — `ErrorBoundary` wraps `<App />` |
+| 2 | Design | `ui/src/pages/Auth.tsx:170` | ✅ shipped — copy reads "connect your AI provider" |
+| 3 | Design | `ui/src/pages/Landing.tsx:286` | ✅ shipped — "Measurable revenue growth in 14 to 30 days" |
+| 4 | Product | RunnerStatusBanner | ⏳ open — "Your runner is not connected" persistent banner (2-3 hr) |
+| 5 | Product | `ui/src/pages/Landing.tsx:1093` | ✅ shipped (de-escalated) — FAQ now reads "Coming soon — email hello@founderos.dev for manual export". No more false advertising |
+| 6 | Product | Sidebar Inbox + count endpoint | ⏳ open — notification badge polled 30s (3-4 hr) |
+| 7 | Design | `ui/src/pages/Auth.tsx:174-207` | ✅ shipped — tab buttons use `min-h-[40px]` + `px-4 py-2` |
+| 8 | Design | `ui/src/pages/Landing.tsx:205-211` | ✅ shipped in this PR — `min-h-[44px] flex items-center` on each nav `<a>` |
+| 9 | Product | Onboarding adapter chooser | ⏳ open — rewrite with per-tile requirements + disable broken tiles (4-6 hr) |
+| 10 | Design | `ui/src/App.tsx:332,670` | ✅ shipped — `NotFoundPage` mounted at both board and global catch-alls |
+
+**The remaining three open items** (#4 RunnerStatusBanner, #6 notification badge, #9 adapter chooser rewrite) are the bigger P0s — collectively ~10 hr. The cheap cluster is now closed.
+
+The earlier CONTINUE.md claim of "neither shipped yet" was wrong — the prior session didn't verify against current code. Lesson: always grep current state before declaring audit findings open.
 
 ## Active threads (blocking-ranked)
 
-### 1. Canary 401 on `/api/companies` (post-deploy synthetic)
+### 1. Canary 401 on `/api/companies` — ROOT CAUSE FOUND ✅
 
-Investigation complete (sub-agent report 2026-05-12). User `bajajvinamr+canary@gmail.com` exists in Supabase auth + `public."user"` (Fly MPG) with owner membership in "Canary Co" (company `eeaeffa1-f9ce-4a41-88d6-83816dfc72bb`). The 401 means `req.actor.type === "none"` — Supabase JWT verification is failing OR the session resolver isn't being called.
+**It's a spec race, not a prod auth bug.** Confirmed 2026-05-12 by cross-referencing `gh run list` (3/8 runs succeed, 5/8 fail — pattern rules out hard config issue) and reading `e2e/tests/auth-round-trip.spec.ts:86-95`.
 
-**Two top hypotheses, ranked:**
+`page.waitForResponse` is registered BEFORE the sign-in button is clicked. Its predicate matches the FIRST `/api/companies` GET after promise creation. When a React effect on the `/auth` page mount (or the redirect-transition state) fires a `GET /api/companies` before the Supabase JWT is stored client-side, that pre-auth call correctly returns 401 — and the spec catches THAT response instead of the real post-auth one.
 
-1. **JWT verification failure** (highest probability). `verifySupabaseJwt()` returns null on any of: missing `SUPABASE_URL`, missing `SUPABASE_JWT_SECRET`, JWKS unreachable, expired/wrong-aud token. The 401 path triggers when `assertBoard(req)` sees `actor.type === "none"`.
+**Fix in this PR:** filter the predicate on `Authorization: Bearer ...` header presence. Pre-auth fetches are ignored (no bearer header); real bearer-token regressions still trigger via the 20s timeout. Same pattern as the "1-strike public probe → structural false positive" invariant from the sales-agent-publisher cloudflared incident.
 
-2. **Race condition** in `maybeBootstrapNewUser()` post-signup hook — but that would produce 403, not 401. Lower probability given the 401 signature.
+Prod auth is healthy. The canary was paging on-call ~5×/day for a test-layer race.
 
-**Recommended next step (not yet executed):**
-```bash
-fly logs --app founderos --level debug | grep -A5 "supabase JWT verify failed"
-```
-Confirms whether the 401 is no-session or failed-JWT-decode. If logs show `code: "JWKS.*"` → `SUPABASE_URL` env unreachable. If `code: "JWTClaimsValidationFailed"` → aud/iss mismatch. If silent → middleware not wired.
-
-Files involved: `server/src/routes/companies.ts:78`, `server/src/routes/authz.ts:4-11` (`assertBoard`), `server/src/middleware/auth.ts:33-302` (`actorMiddleware`), `server/src/auth/supabase.ts:339-346` (`resolveSupabaseSession`).
+Also fixed in this PR: `docs/runbooks/auth-canary.md` updated from documented `canary@founderos.dev` to the actually-provisioned `bajajvinamr+canary@gmail.com`.
 
 ### 2. Hiring context — "2 engineers to redo the frontend"
 

@@ -85,9 +85,28 @@ test.describe("[auth-round-trip] sign-in flow against live Supabase", () => {
 
     // Capture the /api/companies call that fires immediately after auth —
     // this is the load-bearing proof that the bearer token round-trips.
+    //
+    // The predicate filters on `Authorization: Bearer ...` presence. Without
+    // this filter, ANY /api/companies GET arriving after promise creation
+    // matches — including pre-auth React-effect fetches from the /auth page
+    // mount or the redirect-transition state, which correctly 401 because
+    // Supabase hasn't completed sign-in yet. That false-positive flake was
+    // paging on-call ~5x/day (verified across runs 25728012707, 25726997110,
+    // 25720546596, 25733102706, 25733905196 on 2026-05-12).
+    //
+    // Filtering on Bearer-header presence ignores pre-auth noise while still
+    // detecting real bearer-token attachment regressions (timeout fires when
+    // no authed companies call arrives within 20s).
     const companiesPromise = page.waitForResponse(
-      (resp) =>
-        resp.url().includes("/api/companies") && resp.request().method() === "GET",
+      (resp) => {
+        if (!resp.url().includes("/api/companies")) return false;
+        if (resp.request().method() !== "GET") return false;
+        const authHeader = resp.request().headers()["authorization"];
+        return (
+          typeof authHeader === "string" &&
+          authHeader.toLowerCase().startsWith("bearer ")
+        );
+      },
       { timeout: 20_000 },
     );
 
