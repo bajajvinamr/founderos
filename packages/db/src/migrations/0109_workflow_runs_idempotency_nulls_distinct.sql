@@ -1,0 +1,69 @@
+-- 2026-05-13 — L2-F03 / ST-9 — workflow_runs idempotency_key NULLS DISTINCT
+--
+-- Relaxes the unique constraint introduced in 0092 from
+--   UNIQUE NULLS NOT DISTINCT (company_id, workflow_id, idempotency_key)
+-- to
+--   UNIQUE (company_id, workflow_id, idempotency_key)
+-- i.e. Postgres default NULLS DISTINCT semantics.
+--
+-- ## Why
+--
+-- The 0092 constraint over-collapsed NULL: two rows with `idempotency_key=NULL`
+-- for the same (company_id, workflow_id) were treated as equal and the second
+-- INSERT was rejected. That is the wrong contract for the application layer:
+--
+--   - `services/workflows.ts:createWorkflowRun()` and `routes/workflows.ts:383`
+--     pass NO idempotencyKey for founder-initiated manual runs — the intent is
+--     "always allow a new run." Under NULLS NOT DISTINCT this silently failed
+--     on the second click (insert hit ON CONFLICT DO NOTHING → no row → the
+--     "re-query existing" branch was guarded on a truthy `input.idempotencyKey`
+--     and fell through to `throw new Error("Insert returned no run row")`).
+--
+--   - Every bulk-insert test path (workflow-rate-limit, workflow-run-approval,
+--     churn-rescue) had to compute a synthetic `seed-<random>-<i>` key just to
+--     avoid the constraint — explicit evidence the constraint was wrong-shaped.
+--     See `workflow-rate-limit.test.ts:207-209` ("all-NULL bulk inserts collide").
+--
+-- ## What changes semantically
+--
+-- After this migration:
+--   - Two rows with idempotency_key=NULL for same (company_id, workflow_id) →
+--     BOTH ALLOWED (NULL ≠ NULL under default Postgres comparison).
+--   - Two rows with identical non-NULL idempotency_key for same
+--     (company_id, workflow_id) → STILL DEDUPED (this is the actual contract
+--     callers rely on, e.g. churn-rescue using externalEventId).
+--   - Different (company_id, workflow_id) → never collide, regardless of key.
+--
+-- This matches the dedup family pattern documented in vinamr-invariants:
+-- "UNIQUE + ON CONFLICT DO NOTHING + NULLABLE = dedup loss" — but inverted.
+-- Here the application explicitly does NOT want dedup when no key is passed.
+-- Callers that want dedup MUST pass a synthetic key (the churn-rescue pattern).
+--
+-- ## Existing-data safety
+--
+-- Under the 0092 constraint a (company_id, workflow_id) tuple could have at
+-- most ONE row with idempotency_key=NULL — the constraint enforced it. So no
+-- pre-cleanup is needed; relaxing the constraint cannot fail on existing rows.
+--
+-- ## Lock semantics
+--
+-- DROP CONSTRAINT + ADD CONSTRAINT each take ACCESS EXCLUSIVE on workflow_runs.
+-- Per vinamr-invariants ("Postgres ACCESS EXCLUSIVE lock minimization") these
+-- are combined into a single ALTER TABLE statement so the lock is acquired
+-- and released exactly once.
+--
+-- ## Rollback
+--
+--   ALTER TABLE workflow_runs
+--     DROP CONSTRAINT IF EXISTS workflow_runs_idempotency_unique,
+--     ADD CONSTRAINT workflow_runs_idempotency_unique
+--       UNIQUE NULLS NOT DISTINCT (company_id, workflow_id, idempotency_key);
+--
+-- Rollback safety: same — relaxed → strict CAN fail if NULL duplicates have
+-- been inserted in the meantime. If reverting, run a pre-rollback cleanup
+-- to collapse NULL duplicates first (keep oldest row by created_at).
+
+ALTER TABLE workflow_runs
+  DROP CONSTRAINT IF EXISTS workflow_runs_idempotency_unique,
+  ADD CONSTRAINT workflow_runs_idempotency_unique
+    UNIQUE (company_id, workflow_id, idempotency_key);

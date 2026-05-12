@@ -3,6 +3,7 @@
  *
  * Tests for idempotency_key deduplication in workflow_runs.
  * Council 2026-05-06 S4.8 prerequisite #2.
+ * Extended 2026-05-13 (L2-F03 / ST-9) to lock the NULLS DISTINCT contract.
  *
  * Spec:
  *   - G1: createWorkflowRun without idempotencyKey → row created, no conflict
@@ -10,6 +11,13 @@
  *   - G3: Same key but DIFFERENT workflowIds → 2 rows (composite-scoped)
  *   - G4: Same key but DIFFERENT companyIds → 2 rows (tenancy preserved)
  *   - G5: Concurrent creates with same key → exactly 1 row (race-safe)
+ *   - G6: Two creates with NULL key, same (companyId, workflowId) → 2 rows
+ *         (NULLS DISTINCT — explicit "always allow new run" for keyless callers).
+ *         REGRESSION GUARD for L2-F03 / ST-9: pre-0109 this threw because the
+ *         constraint was NULLS NOT DISTINCT and onConflictDoNothing collapsed
+ *         to "Insert returned no run row".
+ *   - G7: NULL key alongside non-NULL keys for the same (companyId, workflowId)
+ *         → all rows allowed. Confirms NULL ≠ any-string in the index.
  */
 
 import { randomUUID } from "node:crypto";
@@ -231,6 +239,97 @@ describeEmbeddedPostgres("workflow_runs idempotency", () => {
     // Different companies → different rows
     expect(run1.id).not.toBe(run2.id);
     expect(run1.companyId).not.toBe(run2.companyId);
+  });
+
+  it("G6: Two creates with NULL key, same (companyId, workflowId) → 2 distinct rows (L2-F03 regression guard)", async () => {
+    const run1 = await createWorkflowRun(db, {
+      companyId,
+      workflowId,
+      actorType: "user",
+      actorId: "founder",
+      data: {
+        status: "running",
+        triggeredBy: { kind: "manual", actorId: "founder" },
+      },
+    });
+
+    // Second call with no idempotencyKey — pre-0109 this raised
+    // "Insert returned no run row" because UNIQUE NULLS NOT DISTINCT made
+    // the second NULL collide with the first, ON CONFLICT DO NOTHING returned
+    // no row, and the re-query branch was guarded on a truthy key.
+    const run2 = await createWorkflowRun(db, {
+      companyId,
+      workflowId,
+      actorType: "user",
+      actorId: "founder",
+      data: {
+        status: "running",
+        triggeredBy: { kind: "manual", actorId: "founder" },
+      },
+    });
+
+    expect(run1.id).not.toBe(run2.id);
+    expect(run1.idempotencyKey).toBeNull();
+    expect(run2.idempotencyKey).toBeNull();
+
+    // Also verify explicit-null is treated identically to omitted.
+    const run3 = await createWorkflowRun(db, {
+      companyId,
+      workflowId,
+      actorType: "user",
+      actorId: "founder",
+      idempotencyKey: null,
+      data: {
+        status: "running",
+        triggeredBy: { kind: "manual", actorId: "founder" },
+      },
+    });
+    expect(run3.id).not.toBe(run1.id);
+    expect(run3.id).not.toBe(run2.id);
+    expect(run3.idempotencyKey).toBeNull();
+  });
+
+  it("G7: NULL key alongside non-NULL keys for same (companyId, workflowId) → all rows allowed", async () => {
+    const nullRun = await createWorkflowRun(db, {
+      companyId,
+      workflowId,
+      actorType: "system",
+      actorId: "test",
+      data: {
+        status: "running",
+        triggeredBy: { kind: "manual", actorId: "test" },
+      },
+    });
+
+    const keyedRun = await createWorkflowRun(db, {
+      companyId,
+      workflowId,
+      actorType: "system",
+      actorId: "test",
+      idempotencyKey: "evt-abc",
+      data: {
+        status: "running",
+        triggeredBy: { kind: "event", eventId: "abc", eventName: "test" },
+      },
+    });
+
+    // Same key as the second insert — should DEDUP, NOT collide with the NULL row.
+    const keyedDup = await createWorkflowRun(db, {
+      companyId,
+      workflowId,
+      actorType: "system",
+      actorId: "test",
+      idempotencyKey: "evt-abc",
+      data: {
+        status: "running",
+        triggeredBy: { kind: "event", eventId: "abc", eventName: "test" },
+      },
+    });
+
+    expect(nullRun.id).not.toBe(keyedRun.id);
+    expect(keyedRun.id).toBe(keyedDup.id); // non-NULL key still dedups
+    expect(nullRun.idempotencyKey).toBeNull();
+    expect(keyedRun.idempotencyKey).toBe("evt-abc");
   });
 
   it("G5: Concurrent creates with same key → exactly 1 row (race-safe)", async () => {

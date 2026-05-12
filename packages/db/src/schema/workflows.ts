@@ -209,11 +209,26 @@ export const workflowRuns = pgTable(
     metricSnapshot: jsonb("metric_snapshot").$type<Record<string, unknown>>(),
     /**
      * idempotencyKey: optional composite-scoped dedup key for workflow run creation.
-     * When provided, enables race-safe dedup via UNIQUE NULLS NOT DISTINCT on
-     * (company_id, workflow_id, idempotency_key). Null values collide once per
-     * (company_id, workflow_id) pair, preventing accidental dual-NULL rows during
-     * migration. Used to prevent duplicate runs from dual triggers (kpi_anomaly
-     * insight + Stripe at_risk webhook on same customer same day).
+     *
+     * Constraint: UNIQUE (company_id, workflow_id, idempotency_key) — Postgres
+     * default NULLS DISTINCT semantics (relaxed in migration 0109, L2-F03 / ST-9).
+     *
+     * Contract:
+     *   - When provided (non-null), enables race-safe dedup. Two inserts with
+     *     the same (company_id, workflow_id, idempotency_key) tuple collide on
+     *     the second; callers MUST handle `.onConflictDoNothing()` and re-query.
+     *   - When NULL, NO dedup is applied — every insert with no key creates a
+     *     new row. This is the "founder clicked Run again" semantic: always
+     *     allow a new manual run.
+     *   - Callers that want dedup but don't have a natural id MUST compute a
+     *     synthetic key (e.g. churn-rescue uses `externalEventId`; bulk-seed
+     *     test paths use `seed-<tag>-<i>`). Same pattern as
+     *     `events.dedup_key NOT NULL` in event-ingest.
+     *
+     * Used to prevent duplicate runs from dual triggers (kpi_anomaly insight +
+     * Stripe at_risk webhook on same customer same day). See migration 0109
+     * header for the historical reason the constraint was relaxed from
+     * NULLS NOT DISTINCT to NULLS DISTINCT.
      */
     idempotencyKey: text("idempotency_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
