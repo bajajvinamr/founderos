@@ -14,6 +14,9 @@
  *   *.ingest.sentry.io / sentry.io                         — error reporting
  *   api.anthropic.com                                      — direct LLM calls
  *   js.stripe.com / api.stripe.com / hooks.stripe.com      — Stripe checkout
+ *   fonts.googleapis.com / fonts.gstatic.com               — Google Fonts
+ *                                                            stylesheet + woff2
+ *                                                            (ui/index.html)
  *
  * The CSP is intentionally NOT report-only. The 2026-05-03 council BLOCK
  * called out "no CSP" as a P1 — shipping report-only would still be a
@@ -47,6 +50,13 @@ const ANTHROPIC_HOSTS = "https://api.anthropic.com";
 const STRIPE_HOSTS = "https://api.stripe.com https://hooks.stripe.com";
 const STRIPE_FRAME = "https://js.stripe.com https://hooks.stripe.com";
 const STRIPE_SCRIPT = "https://js.stripe.com";
+// Google Fonts — `ui/index.html` loads the Inter/Instrument Serif/Fraunces/
+// JetBrains Mono stylesheet from `fonts.googleapis.com` and the woff2 files
+// from `fonts.gstatic.com` (separate origin). Without these entries the
+// stylesheet fetch is CSP-blocked and the page silently degrades to system
+// fallback fonts — visible only as a console error per page load (L2-F04).
+const GOOGLE_FONTS_STYLE_HOSTS = "https://fonts.googleapis.com";
+const GOOGLE_FONTS_FONT_HOSTS = "https://fonts.gstatic.com";
 
 export function buildContentSecurityPolicy(opts: SecurityHeadersOptions): string {
   const supabaseExact = opts.supabaseUrl ? new URL(opts.supabaseUrl).origin : "";
@@ -56,9 +66,9 @@ export function buildContentSecurityPolicy(opts: SecurityHeadersOptions): string
     // Tailwind v4 + React inline styles need 'unsafe-inline' for now.
     // Stripe.js loads from js.stripe.com.
     "script-src": ["'self'", "'unsafe-inline'", STRIPE_SCRIPT],
-    "style-src": ["'self'", "'unsafe-inline'"],
+    "style-src": ["'self'", "'unsafe-inline'", GOOGLE_FONTS_STYLE_HOSTS],
     "img-src": ["'self'", "data:", "blob:", "https:"],
-    "font-src": ["'self'", "data:"],
+    "font-src": ["'self'", "data:", GOOGLE_FONTS_FONT_HOSTS],
     "connect-src": [
       "'self'",
       "ws:",

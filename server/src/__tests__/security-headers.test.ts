@@ -54,6 +54,20 @@ describe("buildContentSecurityPolicy", () => {
     expect(csp).toMatch(/object-src 'none'/);
   });
 
+  it("allows Google Fonts stylesheet (style-src) + woff2 (font-src) — L2-F04", () => {
+    const csp = buildContentSecurityPolicy({});
+    // ui/index.html loads the Inter/Instrument Serif/Fraunces/JetBrains Mono
+    // stylesheet from fonts.googleapis.com; without this entry the request
+    // is CSP-blocked and the page silently degrades to system fonts.
+    expect(csp).toMatch(/style-src[^;]*fonts\.googleapis\.com/);
+    // Google Fonts loads woff2 files from fonts.gstatic.com (separate origin
+    // from the stylesheet) — both must be allowlisted.
+    expect(csp).toMatch(/font-src[^;]*fonts\.gstatic\.com/);
+    // Make sure we didn't open up style-src or font-src wildcards.
+    expect(csp).not.toMatch(/style-src[^;]*\bhttps:\s/);
+    expect(csp).not.toMatch(/font-src[^;]*\bhttps:\s/);
+  });
+
   it("pins the exact Supabase project host when provided", () => {
     const csp = buildContentSecurityPolicy({
       supabaseUrl: "https://ggspsiexqppduvsqvpgy.supabase.co",
