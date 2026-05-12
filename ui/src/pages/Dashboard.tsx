@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
@@ -27,11 +27,14 @@ import { QuickWinsWidget } from "../components/dashboard/QuickWinsWidget";
 import { YesterdayWidget } from "../components/dashboard/YesterdayWidget";
 import { DecisionsInbox } from "./DecisionsInbox";
 import { StatusIcon } from "../components/StatusIcon";
+import { RunnerInstallDialog } from "../components/RunnerInstallDialog";
+import { runnerApi } from "../api/runner";
+import { isHostedRunnerAdapter } from "../lib/runner-adapter-types";
 
 import { Identity } from "../components/Identity";
 import { AgentRunStatus } from "../components/AgentRunStatus";
 import { timeAgo } from "../lib/timeAgo";
-import { Bot, CircleDot, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, CircleDot, ShieldCheck, LayoutDashboard, PauseCircle, Terminal } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -49,6 +52,9 @@ export function Dashboard() {
   const { openOnboarding } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
 
+  // TA05 — runner install dialog state
+  const [runnerDialogOpen, setRunnerDialogOpen] = useState(false);
+
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
@@ -60,6 +66,32 @@ export function Dashboard() {
     queryFn: () => agentsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
+
+  // TA05 — runner status query. Reuses the same query key as RunnerStatusPill
+  // so React Query dedupes the network call when both render simultaneously.
+  // Enabled only when the company has at least one hosted-runner agent so we
+  // don't fire runner-status requests for founders who don't use BYO runner.
+  const hasHostedRunner = useMemo(
+    () => agents?.some((a) => isHostedRunnerAdapter(a.adapterType ?? null)) ?? false,
+    [agents],
+  );
+  const { data: runnerStatus } = useQuery({
+    queryKey: ["runner-status", selectedCompanyId],
+    queryFn: () => runnerApi.status(selectedCompanyId!),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000,
+    enabled: !!selectedCompanyId && hasHostedRunner,
+  });
+
+  // Show "Connect your runner" CTA when: there are hosted-runner agents,
+  // and no token is currently online (missing = no tokens; stale = tokens
+  // exist but none seen within 30s). Hidden once any token goes online.
+  const showRunnerConnectCta = useMemo(() => {
+    if (!hasHostedRunner) return false;
+    if (!runnerStatus) return false;
+    return !runnerStatus.tokens.some((t) => t.online);
+  }, [hasHostedRunner, runnerStatus]);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Dashboard" }]);
@@ -214,6 +246,35 @@ export function Dashboard() {
             className="text-sm font-medium text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 underline underline-offset-2 shrink-0"
           >
             Hire your first teammate
+          </button>
+        </div>
+      )}
+
+      {/* TA05 — "Connect your runner" CTA. Surfaces when the founder has
+          hosted-runner agents but no token is currently online. Uses the
+          same runner-status query key as RunnerStatusPill (React Query
+          dedupes the network call). Hidden once any token goes online. */}
+      {showRunnerConnectCta && selectedCompanyId && (
+        <div
+          data-testid="runner-connect-cta"
+          className="flex items-center justify-between gap-3 rounded-md border border-violet-300 bg-violet-50 px-4 py-3 dark:border-violet-500/25 dark:bg-violet-950/60"
+        >
+          <div className="flex items-center gap-2.5">
+            <Terminal className="h-4 w-4 text-violet-600 dark:text-violet-400 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-violet-900 dark:text-violet-100">
+                Your runner isn't connected
+              </p>
+              <p className="text-xs text-violet-700 dark:text-violet-300">
+                Agents won't run until you start the local runner daemon.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setRunnerDialogOpen(true)}
+            className="text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100 underline underline-offset-2 shrink-0"
+          >
+            Get setup instructions
           </button>
         </div>
       )}
@@ -391,6 +452,15 @@ export function Dashboard() {
           </div>
 
         </>
+      )}
+
+      {/* TA05 — RunnerInstallDialog for the "Connect your runner" CTA above. */}
+      {selectedCompanyId && (
+        <RunnerInstallDialog
+          open={runnerDialogOpen}
+          onOpenChange={setRunnerDialogOpen}
+          companyId={selectedCompanyId}
+        />
       )}
     </div>
   );
