@@ -53,14 +53,30 @@ All PRs branch off `loop/wave-2-base` SHA `2efbe94276dec9632383d48ade285575f82db
 1. **L2-F04 prod CSP missing `fonts.googleapis.com`** (single-line `style-src` fix; matches L2-F01 PR #207 pattern) — dispatched in Phase 3
 2. **Multi-tenant migration is unstarted** — user-FK + cascade is the current tenant boundary; will need its own ADR
 
-## Loop 2 Phase 3 (in flight) — 4 parallel agents
+## Loop 2 Phase 3 — 4 PRs (#217-#220) COMPLETE
 
-| Ticket | Lane | Source |
+| PR | Ticket | Key result |
 |---|---|---|
-| L2-F04 CSP fonts.googleapis.com | F | derived from L2-D04 finding |
-| L2-D19 404 markup safety | D | new |
-| L2-D20 security-headers shape smoke | D | new |
-| L2-A07 adapter-registry contract smoke | A | new |
+| #217 | L2-D20 security-headers shape | Captured prod CSP verbatim; canary red-flags missing registry.npmjs.org until L2-F01 merges |
+| #218 | L2-F04 CSP Google Fonts | style-src + font-src updated; closes L2-D04 console-error finding |
+| #219 | L2-D19 NotFound markup safety | Surfaced `:companyPrefix` route-precedence subtlety; test armed-but-skipping |
+| #220 | L2-A07 adapter-registry contract | **12 adapters walked**; **gemini/openai execute() arity divergence found** |
+
+**Findings for follow-up**:
+- L2-A08 harmonize `apiKeyResolver?` across `*_api` adapters (gemini has it, openai doesn't)
+- Adapter registry has 12 surfaces, not 4
+- `byo_runner` correctly opt-in via FOUNDEROS_BYO_RUNNER_ENABLED
+
+## Loop 2 Phase 4 (in flight) — 4 invariant-defense agents
+
+Each defends a CLAUDE.md-documented vinamr-invariant.
+
+| Ticket | Invariant defended |
+|---|---|
+| L2-D22 runner heartbeat last-seen | `lastSeenAt` updated by auth middleware (no explicit heartbeat endpoint) |
+| L2-D23 composio connectedAccountId | Cross-org leak fix PR #30 — `connectedAccountId` required |
+| L2-D24 request-context ALS inheritance | ALS propagates into setTimeout/queueMicrotask handlers |
+| L2-D25 events.dedup_key NOT NULL | Synthetic dedup-key contract enforced at DB |
 
 CI failure pattern remains informational only:
 - `test (+ coverage)` flake on `workspace-runtime.test.ts` parallel load (`docs/CI-KNOWN-FLAKES.md`)

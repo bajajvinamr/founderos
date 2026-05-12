@@ -58,16 +58,31 @@ All 6 PRs returned and opened:
 - **L2-F04 (new)**: Prod CSP missing `fonts.googleapis.com` in `style-src` — found by L2-D04's console-error filter. Single-line fix in `server/src/middleware/security-headers.ts` matching L2-F01's pattern.
 - **Multi-tenant migration is unstarted**: User-FK + ON DELETE CASCADE is the current tenant-isolation mechanism. Any future tenant work needs its own ADR.
 
-## Wave 2 Phase 3 (IN FLIGHT 2026-05-13T05:15Z) — 4 parallel agents
+## Wave 2 Phase 3 (DONE 2026-05-13T05:32Z) — 4 PRs landed (#217-#220)
 
-Two derived from Phase 2 findings, two new defensive smoke tests.
+| PR | Ticket | Notes |
+|---|---|---|
+| #217 | L2-D20 security-headers shape | Captured prod CSP verbatim; canary correctly red-flags missing `registry.npmjs.org` until L2-F01 (PR #207) merges; spec excluded from synthetic monitor |
+| #218 | L2-F04 CSP Google Fonts | Added `fonts.googleapis.com` to style-src + `fonts.gstatic.com` to font-src; discovered prod loads Inter + Instrument Serif + Fraunces + JetBrains Mono via `ui/index.html:20` |
+| #219 | L2-D19 NotFound markup safety | Surfaced route-resolution-order subtlety: `:companyPrefix/*` claims single-segment unknowns before catch-all; NotFound only reachable for multi-segment paths; test armed-but-skipping, asset-failure check unconditional |
+| #220 | L2-A07 adapter-registry contract | Walked 12 adapters; **found contract divergence: `gemini_api.execute` arity 2, `openai_api.execute` arity 1** (PR #198 added optional `apiKeyResolver?` to gemini but not openai); candidate for L2-A08 harmonization |
 
-| Ticket | Lane | Source | Notes |
-|---|---|---|---|
-| L2-F04 CSP fonts.googleapis.com | F | derived from L2-D04 | mirrors L2-F01 (PR #207) pattern |
-| L2-D19 404 markup safety smoke | D | new | new e2e test, no source touch |
-| L2-D20 security-headers smoke | D | new | verifies X-Frame/X-Content-Type/Referrer-Policy/CSP shape live |
-| L2-A07 adapter-registry contract smoke | A | new | walks adapter registry, asserts ServerAdapterModule shape uniformly |
+### Findings surfaced for follow-up
+- **L2-A08 harmonize `apiKeyResolver?` across `*_api` adapters**: gemini/openai arity divergence is real, deliberate-or-accidental unclear; needs PR-author context
+- **Adapter registry has 12 surfaces, not 4**: future contract changes must consider all 12 (claude/codex/openai/gemini/opencode/pi/cursor/gemini_local/openclaw_gateway/hermes/process/http)
+- **`byo_runner` is correctly opt-in via FOUNDEROS_BYO_RUNNER_ENABLED**: registered at runtime in app.ts; default registry test correctly excludes it
+- **Prod CSP captured as verbatim artifact**: includes Supabase, Sentry, Composio, Anthropic, Stripe origins; no `registry.npmjs.org` yet (pre-L2-F01 merge)
+
+## Wave 2 Phase 4 (IN FLIGHT 2026-05-13T05:35Z) — 4 invariant-defense agents
+
+Each defends a CLAUDE.md-documented vinamr-invariant with a structural test.
+
+| Ticket | Lane | Invariant defended |
+|---|---|---|
+| L2-D22 runner heartbeat last-seen | D | `runner_tokens.lastSeenAt < 30s ago = "online"`; auth middleware MUST update on every request |
+| L2-D23 composio connectedAccountId | D | runComposioTool() MUST require `connectedAccountId: string` (cross-org leak fix PR #30) |
+| L2-D24 request-context ALS inheritance | D | runWithRequestContext ALS propagates to setTimeout/queueMicrotask in handlers |
+| L2-D25 events.dedup_key NOT NULL | D | events table dedup_key is NOT NULL; sources without natural id MUST compute synthetic key |
 
 ## Phase 2 deferred (council-gated, dispatch only with user OK)
 
