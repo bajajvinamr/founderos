@@ -67,16 +67,28 @@ All PRs branch off `loop/wave-2-base` SHA `2efbe94276dec9632383d48ade285575f82db
 - Adapter registry has 12 surfaces, not 4
 - `byo_runner` correctly opt-in via FOUNDEROS_BYO_RUNNER_ENABLED
 
-## Loop 2 Phase 4 (in flight) — 4 invariant-defense agents
+## Loop 2 Phase 4 — 4 PRs (#221-#224) COMPLETE
 
-Each defends a CLAUDE.md-documented vinamr-invariant.
+| PR | Ticket | Key result |
+|---|---|---|
+| #221 | L2-D24 ALS pinning | 10 cases / 65ms; 5 scheduler boundaries covered |
+| #222 | L2-D25 events.dedup_key | 7 assertions; disjunction permits future NULLS-NOT-DISTINCT swap |
+| #223 | L2-D23 composio connectedAccountId | Type-level + runtime; **bonus finding: `userId: ""` TODO at content-publish-tick.ts:102** |
+| #224 | L2-D22 runner lastSeenAt | 3 tests (1 positive + 2 negative regression guards) |
 
-| Ticket | Invariant defended |
+**Finding for follow-up**:
+- L2-A10 audit composio job-caller `userId` field for empty values (from L2-D23)
+
+## Loop 2 Phase 5 (in flight) — 4 S6-sprint canary agents
+
+Each defends a CLAUDE.md invariant from the 2026-05-06 sprint:
+
+| Ticket | Invariant |
 |---|---|
-| L2-D22 runner heartbeat last-seen | `lastSeenAt` updated by auth middleware (no explicit heartbeat endpoint) |
-| L2-D23 composio connectedAccountId | Cross-org leak fix PR #30 — `connectedAccountId` required |
-| L2-D24 request-context ALS inheritance | ALS propagates into setTimeout/queueMicrotask handlers |
-| L2-D25 events.dedup_key NOT NULL | Synthetic dedup-key contract enforced at DB |
+| L2-D26 magic-link atomic single-use | TOCTOU-safe `consume()` via single conditional UPDATE |
+| L2-D27 notifications dedupe | Partial UNIQUE while unread; markRead returns 404 not 403 cross-user |
+| L2-D28 onboarding draft partial UNIQUE | One in-progress draft per user; permits re-onboarding after complete |
+| L2-D29 company_memory.category CHECK | Enum enforced at DB (TS erasure backstop) |
 
 CI failure pattern remains informational only:
 - `test (+ coverage)` flake on `workspace-runtime.test.ts` parallel load (`docs/CI-KNOWN-FLAKES.md`)

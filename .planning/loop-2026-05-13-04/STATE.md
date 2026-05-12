@@ -73,16 +73,28 @@ All 6 PRs returned and opened:
 - **`byo_runner` is correctly opt-in via FOUNDEROS_BYO_RUNNER_ENABLED**: registered at runtime in app.ts; default registry test correctly excludes it
 - **Prod CSP captured as verbatim artifact**: includes Supabase, Sentry, Composio, Anthropic, Stripe origins; no `registry.npmjs.org` yet (pre-L2-F01 merge)
 
-## Wave 2 Phase 4 (IN FLIGHT 2026-05-13T05:35Z) — 4 invariant-defense agents
+## Wave 2 Phase 4 (DONE 2026-05-13T05:55Z) — 4 PRs landed (#221-#224)
 
-Each defends a CLAUDE.md-documented vinamr-invariant with a structural test.
+| PR | Ticket | Notes |
+|---|---|---|
+| #221 | L2-D24 request-context ALS pinning | 10 cases / 65ms; covers 5 scheduler boundaries (setTimeout, queueMicrotask, Promise.then, deep async chain, parallel-interleaved); ALS contract holds cleanly |
+| #222 | L2-D25 events dedup_key NOT NULL | 7 assertions; disjunction `(NOT NULL) OR (NULLS NOT DISTINCT)` permits future evolution; current truth: NOT NULL is sole collision-safety mechanism |
+| #223 | L2-D23 composio connectedAccountId | Type-level (4 conditional proofs in `composio-skill-bridge.contract.ts` under src/, not __tests__/ — caught by typecheck) + runtime (7 assertions); **bonus finding: `userId: ""` TODO at `content-publish-tick.ts:102`** |
+| #224 | L2-D22 runner-auth lastSeenAt | 3 tests (1 positive + 2 negative regression guards); ~5ms fire-and-forget UPDATE latency observed |
+
+### Findings surfaced for follow-up
+- **L2-A10 audit composio job-caller userId for empty values** (from L2-D23) — `content-publish-tick.ts:102` passes `userId: ""` with a TODO; Composio v3 uses userId for per-user routing in OAuth/user-scoped tools
+
+## Wave 2 Phase 5 (IN FLIGHT 2026-05-13T05:58Z) — 4 invariant-defense agents (S6 sprint canaries)
+
+Each defends a CLAUDE.md-documented invariant from the S6.x sprint (2026-05-06).
 
 | Ticket | Lane | Invariant defended |
 |---|---|---|
-| L2-D22 runner heartbeat last-seen | D | `runner_tokens.lastSeenAt < 30s ago = "online"`; auth middleware MUST update on every request |
-| L2-D23 composio connectedAccountId | D | runComposioTool() MUST require `connectedAccountId: string` (cross-org leak fix PR #30) |
-| L2-D24 request-context ALS inheritance | D | runWithRequestContext ALS propagates to setTimeout/queueMicrotask in handlers |
-| L2-D25 events.dedup_key NOT NULL | D | events table dedup_key is NOT NULL; sources without natural id MUST compute synthetic key |
+| L2-D26 magic-link atomic single-use | D | `mlt_<48 hex>` tokens sha256-hashed at rest; `consume()` is a single conditional UPDATE (TOCTOU-safe under concurrent requests) |
+| L2-D27 notifications dedupe behavior | D | `(user_id, kind, ref_kind, ref_id) WHERE read_at IS NULL` partial dedupe; markRead is tenant+user scoped; cross-user returns 404 not 403 |
+| L2-D28 onboarding draft partial UNIQUE | D | partial UNIQUE on `(user_id) WHERE completed_at IS NULL`; permits re-onboarding after completion; `getOrCreate` handles race via try-insert → catch-on-conflict → re-read |
+| L2-D29 company_memory.category CHECK | D | CHECK constraint enforces enum at DB (TS unions erase at compile time) |
 
 ## Phase 2 deferred (council-gated, dispatch only with user OK)
 
