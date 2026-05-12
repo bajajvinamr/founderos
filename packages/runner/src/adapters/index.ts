@@ -44,10 +44,7 @@ import { geminiLocalAdapter } from "./gemini.js";
  *
  * Note: `gemini_local` and `codex_local` are dormant under V1
  * (`FOUNDEROS_DISPATCHER_V2` unset). They go live when the dispatcher
- * flag flips (separate ticket). API-family adapters (openai_api, gemini_api)
- * are placeholder entries for forward compatibility — the dispatcher doesn't
- * spawn subprocess handlers for them (they route through the server's API
- * client layer directly).
+ * flag flips (separate ticket).
  *
  * Use `getAdapter(type)` for runtime lookups so the registry doesn't
  * leak to call sites that only need a single handler.
