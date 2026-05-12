@@ -44,17 +44,30 @@ All 6 PRs returned and opened:
 | acba7ab51709e082f | L2-F03 ST-9 NULL audit | worktree-agent-acba7ab51709e082f → loop-wave-2/l2-f03-st9-null-semantics | **#210** |
 | ae03ac136af671433 | L2-A01 DISPATCHER_V2 cleanup | loop-wave-2/l2-a01-dispatcher-v2-cleanup | **#209** |
 
-## Wave 2 Phase 2 (IN FLIGHT 2026-05-13T04:35Z) — 5 parallel agents
+## Wave 2 Phase 2 (DONE 2026-05-13T05:11Z) — 5 PRs landed (#212-#216)
 
-Dispatch criteria: no council gate, no package.json conflict, dependency-independent.
+| PR | Ticket | Notes |
+|---|---|---|
+| #212 | L2-D03 landing + health smoke | 4 assertions, live `founderos.fly.dev` 3.5s; Task #139 contract verified — `/api/health` returns exactly `{status, version}` |
+| #213 | L2-D16 migration chain integrity | 9 assertions, 21ms; walked 106 journal entries (0→105); discovered Drizzle v7 has no `hash` at rest (runtime-stored in `__drizzle_migrations.hash`); dropped cosmetic `when`-monotonic check |
+| #214 | L2-D04 unauth redirect | 6 assertions live; **architectural surface**: `/dashboard` now `<Navigate to=../today>`; BOARD_ROUTE_ROOTS = today/work/team/library; catch-all sits OUTSIDE CloudAccessGate (audit-P2) |
+| #215 | L2-A02 codex environmentChecks | 3 honest-disable reasons (`codex_local_cli_not_found`, `codex_unconfigured`, `codex_missing_env`); 10 new unit tests, 22/22 adapter-package pass |
+| #216 | L2-D17 tenant FK isolation | 100 tables walked; 12 user_id columns (8 FK+cascade, 4 allowlisted); **finding: no instance_id/tenant_id columns anywhere — FounderOS is single-instance today; the tenant loop is forward-guard for future multi-tenant migration** |
 
-| Ticket | Lane | Risk | Notes |
+### Findings surfaced for follow-up
+- **L2-F04 (new)**: Prod CSP missing `fonts.googleapis.com` in `style-src` — found by L2-D04's console-error filter. Single-line fix in `server/src/middleware/security-headers.ts` matching L2-F01's pattern.
+- **Multi-tenant migration is unstarted**: User-FK + ON DELETE CASCADE is the current tenant-isolation mechanism. Any future tenant work needs its own ADR.
+
+## Wave 2 Phase 3 (IN FLIGHT 2026-05-13T05:15Z) — 4 parallel agents
+
+Two derived from Phase 2 findings, two new defensive smoke tests.
+
+| Ticket | Lane | Source | Notes |
 |---|---|---|---|
-| L2-A02 codex environmentChecks tighten | A | low | adapter check refinement, no schema, no UI |
-| L2-D16 migration chain integrity test | D | low | new test under tests/db/, no source change |
-| L2-D17 tenant FK isolation test | D | low | new test under tests/db/, no source change |
-| L2-D03 landing + health smoke | D | low | new test under e2e/, public-only profile |
-| L2-B01 Notion-soft sand bg pin | B | medium | ui/index.css only, no package.json |
+| L2-F04 CSP fonts.googleapis.com | F | derived from L2-D04 | mirrors L2-F01 (PR #207) pattern |
+| L2-D19 404 markup safety smoke | D | new | new e2e test, no source touch |
+| L2-D20 security-headers smoke | D | new | verifies X-Frame/X-Content-Type/Referrer-Policy/CSP shape live |
+| L2-A07 adapter-registry contract smoke | A | new | walks adapter registry, asserts ServerAdapterModule shape uniformly |
 
 ## Phase 2 deferred (council-gated, dispatch only with user OK)
 

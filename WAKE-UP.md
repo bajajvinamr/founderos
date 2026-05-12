@@ -39,17 +39,28 @@ All PRs branch off `loop/wave-2-base` SHA `2efbe94276dec9632383d48ade285575f82db
 | #210 | L2-F03 | fix(db): workflow_runs idempotency_key NULL semantics | migration 0109 + 2 tests |
 | #211 | L2-E01 | perf(ui): lazy-load mdxeditor cold critical path | -17.7KB entry gzip (not 459KB — rollup hoists composeRefs into vendor) |
 
-## Loop 2 Phase 2 (in flight) — 5 parallel agents
+## Loop 2 Phase 2 — 5 PRs (#212-#216) COMPLETE
 
-Dispatched 2026-05-13T04:35Z. All dependency-independent, no council gates, no package.json conflicts.
-
-| Ticket | Lane | Branch (planned) |
+| PR | Ticket | Key result |
 |---|---|---|
-| L2-A02 codex environmentChecks tighten | A | loop-wave-2/l2-a02-codex-env-checks |
-| L2-D16 migration chain integrity test | D | loop-wave-2/l2-d16-migration-chain |
-| L2-D17 tenant FK isolation test | D | loop-wave-2/l2-d17-tenant-fk |
-| L2-D03 landing + health smoke | D | loop-wave-2/l2-d03-landing-smoke |
-| L2-B01 Notion-soft sand background pin | B | loop-wave-2/l2-b01-sand-bg |
+| #212 | L2-D03 landing + health smoke | 4 assertions, live prod 3.5s; Task #139 contract `{status, version}` verified |
+| #213 | L2-D16 migration chain integrity | 9 assertions, 21ms; walked 106 journal entries; discovered Drizzle v7 has no on-disk hash field |
+| #214 | L2-D04 unauth redirect | 6 assertions live; IA shift surfaced — `/dashboard` → `/today`; catch-all outside CloudAccessGate |
+| #215 | L2-A02 codex environmentChecks | 3 structured disable reasons, 10 new tests, 22/22 adapter-package pass |
+| #216 | L2-D17 tenant FK isolation | 100 tables; 12 user_id cols (8 FK+cascade, 4 allowlisted); **no `instance_id`/`tenant_id` columns exist — FounderOS is single-instance today** |
+
+**Two findings to file as future tickets**:
+1. **L2-F04 prod CSP missing `fonts.googleapis.com`** (single-line `style-src` fix; matches L2-F01 PR #207 pattern) — dispatched in Phase 3
+2. **Multi-tenant migration is unstarted** — user-FK + cascade is the current tenant boundary; will need its own ADR
+
+## Loop 2 Phase 3 (in flight) — 4 parallel agents
+
+| Ticket | Lane | Source |
+|---|---|---|
+| L2-F04 CSP fonts.googleapis.com | F | derived from L2-D04 finding |
+| L2-D19 404 markup safety | D | new |
+| L2-D20 security-headers shape smoke | D | new |
+| L2-A07 adapter-registry contract smoke | A | new |
 
 CI failure pattern remains informational only:
 - `test (+ coverage)` flake on `workspace-runtime.test.ts` parallel load (`docs/CI-KNOWN-FLAKES.md`)
