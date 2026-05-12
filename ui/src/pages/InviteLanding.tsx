@@ -6,6 +6,7 @@ import { authApi } from "../api/auth";
 import { bootstrapStateApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import { AGENT_ADAPTER_TYPES } from "@founderos/shared";
 import type { AgentAdapterType, JoinRequest } from "@founderos/shared";
 
@@ -30,6 +31,7 @@ function readNestedString(value: unknown, path: string[]): string | null {
 }
 
 export function InviteLandingPage() {
+  useNoIndex();
   const queryClient = useQueryClient();
   const params = useParams();
   const token = (params.token ?? "").trim();

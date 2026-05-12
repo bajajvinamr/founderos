@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { accessApi } from "../api/access";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
+import { useNoIndex } from "@/hooks/useNoIndex";
 
 export function CliAuthPage() {
+  useNoIndex();
   const queryClient = useQueryClient();
   const params = useParams();
   const [searchParams] = useSearchParams();

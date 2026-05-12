@@ -8,10 +8,12 @@ import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/context/SupabaseAuthContext";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useNoIndex } from "@/hooks/useNoIndex";
 
 type AuthMode = "sign_in" | "sign_up";
 
 export function AuthPage() {
+  useNoIndex();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
