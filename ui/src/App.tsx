@@ -100,6 +100,7 @@ import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
 import { shouldRedirectCompanylessRouteToOnboarding } from "./lib/onboarding-route";
+import { RunnerStatusBanner } from "./components/RunnerStatusBanner";
 
 function BootstrapPendingPage({ hasActiveInvite = false }: { hasActiveInvite?: boolean }) {
   return (
@@ -670,6 +671,13 @@ export function App() {
         <Route path="*" element={<NotFoundPage scope="global" />} />
       </Routes>
       {FOUNDEROS_ONBOARDING_V2 ? <FounderOnboardingWizard /> : <OnboardingWizard />}
+      {/* TC02 — persistent offline banner above all authenticated pages.
+          RunnerStatusBanner self-hides when no companyId is selected (landing,
+          auth, onboarding) so it is safe to mount globally here. The Layout
+          already has AppRunnerBanner (Notion-soft palette, links to /agents/all)
+          for legacy context; this banner targets the post-onboarding founder
+          who has never started the runner with the exact audit P0 #4 copy. */}
+      <RunnerStatusBanner />
     </>
   );
 }
