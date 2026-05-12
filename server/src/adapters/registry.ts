@@ -38,13 +38,11 @@ import { agentConfigurationDoc as geminiAgentConfigurationDoc, models as geminiM
 import {
   execute as openaiExecute,
   testEnvironment as openaiTestEnvironment,
-  sessionCodec as openaiSessionCodec,
-} from "@founderos/openai-api/server";
-import { agentConfigurationDoc as openaiAgentConfigurationDoc, models as openaiModels } from "@founderos/openai-api";
+} from "@founderos/adapter-openai-api/server";
+import { agentConfigurationDoc as openaiAgentConfigurationDoc, models as openaiModels } from "@founderos/adapter-openai-api";
 import {
   execute as geminiApiExecute,
   testEnvironment as geminiApiTestEnvironment,
-  sessionCodec as geminiApiSessionCodec,
 } from "@founderos/gemini-api/server";
 import { agentConfigurationDoc as geminiApiAgentConfigurationDoc, models as geminiApiModels } from "@founderos/gemini-api";
 import {
@@ -160,7 +158,6 @@ const openaiApiAdapter: ServerAdapterModule = {
   type: "openai_api",
   execute: openaiExecute,
   testEnvironment: openaiTestEnvironment,
-  sessionCodec: openaiSessionCodec,
   sessionManagement: getAdapterSessionManagement("openai_api") ?? undefined,
   models: openaiModels,
   supportsLocalAgentJwt: false,
@@ -171,7 +168,6 @@ const geminiApiAdapter: ServerAdapterModule = {
   type: "gemini_api",
   execute: geminiApiExecute,
   testEnvironment: geminiApiTestEnvironment,
-  sessionCodec: geminiApiSessionCodec,
   sessionManagement: getAdapterSessionManagement("gemini_api") ?? undefined,
   models: geminiApiModels,
   supportsLocalAgentJwt: false,
