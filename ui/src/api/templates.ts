@@ -89,6 +89,8 @@ export const templatesApi = {
     api.post<StoredApiKeyRecord>("/providers/keys", req),
   deleteProviderKey: (family: "anthropic" | "openai" | "google", executionMode: "api" | "cli_oauth" = "api") =>
     api.delete<void>(`/providers/keys/${family}/${executionMode}`),
+  validateKey: (req: { provider: "anthropic" | "openai" | "gemini"; key: string }) =>
+    api.post<{ valid: boolean; reason?: string }>("/byo-key/validate", req),
   companyProvidersOverview: (companyId: string) =>
     api.get<CompanyProvidersOverview>(`/companies/${companyId}/providers-overview`),
   /**

@@ -65,6 +65,7 @@ import {
   resolveExecutionWorkspaceMode,
 } from "./execution-workspace-policy.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { instanceApiKeysService, type ProviderFamilyKey, type ExecutionMode } from "./instance-api-keys.js";
 import { logActivity } from "./activity-log.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
 import {
@@ -2397,11 +2398,26 @@ export function heartbeatService(db: Db) {
       const authToken: string | undefined = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
         : undefined;
+
+      // TA01+TA02: Inject apiKeyResolver for API-key-based adapters.
+      // The resolver is a fresh closure per-run — it calls getDecrypted()
+      // at execution time, never caching the decrypted value in module scope.
+      // `apiKeyResolver` is a function reference, not a string, so it will
+      // NOT match the secretKeys scrubbing regex path downstream.
+      const apiKeyResolver =
+        agent.adapterType === "openai_api" || agent.adapterType === "gemini_api"
+          ? (family: string, mode: string) =>
+              instanceApiKeysService(db).getDecrypted(
+                family as ProviderFamilyKey,
+                mode as ExecutionMode,
+              )
+          : undefined;
+
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
-        config: runtimeConfig,
+        config: apiKeyResolver ? { ...runtimeConfig, apiKeyResolver } : runtimeConfig,
         context,
         onLog: gatedOnLog,
         onMeta: onAdapterMeta,

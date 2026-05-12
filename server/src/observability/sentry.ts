@@ -31,6 +31,23 @@ export async function initServerSentry(): Promise<boolean> {
       environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "production",
       tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? "0.1"),
       sendDefaultPii: false,
+      beforeBreadcrumb(breadcrumb) {
+        // TA02 council condition #4: scrub Gemini API key-bearing URLs from
+        // Sentry breadcrumbs before they are sent.
+        // generativelanguage.googleapis.com URLs contain ?key=<apikey> as a
+        // query parameter — these must never appear in Sentry.
+        if (
+          breadcrumb.data?.url &&
+          typeof breadcrumb.data.url === "string" &&
+          breadcrumb.data.url.includes("generativelanguage.googleapis.com")
+        ) {
+          breadcrumb.data = {
+            ...breadcrumb.data,
+            url: "[scrubbed: gemini-api-key-url]",
+          };
+        }
+        return breadcrumb;
+      },
     });
     captureFn = (err, context) => {
       Sentry.withScope((scope) => {

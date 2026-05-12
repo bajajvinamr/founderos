@@ -36,10 +36,18 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// API key resolver type — injected at call time to avoid process.env mutation
+// API key resolver type — injected via config.apiKeyResolver (TA02 normalized
+// to match the openai-api pattern). The old second-positional-arg form
+// (execute(ctx, resolver)) is removed; callers pass via config instead.
 // ---------------------------------------------------------------------------
 
-export type ApiKeyResolver = () => Promise<string | null>;
+export type GeminiKeyResolver = (
+  family: "google",
+  executionMode: "api",
+) => Promise<string | null>;
+
+// Kept for backward-compat type exports — same shape as before but renamed.
+export type ApiKeyResolver = GeminiKeyResolver;
 
 // ---------------------------------------------------------------------------
 // execute
@@ -47,19 +55,24 @@ export type ApiKeyResolver = () => Promise<string | null>;
 
 export async function execute(
   ctx: AdapterExecutionContext,
-  apiKeyResolver?: ApiKeyResolver,
 ): Promise<AdapterExecutionResult> {
   const model = asString(ctx.config.model, DEFAULT_GEMINI_API_MODEL);
 
   // ------------------------------------------------------------------
-  // 1. Resolve API key — never fall back to process.env in hosted mode.
+  // 1. Resolve API key via config.apiKeyResolver (normalized to match the
+  //    openai-api pattern — TA02 signature normalization).
   //    Callers inject a resolver that calls
   //    instanceApiKeysService.getDecrypted('google', 'api').
   // ------------------------------------------------------------------
+  const apiKeyResolver = ctx.config.apiKeyResolver as GeminiKeyResolver | undefined;
   let apiKey: string | null = null;
 
   if (typeof apiKeyResolver === "function") {
-    apiKey = await apiKeyResolver();
+    try {
+      apiKey = await apiKeyResolver("google", "api");
+    } catch {
+      apiKey = null;
+    }
   }
 
   if (!apiKey) {

@@ -11,6 +11,8 @@ import type { Db } from "@founderos/db";
 import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { validateAnthropicKey } from "../services/anthropic-key-validator.js";
+import { validateOpenaiKey } from "../services/openai-key-validator.js";
+import { validateGeminiKey } from "../services/gemini-key-validator.js";
 import { byoKeyValidateLimiter } from "../middleware/rate-limit.js";
 
 const byoKeyValidateSchema = z.object({
@@ -49,11 +51,9 @@ export function byoKeyRoutes(_db: Db) {
       if (provider === "anthropic") {
         result = await validateAnthropicKey(key);
       } else if (provider === "openai") {
-        // Placeholder for OpenAI validation
-        result = { valid: false, reason: "not_implemented" };
+        result = await validateOpenaiKey(key);
       } else if (provider === "gemini") {
-        // Placeholder for Gemini validation
-        result = { valid: false, reason: "not_implemented" };
+        result = await validateGeminiKey(key);
       } else {
         // TypeScript exhaustiveness — should never happen
         result = { valid: false, reason: "unknown_provider" };

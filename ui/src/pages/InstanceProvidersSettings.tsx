@@ -211,6 +211,34 @@ function ProviderCard({
   );
 }
 
+/**
+ * Map the `family` field (as stored in the DB / returned by the providers API)
+ * to the `provider` field expected by the byo-key/validate endpoint.
+ *
+ * The instance_api_keys table uses "google" as the family, but the
+ * byoKeyValidateSchema uses "gemini" — see byo-key.ts:17.
+ */
+function familyToValidateProvider(
+  family: "anthropic" | "openai" | "google",
+): "anthropic" | "openai" | "gemini" {
+  if (family === "google") return "gemini";
+  return family;
+}
+
+function validationReasonToMessage(reason: string | undefined): string {
+  switch (reason) {
+    case "bad_key":
+    case "invalid_key":
+      return "Invalid key — check it and try again";
+    case "timeout":
+      return "Validation timed out — try again";
+    case "network_error":
+      return "Could not reach the provider — check your connection";
+    default:
+      return reason ? `Validation failed: ${reason}` : "Validation failed";
+  }
+}
+
 function InlineKeyEditor({
   family,
   envVarName,
@@ -224,6 +252,10 @@ function InlineKeyEditor({
 }) {
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
+  const [validateError, setValidateError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isReverifying, setIsReverifying] = useState(false);
+  const [reverifyResult, setReverifyResult] = useState<{ valid: boolean; reason?: string } | null>(null);
   const qc = useQueryClient();
 
   const setMutation = useMutation({
@@ -232,6 +264,7 @@ function InlineKeyEditor({
     onSuccess: () => {
       setValue("");
       setOpen(false);
+      setValidateError(null);
       qc.invalidateQueries({ queryKey: ["providers", "status"] });
     },
   });
@@ -243,29 +276,106 @@ function InlineKeyEditor({
     },
   });
 
+  /** Council condition #6: "Save & verify" — validates then saves atomically. */
+  async function handleSaveAndVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (value.trim().length < 4) return;
+
+    setValidateError(null);
+    setIsValidating(true);
+
+    let validResult: { valid: boolean; reason?: string } | null = null;
+    try {
+      validResult = await templatesApi.validateKey({
+        provider: familyToValidateProvider(family),
+        key: value,
+      });
+    } catch {
+      setIsValidating(false);
+      setValidateError("Could not reach the provider — check your connection");
+      return;
+    }
+
+    setIsValidating(false);
+
+    if (!validResult.valid) {
+      setValidateError(validationReasonToMessage(validResult.reason));
+      return;
+    }
+
+    // Validation passed — proceed to save.
+    setMutation.mutate();
+  }
+
+  /** "Save without testing" — skips validation, saves directly. */
+  function handleSaveWithoutTest(e: React.MouseEvent) {
+    e.preventDefault();
+    if (value.trim().length < 4) return;
+    setValidateError(null);
+    setMutation.mutate();
+  }
+
+  /** Re-verify an existing stored key (validate-only, no save). */
+  async function handleReverify() {
+    if (!existingStoredKey) return;
+    setIsReverifying(true);
+    setReverifyResult(null);
+    try {
+      // We don't have the plaintext — open the editor instead to enter the
+      // key again for re-verification.
+      setOpen(true);
+    } finally {
+      setIsReverifying(false);
+    }
+  }
+
+  const isPending = isValidating || setMutation.isPending;
+
   return (
     <div className="mt-4 border-t border-border pt-4">
-      {existingStoredKey ? (
-        <div className="flex items-center justify-between gap-3">
+      {existingStoredKey && !open ? (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="text-xs text-muted-foreground">
             Instance-stored key: <code className="font-mono">{existingStoredKey.keyHint ?? "****"}</code>
             <span className="ml-2">· updated {new Date(existingStoredKey.updatedAt).toLocaleString()}</span>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-            className="text-destructive hover:text-destructive gap-1"
-          >
-            {deleteMutation.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Trash2 className="h-3 w-3" />
-            )}
-            Remove
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleReverify}
+              disabled={isReverifying}
+              className="gap-1"
+            >
+              {isReverifying ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Key className="h-3 w-3" />
+              )}
+              Re-verify
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+              className="text-destructive hover:text-destructive gap-1"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+              Remove
+            </Button>
+          </div>
+          {reverifyResult && (
+            <div className={`text-xs w-full ${reverifyResult.valid ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+              {reverifyResult.valid ? "Key is valid" : validationReasonToMessage(reverifyResult.reason)}
+            </div>
+          )}
         </div>
       ) : !open ? (
         <Button
@@ -280,31 +390,37 @@ function InlineKeyEditor({
           {envConfigured ? `${envVarName} is set via env` : "Paste API key"}
         </Button>
       ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (value.trim().length > 0) setMutation.mutate();
-          }}
-          className="space-y-2"
-        >
+        <form onSubmit={handleSaveAndVerify} className="space-y-2">
           <Input
             type="password"
             autoFocus
             autoComplete="off"
             placeholder={`Paste your ${envVarName}…`}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
-            disabled={setMutation.isPending}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setValidateError(null);
+            }}
+            disabled={isPending}
             className="font-mono text-xs"
           />
-          <div className="flex items-center gap-2">
-            <Button type="submit" size="sm" disabled={setMutation.isPending || value.trim().length < 4}>
-              {setMutation.isPending ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Primary CTA: Save & verify (validates then saves atomically) */}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isPending || value.trim().length < 4}
+            >
+              {isValidating ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Verifying…
+                </>
+              ) : setMutation.isPending ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Saving…
                 </>
               ) : (
-                "Save key"
+                "Save & verify"
               )}
             </Button>
             <Button
@@ -314,18 +430,32 @@ function InlineKeyEditor({
               onClick={() => {
                 setOpen(false);
                 setValue("");
+                setValidateError(null);
               }}
-              disabled={setMutation.isPending}
+              disabled={isPending}
             >
               Cancel
             </Button>
-            <span className="text-[10px] text-muted-foreground ml-auto">
-              Encrypted with your instance master key. Never shown again after save.
-            </span>
+            {/* Secondary: skip validation for power users who know the key works */}
+            {value.trim().length >= 4 && !isPending && (
+              <button
+                type="button"
+                onClick={handleSaveWithoutTest}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-auto"
+              >
+                Save without testing
+              </button>
+            )}
           </div>
+          {validateError && (
+            <div className="text-xs text-destructive">{validateError}</div>
+          )}
           {setMutation.error instanceof Error && (
             <div className="text-xs text-destructive">{setMutation.error.message}</div>
           )}
+          <span className="block text-[10px] text-muted-foreground">
+            Encrypted with your instance master key. Never shown again after save.
+          </span>
         </form>
       )}
     </div>

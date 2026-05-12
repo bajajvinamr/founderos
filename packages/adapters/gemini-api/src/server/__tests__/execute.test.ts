@@ -78,9 +78,11 @@ describe("execute() — no API key", () => {
     expect(mockGenerateContentStream).not.toHaveBeenCalled();
   });
 
-  it("returns errorCode 'no_api_key' when resolver returns null", async () => {
-    const ctx = makeCtx();
-    const result = await execute(ctx, async () => null);
+  it("returns errorCode 'no_api_key' when resolver (via config) returns null", async () => {
+    const ctx = makeCtx({
+      config: { model: "gemini-2.5-pro", apiKeyResolver: async () => null },
+    });
+    const result = await execute(ctx);
     expect(result.exitCode).toBeNull();
     expect(result.errorCode).toBe("no_api_key");
     expect(mockGenerateContentStream).not.toHaveBeenCalled();
@@ -107,7 +109,7 @@ describe("execute() — with API key (streaming)", () => {
     mockStreamChunks.push({ text: () => "Hello" }, { text: () => " world" });
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.exitCode).toBe(0);
     expect(result.errorCode).toBeUndefined();
@@ -121,7 +123,7 @@ describe("execute() — with API key (streaming)", () => {
       onLog: vi.fn(async (stream, chunk) => { logCalls.push([stream, chunk]); }),
     });
 
-    await execute(ctx, async () => "fake-google-api-key");
+    await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     const stdoutChunks = logCalls.filter(([s]) => s === "stdout").map(([, c]) => c);
     expect(stdoutChunks).toContain("chunk-A");
@@ -132,7 +134,7 @@ describe("execute() — with API key (streaming)", () => {
     mockStreamChunks.push({ text: () => "Hello" }, { text: () => " world" });
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.summary).toBe("Hello world");
   });
@@ -146,7 +148,7 @@ describe("execute() — with API key (streaming)", () => {
     };
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.usage).toEqual({ inputTokens: 42, outputTokens: 17, cachedInputTokens: 5 });
   });
@@ -160,7 +162,7 @@ describe("execute() — with API key (streaming)", () => {
     };
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.usage?.cachedInputTokens).toBeUndefined();
   });
@@ -169,7 +171,7 @@ describe("execute() — with API key (streaming)", () => {
     mockStreamChunks.push({ text: () => "ok" });
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.provider).toBe("google");
     expect(result.biller).toBe("google");
@@ -179,7 +181,7 @@ describe("execute() — with API key (streaming)", () => {
   it("uses model from config, defaulting to gemini-2.5-pro", async () => {
     mockStreamChunks.push({ text: () => "ok" });
     const ctx = makeCtx({ config: {} });
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.model).toBe("gemini-2.5-pro");
     expect(mockGetGenerativeModel).toHaveBeenCalledWith({ model: "gemini-2.5-pro" });
@@ -188,7 +190,7 @@ describe("execute() — with API key (streaming)", () => {
   it("uses model override from config when provided", async () => {
     mockStreamChunks.push({ text: () => "ok" });
     const ctx = makeCtx({ config: { model: "gemini-1.5-flash" } });
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.model).toBe("gemini-1.5-flash");
     expect(mockGetGenerativeModel).toHaveBeenCalledWith({ model: "gemini-1.5-flash" });
@@ -198,7 +200,7 @@ describe("execute() — with API key (streaming)", () => {
     mockGenerateContentStream.mockRejectedValueOnce(new Error("quota exceeded"));
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.exitCode).toBe(1);
     expect(result.errorCode).toBe("gemini_api_error");
@@ -226,7 +228,7 @@ describe("execute() — cost_usd extraction safety", () => {
     mockResponse.costUsd = undefined;
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.costUsd).toBeNull();
   });
@@ -236,7 +238,7 @@ describe("execute() — cost_usd extraction safety", () => {
     mockResponse.costUsd = 0.0042;
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.costUsd).toBe(0.0042);
   });
@@ -246,7 +248,7 @@ describe("execute() — cost_usd extraction safety", () => {
     (mockResponse as Record<string, unknown>).costUsd = NaN;
 
     const ctx = makeCtx();
-    const result = await execute(ctx, async () => "fake-google-api-key");
+    const result = await execute({ ...ctx, config: { ...ctx.config, apiKeyResolver: async () => "fake-google-api-key" } });
 
     expect(result.costUsd).toBeNull();
   });
