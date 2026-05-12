@@ -44,7 +44,9 @@ import {
   approvals,
   companyMemberships,
   composioConnections,
+  dailyBriefs,
 } from "../packages/db/src/schema/index.js";
+import type { DailyBriefPayload } from "../packages/db/src/schema/daily_briefs.js";
 import { runPostSignupBootstrap } from "../server/src/auth/post-signup-hook.js";
 
 // ─── Gate: FOUNDEROS_SEED_MIRA_LABS=1 ────────────────────────────────────────
@@ -198,6 +200,112 @@ async function resolveAnitaAuthUid(): Promise<string> {
     `[seed-mira-labs] Created Supabase user for ${ANITA_EMAIL}: ${createData.data.id}`,
   );
   return createData.data.id;
+}
+
+// ─── TD-2: Pre-seed daily brief ───────────────────────────────────────────────
+
+/**
+ * seedMiraLabsDailyBrief — inserts a pre-baked daily_briefs row for today.
+ *
+ * This is TD-2. On first login the `/brief` route returns empty for a freshly-
+ * seeded company because no daily_briefs row exists and the 7am cron hasn't
+ * fired yet. Inserting a synthetic row here means the first-impression journey
+ * (mira-labs-spec §5, Step 3) is not blank.
+ *
+ * Content mirrors the DailyBriefPayload shape defined in daily_briefs.ts and
+ * is verbatim from mira-labs-spec.md §2 Agent 1 expected output.
+ *
+ * Idempotency: ON CONFLICT (company_id, for_date) DO NOTHING — running the
+ * seed script twice will not create a second brief row for today.
+ *
+ * @param db       — Drizzle DB instance
+ * @param companyId — Mira Labs company UUID
+ * @param acmeRetailApprovalId — UUID of the Acme Retail proposal approval (a3)
+ * @param bakeHouseApprovalId  — UUID of the Bake House invoice approval (a4)
+ */
+async function seedMiraLabsDailyBrief(
+  db: ReturnType<typeof createDb>,
+  companyId: string,
+  acmeRetailApprovalId: string,
+  bakeHouseApprovalId: string,
+): Promise<void> {
+  // IST local date at run time. The brief is intended for "today" from Anita's
+  // perspective (digest_timezone = "Asia/Kolkata"). We compute it with the same
+  // Intl helper the production cron uses so the brief's forDate matches what
+  // `GET /api/companies/:id/daily-briefs?forDate=today` would resolve to.
+  const todayIst = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const payload: DailyBriefPayload = {
+    headline:
+      "2 client emails need replies; Acme Retail proposal draft ready for your review.",
+    topThreeActions: [
+      {
+        action: "Review and approve Acme Retail proposal draft",
+        rationale:
+          "Theo completed a first draft based on your discovery notes. Proposal: AI Customer-Support Automation — $2,200/mo + $3,500 setup. Sending deadline: Friday.",
+        approvalId: acmeRetailApprovalId,
+      },
+      {
+        action: "Reply to Northwood Dental — they're asking about next month's scope",
+        rationale:
+          "Email arrived 8pm yesterday. They haven't signed next month yet. A quick reply confirming June scope keeps the renewal on track.",
+        approvalId: undefined,
+      },
+      {
+        action: "Chase Bake House invoice — 6 days overdue",
+        rationale:
+          "Iris flagged $1,200 outstanding. Stripe last charge: May 7 (overdue by 6 days). Approve the payment reminder to unblock this.",
+        approvalId: bakeHouseApprovalId,
+      },
+    ],
+    kpiMovements: [
+      {
+        metric: "MRR",
+        from: "$6,400",
+        to: "$6,400",
+        delta: "flat",
+        commentary:
+          "4 active retainers. Bake House payment pending ($1,200). Fielding Logistics discovery call tomorrow — potential $2K/mo.",
+      },
+    ],
+    anomalies: [],
+    blockers: [
+      {
+        title: "Bake House invoice 6 days overdue",
+        resolutionAction:
+          "Send payment reminder via Stripe; Iris has drafted the email — approve from Inbox.",
+      },
+    ],
+    opportunities: [
+      {
+        title: "Fielding Logistics discovery call — May 14",
+        expectedImpact: "Potential $2,000/mo retainer (120-person freight company).",
+        insightId: "",
+      },
+    ],
+  };
+
+  console.log(
+    `[seed-mira-labs] Inserting daily brief for ${todayIst} (IST) — ON CONFLICT DO NOTHING…`,
+  );
+
+  // onConflictDoNothing() hits the unique index (company_id, for_date) —
+  // first-write-wins. A re-run of the seed script for the same day is a no-op.
+  await db
+    .insert(dailyBriefs)
+    .values({
+      companyId,
+      forDate: todayIst,
+      payload,
+    })
+    .onConflictDoNothing();
+
+  console.log("[seed-mira-labs] Daily brief row upserted (or already existed).");
 }
 
 // ─── Reset path ───────────────────────────────────────────────────────────────
@@ -771,6 +879,12 @@ Current clients: {{client_list_with_stripe_ids}}`;
   ]);
   console.log("[seed-mira-labs] Composio connection placeholders inserted.");
 
+  // ── TD-2: Pre-seed daily brief (topThreeActions reference real approval UUIDs) ─
+  // a3 = Acme Retail proposal approval (Theo-generated)
+  // a4 = Bake House invoice reminder approval (Iris-generated)
+  // Both were inserted above in the approvals batch and have deterministic DB-assigned UUIDs.
+  await seedMiraLabsDailyBrief(db, MIRA_COMPANY_ID, a3!.id, a4!.id);
+
   // ── Council condition #4 assertion ──────────────────────────────────────────
   // Acceptance criterion: zero instance_api_keys rows seeded.
   // (No insert of instance_api_keys anywhere in this script — verified by grep.)
@@ -784,6 +898,7 @@ Current clients: {{client_list_with_stripe_ids}}`;
    Company ID: ${MIRA_COMPANY_ID}
    Mirror upsert: ✅ via runPostSignupBootstrap (ANITA_AUTH_UID=${ANITA_AUTH_UID})
    Inbox items: ${approvalCount}
+   Daily brief: ✅ pre-seeded for today (Acme Retail + Bake House approvalIds wired)
    Agents: Maya (anthropic_api/claude-opus-4-6), Theo (openai_api/gpt-4.1-mini), Iris (anthropic_api/claude-sonnet-4-6)
    Composio: 3 connections pending OAuth (Slack, Gmail, Stripe)
 
