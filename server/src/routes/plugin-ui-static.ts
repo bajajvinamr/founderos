@@ -276,7 +276,7 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
    * - Other files → must-revalidate with ETag
    */
   router.get("/_plugins/:pluginId/ui/*filePath", pluginUiStaticLimiter, async (req, res) => {
-    const { pluginId } = req.params;
+    const pluginId = req.params.pluginId as string;
 
     // Extract the relative file path from the named wildcard.
     // In Express 5 with path-to-regexp v8, named wildcards may return
