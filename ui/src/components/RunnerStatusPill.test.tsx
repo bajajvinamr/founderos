@@ -109,14 +109,14 @@ describe("<RunnerStatusPill />", () => {
   it("renders the loading label initially", () => {
     mockRunnerApi.status.mockReturnValue(new Promise(() => {}));
     render();
-    expect(container.textContent).toContain("Checking runner");
+    expect(container.textContent).toContain("Checking your desktop connector");
   });
 
   it("renders missing state for empty token list", async () => {
     mockRunnerApi.status.mockResolvedValue({ tokens: [] });
     render();
-    await flushQuery(() => container.textContent?.includes("Install runner") ?? false);
-    expect(container.textContent).toContain("Install runner");
+    await flushQuery(() => container.textContent?.includes("Set up your desktop connector") ?? false);
+    expect(container.textContent).toContain("Set up your desktop connector");
     const dot = container.querySelector('[data-testid="runner-status-dot"]');
     expect(dot?.className).toContain("bg-rose-500");
   });
@@ -126,8 +126,8 @@ describe("<RunnerStatusPill />", () => {
       tokens: [summary({ online: false })],
     });
     render();
-    await flushQuery(() => container.textContent?.includes("Runner stale") ?? false);
-    expect(container.textContent).toContain("Runner stale");
+    await flushQuery(() => container.textContent?.includes("Your desktop connector is offline") ?? false);
+    expect(container.textContent).toContain("Your desktop connector is offline");
     const dot = container.querySelector('[data-testid="runner-status-dot"]');
     expect(dot?.className).toContain("bg-amber-500");
   });
@@ -137,8 +137,8 @@ describe("<RunnerStatusPill />", () => {
       tokens: [summary({ online: true })],
     });
     render();
-    await flushQuery(() => container.textContent?.includes("Runner online") ?? false);
-    expect(container.textContent).toContain("Runner online");
+    await flushQuery(() => container.textContent?.includes("Your desktop connector is online") ?? false);
+    expect(container.textContent).toContain("Your desktop connector is online");
     expect(container.textContent).not.toContain("(2)");
     const dot = container.querySelector('[data-testid="runner-status-dot"]');
     expect(dot?.className).toContain("bg-emerald-500");
@@ -152,8 +152,8 @@ describe("<RunnerStatusPill />", () => {
       ],
     });
     render();
-    await flushQuery(() => container.textContent?.includes("Runner online (2)") ?? false);
-    expect(container.textContent).toContain("Runner online (2)");
+    await flushQuery(() => container.textContent?.includes("Your desktop connector is online (2)") ?? false);
+    expect(container.textContent).toContain("Your desktop connector is online (2)");
   });
 
   it("renders error state when the request fails", async () => {
@@ -175,7 +175,7 @@ describe("<RunnerStatusPill />", () => {
         </QueryClientProvider>,
       );
     });
-    await flushQuery(() => container.textContent?.includes("Install runner") ?? false);
+    await flushQuery(() => container.textContent?.includes("Set up your desktop connector") ?? false);
     const button = container.querySelector('[data-testid="runner-status-pill"]');
     act(() => {
       (button as HTMLButtonElement).click();

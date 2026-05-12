@@ -210,8 +210,8 @@ function SignedOutState({ currentPath }: { currentPath: string }) {
   return (
     <PageShell>
       <div className="rounded-xl border border-border bg-card p-8">
-        <Eyebrow label="Instance Claim" />
-        <DisplayH1>Claim instance admin</DisplayH1>
+        <Eyebrow label="Claim your access" />
+        <DisplayH1>Claim your founder access</DisplayH1>
         <SubCopy>
           Claiming makes you the person who can manage integrations, configure provider keys,
           control instance-level settings, and invite other admins. You need to be signed in first.
@@ -250,7 +250,7 @@ function ConfirmClaimState({
   onSignOut,
 }: ConfirmClaimProps) {
   const [showRotate, setShowRotate] = useState(false);
-  const instanceHost = typeof window !== "undefined" ? window.location.host : "this instance";
+  const instanceHost = typeof window !== "undefined" ? window.location.host : "your FounderOS account";
 
   const errCode = claimError ? errorCode(claimError) : null;
   const errMsg = claimError instanceof Error ? claimError.message : null;
@@ -258,7 +258,7 @@ function ConfirmClaimState({
   return (
     <PageShell>
       <div className="rounded-xl border border-border bg-card p-8">
-        <Eyebrow label="Instance Claim" />
+        <Eyebrow label="Claim your access" />
         <DisplayH1>Become the admin of this instance.</DisplayH1>
         <SubCopy>
           You&rsquo;re about to take ownership of{" "}

@@ -27,11 +27,11 @@ export function LegalPrivacy() {
         <ul>
           <li>
             <strong>Account info</strong> — email, name, auth provider (Clerk or
-            better-auth). Stored in your instance database.
+            better-auth). Stored in your FounderOS database.
           </li>
           <li>
             <strong>Your company data</strong> — agents you created, goals, projects,
-            issues, activity, and heartbeat runs. Stored in your instance database.
+            issues, activity, and heartbeat runs. Stored in your FounderOS database.
           </li>
           <li>
             <strong>API keys you store</strong> — AES-256-GCM-encrypted with your
@@ -67,7 +67,7 @@ export function LegalPrivacy() {
             coverage applies to identity data.
           </li>
           <li>
-            <strong>Supabase / your Postgres</strong> — holds your instance data at rest.
+            <strong>Supabase / your Postgres</strong> — holds your FounderOS data at rest.
           </li>
           <li>
             <strong>Fly.io / your hosting provider</strong> — runs the server process.

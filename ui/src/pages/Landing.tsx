@@ -999,14 +999,14 @@ function Pricing() {
             <p className="text-[14px] text-pulse-bone/75 leading-[1.55] mb-6">
               For indie founders and creators running their first real company.
               One workspace, five departments, 20 workflows, 50k agent actions
-              per month. BYO provider keys.
+              per month. Use your own provider keys.
             </p>
             <ul className="space-y-2 text-[13px] font-mono">
               <li>— 5 departments (CoS, Growth, Content, CRM, Finance Lite)</li>
               <li>— 20 workflows</li>
               <li>— 1 workspace, 1 seat</li>
               <li>— 50,000 agent tasks per month — a Daily Brief uses ~30, an inbox approval uses ~3</li>
-              <li>— BYO provider keys</li>
+              <li>— Use your own provider keys</li>
             </ul>
             <div className="mt-8">
               <Link to="/auth" className="btn w-full justify-center md:w-auto md:justify-start">
@@ -1086,7 +1086,7 @@ function FaqSection() {
     },
     {
       q: "What does it really cost to run?",
-      a: "Three tiers. Solo Founder starts at $299/mo for indie builders. Lean Team at $2k/mo covers startups with 2–10 people. Venture Studio at $10k+ is for portfolios running multiple companies at once. Every tier is BYO provider keys — the spend you already make on Claude/Codex/Gemini doesn't change.",
+      a: "Three tiers. Solo Founder starts at $299/mo for indie builders. Lean Team at $2k/mo covers startups with 2–10 people. Venture Studio at $10k+ is for portfolios running multiple companies at once. Every tier uses your own provider keys — the spend you already make on Claude/Codex/Gemini doesn't change.",
     },
     {
       q: "Can I take my company with me?",

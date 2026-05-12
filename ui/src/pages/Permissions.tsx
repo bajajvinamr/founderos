@@ -77,7 +77,7 @@ function PermissionsMatrixView({ companyId }: { companyId: string }) {
           Permissions
         </div>
         <h1 className="font-display text-[32px] md:text-[40px] leading-[1.05] tracking-tight text-foreground">
-          Autonomy matrix
+          Authority matrix
         </h1>
         <p className="text-[12px] text-muted-foreground tabular-nums">
           <span className="font-medium text-foreground">
@@ -120,7 +120,7 @@ function PermissionsMatrixView({ companyId }: { companyId: string }) {
       <div className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
           <Shield className="size-4 text-muted-foreground" />
-          Autonomy levels
+          Authority levels
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           {[1, 2, 3, 4].map((lvl) => (

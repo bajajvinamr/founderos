@@ -726,7 +726,7 @@ function ReviewStep({
           <MetaRow label="Agents" value={template.agentCount.toString()} />
           <MetaRow label="Goals" value={template.goalCount.toString()} />
           <MetaRow label="Projects" value={template.projectCount.toString()} />
-          <MetaRow label="Provider strategy" value={strategyLabel} />
+          <MetaRow label="AI setup" value={strategyLabel} />
         </div>
 
         {providers && providers.storedKeys.length > 0 && (

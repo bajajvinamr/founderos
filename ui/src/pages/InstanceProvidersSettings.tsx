@@ -71,7 +71,7 @@ export function InstanceProvidersSettings() {
             <div className="font-semibold text-foreground">No providers configured</div>
             <div className="mt-1 text-muted-foreground">
               Your agents won't be able to run until you set up at least one provider below.
-              The fastest path is the Claude Code CLI (free with a Claude subscription) — it
+              The fastest path is the Claude Code desktop app (free with a Claude subscription) — it
               auto-detects once installed.
             </div>
           </div>
@@ -94,7 +94,7 @@ export function InstanceProvidersSettings() {
         <div className="font-semibold text-foreground mb-2">Why two options per provider?</div>
         <ul className="space-y-1.5 text-muted-foreground leading-relaxed list-disc ml-5">
           <li>
-            <span className="font-medium text-foreground">CLI (subscription):</span> uses your
+            <span className="font-medium text-foreground">Desktop app (subscription):</span> uses your
             paid Claude / Codex / Gemini subscription. No per-token billing. Best if you already
             pay monthly.
           </li>
@@ -105,7 +105,7 @@ export function InstanceProvidersSettings() {
           </li>
           <li>
             <span className="font-medium text-foreground">Both configured:</span> FounderOS
-            defaults to CLI but automatically falls back to the API if the CLI fails.
+            defaults to desktop app but automatically falls back to the API if the desktop app fails.
           </li>
         </ul>
       </div>
@@ -163,7 +163,7 @@ function ProviderCard({
       <div className="mt-4 grid md:grid-cols-2 gap-3">
         <MethodRow
           icon={Terminal}
-          label="Local CLI"
+          label="Desktop app"
           status={
             report.cli.installed && report.cli.authed
               ? "green"
@@ -277,7 +277,7 @@ function InlineKeyEditor({
           className="gap-1.5 w-full"
         >
           <Key className="h-3 w-3" />
-          {envConfigured ? `${envVarName} is set via env` : "Paste API key"}
+          {envConfigured ? `${envVarName} is set via env` : "Paste your secret key"}
         </Button>
       ) : (
         <form
@@ -396,7 +396,7 @@ const PROVIDER_META: Record<
   anthropic: {
     label: "Anthropic — Claude",
     description:
-      "Runs agents via the `claude` CLI (Claude Code subscription auth) or direct API. Best for reasoning-heavy roles like CEO, CTO, Evals.",
+      "Runs agents via the Claude desktop app (Claude Code subscription auth) or direct API. Best for reasoning-heavy roles like CEO, CTO, Evals.",
     icon: "🟠",
     envVarName: "ANTHROPIC_API_KEY",
     installCmd: "npm i -g @anthropic-ai/claude-code",
@@ -407,7 +407,7 @@ const PROVIDER_META: Record<
   openai: {
     label: "OpenAI — Codex / GPT-5",
     description:
-      "Runs agents via the `codex` CLI (OpenAI subscription) or direct API. Great for sales, content, and high-volume workloads.",
+      "Runs agents via the Codex desktop app (OpenAI subscription) or direct API. Great for sales, content, and high-volume workloads.",
     icon: "🔵",
     envVarName: "OPENAI_API_KEY",
     installCmd: "npm i -g @openai/codex",
@@ -418,7 +418,7 @@ const PROVIDER_META: Record<
   google: {
     label: "Google — Gemini",
     description:
-      "Runs agents via the `gemini` CLI (Google AI subscription) or Google AI Studio API key. Strong mix of quality + value for ops work.",
+      "Runs agents via the Gemini desktop app (Google AI subscription) or Google AI Studio API key. Strong mix of quality + value for ops work.",
     icon: "🟢",
     envVarName: "GEMINI_API_KEY",
     installCmd: "npm i -g @google/gemini-cli",

@@ -81,15 +81,15 @@ export function RunnerStatusPill({ companyId, onClick, className }: RunnerStatus
 function renderForKind(kind: RunnerStatusKind, onlineCount: number): { dotColor: string; label: string } {
   switch (kind) {
     case "online":
-      return { dotColor: "bg-emerald-500", label: `Runner online${onlineCount > 1 ? ` (${onlineCount})` : ""}` };
+      return { dotColor: "bg-emerald-500", label: `Your desktop connector is online${onlineCount > 1 ? ` (${onlineCount})` : ""}` };
     case "stale":
-      return { dotColor: "bg-amber-500", label: "Runner stale" };
+      return { dotColor: "bg-amber-500", label: "Your desktop connector is offline" };
     case "missing":
-      return { dotColor: "bg-rose-500", label: "Install runner" };
+      return { dotColor: "bg-rose-500", label: "Set up your desktop connector" };
     case "error":
       return { dotColor: "bg-rose-500", label: "Runner status unavailable" };
     case "loading":
     default:
-      return { dotColor: "bg-muted", label: "Checking runner…" };
+      return { dotColor: "bg-muted", label: "Checking your desktop connector…" };
   }
 }

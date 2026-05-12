@@ -122,7 +122,7 @@ export function AuthPage() {
     setError(null);
     setInfo(null);
     if (!email.trim()) {
-      setError("Enter your email to get a magic link.");
+      setError("Enter your email to get a one-click sign-in link.");
       return;
     }
     setPendingAction("magic");
@@ -134,8 +134,8 @@ export function AuthPage() {
         },
       });
       if (otpError) throw otpError;
-      setInfo("Magic link sent. Check your email.");
-      pushToast({ title: "Magic link sent", body: "Check your email to finish signing in.", tone: "success" });
+      setInfo("One-click sign-in link sent. Check your email.");
+      pushToast({ title: "Sign-in link sent", body: "Check your email to finish signing in.", tone: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not send magic link";
       setError(message);
@@ -317,7 +317,7 @@ export function AuthPage() {
               onClick={handleMagicLink}
               disabled={isBusy}
             >
-              {pendingAction === "magic" ? "Sending magic link…" : "Send me a magic link instead"}
+              {pendingAction === "magic" ? "Sending sign-in link…" : "Send me a sign-in link instead"}
             </button>
           </div>
 

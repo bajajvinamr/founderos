@@ -86,8 +86,8 @@ export function AgentProviderBadge({
 }
 
 const ADAPTER_META: Record<string, { family: string; label: string; icon: string; bg: string }> = {
-  claude_local: { family: "anthropic", label: "Claude CLI", icon: "🟠", bg: "color-mix(in oklch, #d97757 18%, transparent)" },
-  codex_local:  { family: "openai",    label: "Codex CLI",  icon: "🔵", bg: "color-mix(in oklch, #10a37f 18%, transparent)" },
+  claude_local: { family: "anthropic", label: "Claude desktop app", icon: "🟠", bg: "color-mix(in oklch, #d97757 18%, transparent)" },
+  codex_local:  { family: "openai",    label: "Codex desktop app",  icon: "🔵", bg: "color-mix(in oklch, #10a37f 18%, transparent)" },
   openai_api:   { family: "openai",    label: "OpenAI API", icon: "🔵", bg: "color-mix(in oklch, #10a37f 18%, transparent)" },
   gemini_local: { family: "google",    label: "Gemini",     icon: "🟢", bg: "color-mix(in oklch, #4285f4 18%, transparent)" },
   cursor_local: { family: "other",     label: "Cursor CLI", icon: "🟣", bg: "color-mix(in oklch, #8b5cf6 18%, transparent)" },
