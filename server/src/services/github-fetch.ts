@@ -1,4 +1,5 @@
 import dns from "dns/promises";
+import type { LookupAddress } from "dns";
 import { unprocessable } from "../errors.js";
 
 // ─── Allowlist ────────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export async function assertSafeGitHubHostname(hostname: string): Promise<void> 
   }
 
   // GitHub Enterprise: resolve and check every returned address
-  let addresses: dns.LookupAddress[];
+  let addresses: LookupAddress[];
   try {
     addresses = await dns.lookup(h, { all: true });
   } catch {

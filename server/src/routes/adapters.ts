@@ -353,7 +353,7 @@ export function adapterRoutes() {
   router.patch("/adapters/:type", async (req, res) => {
     assertBoard(req);
 
-    const adapterType = req.params.type;
+    const adapterType = req.params.type as string;
     const { disabled } = req.body as { disabled?: boolean };
 
     if (typeof disabled !== "boolean") {
@@ -388,7 +388,7 @@ export function adapterRoutes() {
   router.patch("/adapters/:type/override", async (req, res) => {
     assertBoard(req);
 
-    const adapterType = req.params.type;
+    const adapterType = req.params.type as string;
     const { paused } = req.body as { paused?: boolean };
 
     if (typeof paused !== "boolean") {
@@ -416,7 +416,7 @@ export function adapterRoutes() {
   router.delete("/adapters/:type", adapterDeleteLimiter, async (req, res) => {
     assertBoard(req);
 
-    const adapterType = req.params.type;
+    const adapterType = req.params.type as string;
 
     if (!adapterType) {
       res.status(400).json({ error: "Adapter type is required." });
@@ -491,7 +491,7 @@ export function adapterRoutes() {
   router.post("/adapters/:type/reload", async (req, res) => {
     assertBoard(req);
 
-    const type = req.params.type;
+    const type = req.params.type as string;
 
     // Built-in adapters cannot be reloaded unless overridden by an external one
     if (BUILTIN_ADAPTER_TYPES.has(type) && !getAdapterPluginByType(type)) {
@@ -543,7 +543,7 @@ export function adapterRoutes() {
   router.post("/adapters/:type/reinstall", adapterInstallLimiter, async (req, res) => {
     assertBoard(req);
 
-    const type = req.params.type;
+    const type = req.params.type as string;
 
     if (BUILTIN_ADAPTER_TYPES.has(type) && !getAdapterPluginByType(type)) {
       res.status(400).json({ error: "Cannot reinstall built-in adapter." });
@@ -611,7 +611,7 @@ export function adapterRoutes() {
 
   router.get("/adapters/:type/config-schema", async (req, res) => {
     assertBoard(req);
-    const { type } = req.params;
+    const { type: typeRaw } = req.params; const type = typeRaw as string;
 
     const adapter = findActiveServerAdapter(type);
     if (!adapter) {
@@ -649,7 +649,7 @@ export function adapterRoutes() {
   // pointing to a self-contained ESM module with zero runtime dependencies.
   router.get("/adapters/:type/ui-parser.js", (req, res) => {
     assertBoard(req);
-    const { type } = req.params;
+    const { type: typeRaw } = req.params; const type = typeRaw as string;
     const source = getOrExtractUiParserSource(type);
     if (!source) {
       res.status(404).json({ error: `No UI parser available for adapter "${type}".` });
