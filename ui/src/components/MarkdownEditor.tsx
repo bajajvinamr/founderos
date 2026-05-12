@@ -28,6 +28,12 @@ import {
   thematicBreakPlugin,
   type RealmPlugin,
 } from "@mdxeditor/editor";
+// Co-locate the editor stylesheet with the component that needs it so the
+// dependency is visible at the consumer site and Vite chunks it alongside
+// the lazy editor JS. Previously this import sat at the top of `main.tsx`,
+// which made the browser fetch ~10 KB gzip of editor CSS on every cold load
+// — even on landing/auth pages where the editor never mounts. Ticket L2-E01.
+import "@mdxeditor/editor/style.css";
 import { buildAgentMentionHref, buildProjectMentionHref } from "@founderos/shared";
 import { Boxes } from "lucide-react";
 import { AgentIcon } from "./AgentIconPicker";

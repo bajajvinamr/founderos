@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import type { Issue } from "@founderos/shared";
@@ -9,7 +9,17 @@ import { queryKeys } from "../lib/queryKeys";
 import { cn, relativeTime } from "../lib/utils";
 import { ExternalLink } from "lucide-react";
 import { Identity } from "./Identity";
-import { RunChatSurface } from "./RunChatSurface";
+// L2-E01: `RunChatSurface` → `IssueChatThread` → `MarkdownEditor` →
+// `@mdxeditor/editor` is a ~459 KB gzip dependency chain. `ActiveAgentsPanel`
+// renders inside the eager `Dashboard` page, so this transitive chain was
+// dragging the editor bundle onto the cold critical path for every signed-in
+// user — even though the editor only mounts when a run card actually shows a
+// chat surface, which the empty-state branch below skips entirely. Going lazy
+// here keeps the post-login first paint snappy and defers ~459 KB gzip until
+// the first AgentRunCard renders.
+const RunChatSurface = lazy(() =>
+  import("./RunChatSurface").then((m) => ({ default: m.RunChatSurface })),
+);
 import { useLiveRunTranscripts } from "./transcript/useLiveRunTranscripts";
 
 const MIN_DASHBOARD_RUNS = 4;
@@ -144,12 +154,14 @@ function AgentRunCard({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <RunChatSurface
-          run={run}
-          transcript={transcript}
-          hasOutput={hasOutput}
-          companyId={companyId}
-        />
+        <Suspense fallback={null}>
+          <RunChatSurface
+            run={run}
+            transcript={transcript}
+            hasOutput={hasOutput}
+            companyId={companyId}
+          />
+        </Suspense>
       </div>
     </div>
   );

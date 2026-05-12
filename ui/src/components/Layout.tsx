@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Moon, Settings, Sun } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useNavigationType, useParams } from "@/lib/router";
@@ -17,9 +17,23 @@ import { BreadcrumbBar } from "./BreadcrumbBar";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { CommandPalette } from "./CommandPalette";
 import { isAskFirstShellEnabled } from "../lib/feature-flags";
-import { NewIssueDialog } from "./NewIssueDialog";
-import { NewProjectDialog } from "./NewProjectDialog";
-import { NewGoalDialog } from "./NewGoalDialog";
+// Lazy-load the three "Add" dialogs that statically import MarkdownEditor
+// (and through it, `@mdxeditor/editor` + `lexical` — ~459 KB gzip combined).
+// Layout renders on every authenticated page, so eager imports here drag
+// `vendor-mdxeditor` + `vendor-lexical` onto the cold critical path for the
+// ~95% of users who never open one of these dialogs. We pair `React.lazy` +
+// `Suspense` with conditional rendering on the dialog's open-state from
+// `useDialog()` so the chunk only downloads on first open. Ticket L2-E01.
+const NewIssueDialog = lazy(() =>
+  import("./NewIssueDialog").then((m) => ({ default: m.NewIssueDialog })),
+);
+const NewProjectDialog = lazy(() =>
+  import("./NewProjectDialog").then((m) => ({ default: m.NewProjectDialog })),
+);
+const NewGoalDialog = lazy(() =>
+  import("./NewGoalDialog").then((m) => ({ default: m.NewGoalDialog })),
+);
+// NewAgentDialog stays eager — it does NOT import MarkdownEditor.
 import { NewAgentDialog } from "./NewAgentDialog";
 import { KeyboardShortcutsCheatsheet } from "./KeyboardShortcutsCheatsheet";
 import { ToastViewport } from "./ToastViewport";
@@ -67,7 +81,17 @@ function readRememberedInstanceSettingsPath(): string {
 
 export function Layout() {
   const { sidebarOpen, setSidebarOpen, toggleSidebar, isMobile } = useSidebar();
-  const { openNewIssue, openOnboarding } = useDialog();
+  // `newIssueOpen` / `newProjectOpen` / `newGoalOpen` gate the lazy chunk
+  // download for the dialogs — only mount them once the user opens one.
+  // After first mount React keeps the chunk in memory; subsequent opens are
+  // instant. See lazy() imports above. Ticket L2-E01.
+  const {
+    openNewIssue,
+    openOnboarding,
+    newIssueOpen,
+    newProjectOpen,
+    newGoalOpen,
+  } = useDialog();
   const { togglePanelVisible } = usePanel();
   // P3 Wave 1 — Ask-First shell feature flag. Default OFF; flip via
   // `VITE_FOUNDEROS_ASK_FIRST_SHELL=true` env var or `?shell=new` query
@@ -98,6 +122,25 @@ export function Layout() {
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const [instanceSettingsTarget, setInstanceSettingsTarget] = useState<string>(() => readRememberedInstanceSettingsPath());
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // L2-E01: track "has the user ever opened this dialog?" so we can keep the
+  // lazy chunk mounted after first open. Without this, closing the dialog
+  // would unmount the lazy component, which is fine functionally but the
+  // browser keeps the JS chunk in memory either way — keeping the component
+  // mounted preserves any in-progress form state if the user reopens.
+  const [newIssueDialogMounted, setNewIssueDialogMounted] = useState(false);
+  const [newProjectDialogMounted, setNewProjectDialogMounted] = useState(false);
+  const [newGoalDialogMounted, setNewGoalDialogMounted] = useState(false);
+  useEffect(() => {
+    if (newIssueOpen) setNewIssueDialogMounted(true);
+  }, [newIssueOpen]);
+  useEffect(() => {
+    if (newProjectOpen) setNewProjectDialogMounted(true);
+  }, [newProjectOpen]);
+  useEffect(() => {
+    if (newGoalOpen) setNewGoalDialogMounted(true);
+  }, [newGoalOpen]);
+
   const nextTheme = theme === "dark" ? "light" : "dark";
   const matchedCompany = useMemo(() => {
     if (!companyPrefix) return null;
@@ -601,9 +644,27 @@ export function Layout() {
       </div>
       {isMobile && <MobileBottomNav visible={mobileNavVisible} />}
       <CommandPalette />
-      <NewIssueDialog />
-      <NewProjectDialog />
-      <NewGoalDialog />
+      {/*
+        Lazy-mounted dialogs: each chunk only downloads when the user first
+        opens that dialog. Once mounted, we keep it rendered so close/reopen
+        is instant (dialog hides itself via its own `open` prop). Fallback is
+        `null` because the closed-state DOM is empty anyway. Ticket L2-E01.
+      */}
+      {(newIssueOpen || newIssueDialogMounted) && (
+        <Suspense fallback={null}>
+          <NewIssueDialog />
+        </Suspense>
+      )}
+      {(newProjectOpen || newProjectDialogMounted) && (
+        <Suspense fallback={null}>
+          <NewProjectDialog />
+        </Suspense>
+      )}
+      {(newGoalOpen || newGoalDialogMounted) && (
+        <Suspense fallback={null}>
+          <NewGoalDialog />
+        </Suspense>
+      )}
       <NewAgentDialog />
       <KeyboardShortcutsCheatsheet open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ToastViewport />

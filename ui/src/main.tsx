@@ -22,7 +22,11 @@ void initBrowserSentry();
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initPluginBridge } from "./plugins/bridge-init";
 import { PluginLauncherProvider } from "./plugins/launchers";
-import "@mdxeditor/editor/style.css";
+// NOTE: `@mdxeditor/editor/style.css` is intentionally NOT imported here.
+// It's imported as a side-effect inside `components/MarkdownEditor.tsx` so the
+// CSS only lands in the `vendor-mdxeditor` lazy chunk's CSS asset — not on the
+// critical path. See ticket L2-E01: ~459 KB gzip preload removed from cold load
+// for ~95% of users who never open an editor surface.
 import "./index.css";
 
 initPluginBridge(React, ReactDOM);
