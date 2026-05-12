@@ -9,12 +9,6 @@
  *   FOUNDEROS_CLAUDE_BIN    — path to claude CLI (default: "claude" on PATH)
  *   FOUNDEROS_RUNNER_TIMEOUT_SEC — per-job ceiling, default 600
  *   FOUNDEROS_RUNNER_LOG_LEVEL   — debug | info | warn | error (default: info)
- *   FOUNDEROS_DISPATCHER_V2      — when truthy ("1" | "true" | "yes",
- *                                   case-insensitive) opts the runner into the
- *                                   PHASE-S7 multi-provider dispatcher path
- *                                   (Gemini, Codex, Cursor, OpenCode, …).
- *                                   Absence = safe default = legacy `runClaude`.
- *                                   See docs/runbooks/dispatcher-v2-rollout.md.
  */
 
 // Hand-rolled to avoid CodeQL js/polynomial-redos on regex-over-untrusted-input.
@@ -137,21 +131,4 @@ export function loadConfig(
     defaultTimeoutSec,
     logLevel: rawLevel,
   };
-}
-
-/**
- * PHASE-S7 dispatcher feature flag.
- *
- * Truthy values: "1", "true", "yes" (case-insensitive, trimmed). Anything
- * else — including unset, empty string, "0", "false" — means the legacy
- * `runClaude` path is used. Absence MUST be the safe default; downstream
- * tickets S7.A.1..S7.D.6 wire the multi-adapter dispatcher behind this
- * gate so it can be flipped/rolled back via `fly secrets`.
- *
- * Caller convention: use this helper instead of re-parsing the env var,
- * so the truthy set stays single-sourced.
- */
-export function isDispatcherV2Enabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = (env.FOUNDEROS_DISPATCHER_V2 ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
 }

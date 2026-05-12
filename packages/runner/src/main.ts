@@ -23,7 +23,7 @@ import {
   type RunnerAdapterType,
   type RunnerEvent,
 } from "./api.js";
-import { isDispatcherV2Enabled, type RunnerConfig } from "./config.js";
+import { type RunnerConfig } from "./config.js";
 import { runAdapter, UnknownAdapterTypeError } from "./dispatcher.js";
 import type { RunContext, RunResult } from "./handlers/types.js";
 import { RUNNER_VERSION } from "./version.js";
@@ -68,22 +68,14 @@ export async function runRunnerLoop(opts: RunnerLoopOptions): Promise<{ jobsProc
   const logger = opts.logger ?? consoleLogger(config.logLevel);
   const api = opts.apiClient ?? new RunnerApiClient(config);
 
-  // PHASE-S7 dispatcher gate. Absence = legacy runClaude (safe default);
-  // truthy = route claimed jobs through `runAdapter` (S7.1.b.3 dispatcher)
-  // so claude_local / future gemini_local / codex_local / openai_api / ...
-  // share one code path. Test seam: when `opts.spawnFn` is set, the legacy
-  // spawnImpl path runs regardless of the flag — dispatcher-flag tests rely
-  // on this to pin v2 logging without paying for the dispatcher's stubbed
-  // `claudeLocalAdapter.run()` (lifecycle implementation lands in S7.1.c.*
-  // follow-ups).
-  const v2 = isDispatcherV2Enabled();
-  if (v2) {
-    console.info("[dispatcher] v2 (multi-adapter)");
-  } else {
-    console.info("[dispatcher] v1 (legacy runClaude)");
-  }
+  // The multi-adapter dispatcher (S7.1.b.3 `runAdapter`) is the canonical
+  // execution path: claude_local / gemini_local / codex_local / openai_api /
+  // ... all share one code path. Test seam: when `opts.spawnFn` is set, the
+  // legacy direct-`runClaude` path runs instead so existing main-loop
+  // integration tests can pin the SpawnArgs → SpawnResult surface without
+  // exercising the dispatcher.
   const spawnImpl = opts.spawnFn ?? runClaude;
-  const useDispatcher = v2 && !opts.spawnFn;
+  const useDispatcher = !opts.spawnFn;
 
   let jobsProcessed = 0;
   let backoffMs = 0;
@@ -295,9 +287,8 @@ type ClaimedPayload = RunOneJobInput["payload"];
 /**
  * Legacy direct-`runClaude` execution path. Preserves existing behavior bit
  * for bit — same SpawnArgs, same SpawnResult → CompletionBody mapping. This
- * is what runs when `FOUNDEROS_DISPATCHER_V2` is unset (safe default) AND
- * what runs whenever a `spawnFn` test seam is provided (so the existing
- * main-loop integration tests keep pinning the same surface).
+ * runs whenever a `spawnFn` test seam is provided (so the existing main-loop
+ * integration tests keep pinning the same surface).
  */
 async function runViaLegacy(args: {
   payload: ClaimedPayload;

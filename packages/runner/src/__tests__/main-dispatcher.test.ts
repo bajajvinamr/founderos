@@ -1,12 +1,12 @@
 /**
  * Main-loop dispatcher-path tests — S7.1.c.
  *
- * Verifies that when `FOUNDEROS_DISPATCHER_V2=1` AND no `spawnFn` test
- * seam is provided, `runRunnerLoop` routes claimed jobs through the
- * S7.1.b.3 `runAdapter` dispatcher rather than the legacy direct-`runClaude`
- * path. Mocks `../dispatcher.js` so the test pins the dispatcher contract
- * (events forwarded, `RunResult` captured into `CompletionBody`) without
- * exercising the real `claudeLocalAdapter.run()` placeholder.
+ * Verifies that when no `spawnFn` test seam is provided, `runRunnerLoop`
+ * routes claimed jobs through the S7.1.b.3 `runAdapter` dispatcher rather
+ * than the legacy direct-`runClaude` path. Mocks `../dispatcher.js` so the
+ * test pins the dispatcher contract (events forwarded, `RunResult` captured
+ * into `CompletionBody`) without exercising the real `claudeLocalAdapter.run()`
+ * placeholder.
  *
  * Coverage:
  *   (a) happy path: events flushed, RunResult fields land in CompletionBody
@@ -168,7 +168,6 @@ const makeJobPayload = (overrides: Partial<JobPayload> = {}): JobPayload => ({
 
 describe("runRunnerLoop — S7.1.c dispatcher path", () => {
   it("(a) happy path: events forwarded, RunResult mapped onto CompletionBody", async () => {
-    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "1");
     dispatcherCalls.length = 0;
 
     setRunAdapterImpl(async function* (): AsyncGenerator<
@@ -229,11 +228,9 @@ describe("runRunnerLoop — S7.1.c dispatcher path", () => {
     expect(dispatcherCalls[0].adapterType).toBe("claude_local");
     expect(dispatcherCalls[0].ctx.prompt).toBe("do the thing");
     expect(dispatcherCalls[0].ctx.timeoutSec).toBe(5);
-    vi.unstubAllEnvs();
   });
 
   it("(b) UnknownAdapterTypeError → fail job with unknown_adapter_type", async () => {
-    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "1");
     dispatcherCalls.length = 0;
 
     setRunAdapterImpl(async function* (): AsyncGenerator<
@@ -264,11 +261,9 @@ describe("runRunnerLoop — S7.1.c dispatcher path", () => {
     expect(completedWith[0].status).toBe("failed");
     expect(completedWith[0].errorMessage).toContain("unknown_adapter_type");
     expect(completedWith[0].errorMessage).toContain("gemini_local");
-    vi.unstubAllEnvs();
   });
 
   it("(c) generator throws a non-UnknownAdapterTypeError → fail with that message", async () => {
-    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "1");
     dispatcherCalls.length = 0;
 
     setRunAdapterImpl(async function* (): AsyncGenerator<
@@ -298,11 +293,9 @@ describe("runRunnerLoop — S7.1.c dispatcher path", () => {
     expect(completedWith).toHaveLength(1);
     expect(completedWith[0].status).toBe("failed");
     expect(completedWith[0].errorMessage).toContain("synthetic adapter explosion");
-    vi.unstubAllEnvs();
   });
 
   it("(d) generator returns undefined RunResult → fail with dispatcher_no_result", async () => {
-    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "1");
     dispatcherCalls.length = 0;
 
     // A misbehaving adapter that yields no events and returns undefined.
@@ -332,11 +325,9 @@ describe("runRunnerLoop — S7.1.c dispatcher path", () => {
     expect(completedWith).toHaveLength(1);
     expect(completedWith[0].status).toBe("failed");
     expect(completedWith[0].errorMessage).toContain("dispatcher_no_result");
-    vi.unstubAllEnvs();
   });
 
   it("(e) missing adapterType in claim payload defaults to claude_local", async () => {
-    vi.stubEnv("FOUNDEROS_DISPATCHER_V2", "1");
     dispatcherCalls.length = 0;
 
     setRunAdapterImpl(async function* (): AsyncGenerator<
@@ -374,6 +365,5 @@ describe("runRunnerLoop — S7.1.c dispatcher path", () => {
     expect(dispatcherCalls[0].adapterType).toBe("claude_local");
     expect(completedWith).toHaveLength(1);
     expect(completedWith[0].status).toBe("completed");
-    vi.unstubAllEnvs();
   });
 });

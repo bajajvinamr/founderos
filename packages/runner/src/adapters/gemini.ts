@@ -40,11 +40,6 @@
  * own SIGTERM→SIGKILL timeout escalation (parity with `runClaude`) and
  * honors the dispatcher's `AbortSignal` for user-cancel. `run()` returns
  * one of three terminal statuses (`completed` / `failed` / `cancelled`).
- *
- * Note: this adapter is dormant under V1 (`FOUNDEROS_DISPATCHER_V2` unset)
- * and goes live when the flag flips. The server-side adapter at
- * `packages/adapters/gemini-local/src/server/execute.ts` is unchanged
- * and continues to power the in-process server path until then.
  */
 
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
