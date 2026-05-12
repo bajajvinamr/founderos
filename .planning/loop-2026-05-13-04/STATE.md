@@ -85,16 +85,38 @@ All 6 PRs returned and opened:
 ### Findings surfaced for follow-up
 - **L2-A10 audit composio job-caller userId for empty values** (from L2-D23) — `content-publish-tick.ts:102` passes `userId: ""` with a TODO; Composio v3 uses userId for per-user routing in OAuth/user-scoped tools
 
-## Wave 2 Phase 5 (IN FLIGHT 2026-05-13T05:58Z) — 4 invariant-defense agents (S6 sprint canaries)
+## Wave 2 Phase 5 (DONE 2026-05-13T06:09Z) — 4 PRs landed (#225-#228)
 
-Each defends a CLAUDE.md-documented invariant from the S6.x sprint (2026-05-06).
-
-| Ticket | Lane | Invariant defended |
+| PR | Ticket | Notes |
 |---|---|---|
-| L2-D26 magic-link atomic single-use | D | `mlt_<48 hex>` tokens sha256-hashed at rest; `consume()` is a single conditional UPDATE (TOCTOU-safe under concurrent requests) |
-| L2-D27 notifications dedupe behavior | D | `(user_id, kind, ref_kind, ref_id) WHERE read_at IS NULL` partial dedupe; markRead is tenant+user scoped; cross-user returns 404 not 403 |
-| L2-D28 onboarding draft partial UNIQUE | D | partial UNIQUE on `(user_id) WHERE completed_at IS NULL`; permits re-onboarding after completion; `getOrCreate` handles race via try-insert → catch-on-conflict → re-read |
-| L2-D29 company_memory.category CHECK | D | CHECK constraint enforces enum at DB (TS unions erase at compile time) |
+| #225 | L2-D27 notifications dedupe | 8 cases; cross-user markRead returns 404 not 403 (anti-enumeration); same body for "not yours" and "doesn't exist" |
+| #226 | L2-D26 magic-link atomic consume | 15 cases / 4 layers; 10-way Promise.all → exactly 1 success + 9 null; source-shape pin via regex on services/magic-link.ts |
+| #227 | L2-D29 company_memory.category CHECK | 7 cases; **3 sources of truth aligned** (DB CHECK + Zod validator + Drizzle const); pg code 23514 on violation |
+| #228 | L2-D28 onboarding draft partial UNIQUE | 9 cases; 5-way Promise.all → exactly 1 row; PUT-without-GET → 409 no_active_draft |
+
+## Loop 2 dispatch ENDED 2026-05-13T06:12Z
+
+Reasons to stop:
+1. **35 PRs queued for human review** (12 Loop 1 + 23 Loop 2) — significant queue depth
+2. **Remaining CLAUDE.md invariants touch auth/payments/Stripe** — council-gated; hook keeps firing
+3. **Marginal value declining** — top-20 invariants covered; next batch is increasingly speculative
+4. **Hard stop at 10:10Z** leaves 4h for human review window, not for more dispatch
+
+Final WAKE-UP.md consolidated with merge order (tiered), findings, architectural reveals, what-I-couldn't-do list, and resume protocol.
+
+## Final ledger
+
+| Phase | Wall time | PRs | Avg per PR |
+|---|---|---|---|
+| Loop 1 (prior session) | ~9h | 12 | 45 min |
+| Loop 2 Phase 1 | ~70 min wait + 1h dispatch | 6 | 30 min |
+| Loop 2 Phase 2 | ~35 min | 5 | 7 min |
+| Loop 2 Phase 3 | ~30 min | 4 | 7 min |
+| Loop 2 Phase 4 | ~25 min | 4 | 6 min |
+| Loop 2 Phase 5 | ~20 min | 4 | 5 min |
+| **Total** | **~13h** | **35** | **22 min** |
+
+PR creation rate accelerated from 45 min/PR in Loop 1 to 5 min/PR by Phase 5 — pattern: smaller, more focused, more parallel-dispatched, less novel per PR.
 
 ## Phase 2 deferred (council-gated, dispatch only with user OK)
 
