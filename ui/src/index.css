@@ -4,31 +4,31 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-background: var(--LEGACY-background);
+  --color-foreground: var(--LEGACY-foreground);
+  --color-card: var(--LEGACY-card);
+  --color-card-foreground: var(--LEGACY-card-foreground);
+  --color-popover: var(--LEGACY-popover);
+  --color-popover-foreground: var(--LEGACY-popover-foreground);
+  --color-primary: var(--LEGACY-primary);
+  --color-primary-foreground: var(--LEGACY-primary-foreground);
+  --color-secondary: var(--LEGACY-secondary);
+  --color-secondary-foreground: var(--LEGACY-secondary-foreground);
+  --color-muted: var(--LEGACY-muted);
+  --color-muted-foreground: var(--LEGACY-muted-foreground);
+  --color-accent: var(--LEGACY-accent);
+  --color-accent-foreground: var(--LEGACY-accent-foreground);
+  --color-destructive: var(--LEGACY-destructive);
+  --color-destructive-foreground: var(--LEGACY-destructive-foreground);
+  --color-border: var(--LEGACY-border);
+  --color-input: var(--LEGACY-input);
+  --color-ring: var(--LEGACY-ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
+  --color-sidebar: var(--LEGACY-sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
@@ -36,15 +36,14 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  /* Pulse register radius scale — editorial flat. Cards / modals keep
-     a hint of softness (0.125rem / 0.25rem) for affordance; buttons,
-     inputs, and badges go fully sharp. The base `--radius` (set in
-     :root below) is 0. Tighter than the prior shadcn defaults
-     (0.375 → 0.875rem) by ~3-4×. */
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0.125rem;
-  --radius-xl: 0.25rem;
+  /* V2 radius scale override (DESIGN-V2.md §1.4).
+     shadcn --radius-sm/md/lg/xl now map to V2 sm/md/md/md values.
+     V2 radius-sm = 4px (inputs, buttons), radius-md = 6px (cards, modals).
+     Prior Pulse values were 0/0/0.125rem/0.25rem. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
 }
 
 :root {
@@ -55,32 +54,34 @@
      Warm off-white surfaces, deep slate ink, signal-orange primary
      (#ff5b29 ≈ oklch(0.66 0.21 35)) — replaces prior teal accent to
      match landing.tsx visual identity while keeping the auth-app
-     light-mode stamina (founders stare at the Inbox for hours). */
-  --background: oklch(0.985 0.004 95);
-  --foreground: oklch(0.21 0.015 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.015 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.015 260);
-  --primary: oklch(0.66 0.21 35);
-  --primary-foreground: oklch(0.985 0.004 95);
-  --secondary: oklch(0.955 0.008 240);
-  --secondary-foreground: oklch(0.21 0.015 260);
-  --muted: oklch(0.96 0.005 240);
-  --muted-foreground: oklch(0.5 0.015 260);
-  --accent: oklch(0.96 0.05 35);
-  --accent-foreground: oklch(0.45 0.18 35);
-  --destructive: oklch(0.6 0.24 27);
-  --destructive-foreground: oklch(0.985 0.004 95);
-  --border: oklch(0.91 0.008 240);
-  --input: oklch(0.93 0.006 240);
-  --ring: oklch(0.66 0.21 35);
+     light-mode stamina (founders stare at the Inbox for hours).
+     NOTE: Tokens renamed to --LEGACY-* as part of DESIGN-V2 Step 1 migration.
+     Existing components continue to bind via @theme inline above. */
+  --LEGACY-background: oklch(0.985 0.004 95);
+  --LEGACY-foreground: oklch(0.21 0.015 260);
+  --LEGACY-card: oklch(1 0 0);
+  --LEGACY-card-foreground: oklch(0.21 0.015 260);
+  --LEGACY-popover: oklch(1 0 0);
+  --LEGACY-popover-foreground: oklch(0.21 0.015 260);
+  --LEGACY-primary: oklch(0.66 0.21 35);
+  --LEGACY-primary-foreground: oklch(0.985 0.004 95);
+  --LEGACY-secondary: oklch(0.955 0.008 240);
+  --LEGACY-secondary-foreground: oklch(0.21 0.015 260);
+  --LEGACY-muted: oklch(0.96 0.005 240);
+  --LEGACY-muted-foreground: oklch(0.5 0.015 260);
+  --LEGACY-accent: oklch(0.96 0.05 35);
+  --LEGACY-accent-foreground: oklch(0.45 0.18 35);
+  --LEGACY-destructive: oklch(0.6 0.24 27);
+  --LEGACY-destructive-foreground: oklch(0.985 0.004 95);
+  --LEGACY-border: oklch(0.91 0.008 240);
+  --LEGACY-input: oklch(0.93 0.006 240);
+  --LEGACY-ring: oklch(0.66 0.21 35);
   --chart-1: oklch(0.66 0.21 35);
   --chart-2: oklch(0.72 0.14 55);
   --chart-3: oklch(0.55 0.095 193);
   --chart-4: oklch(0.6 0.15 300);
   --chart-5: oklch(0.7 0.11 178);
-  --sidebar: oklch(0.97 0.005 240);
+  --LEGACY-sidebar: oklch(0.97 0.005 240);
   --sidebar-foreground: oklch(0.21 0.015 260);
   --sidebar-primary: oklch(0.66 0.21 35);
   --sidebar-primary-foreground: oklch(0.985 0.004 95);
@@ -94,6 +95,32 @@
   --brand-soft: oklch(0.96 0.05 35);
   --brand-ring: oklch(0.85 0.12 35);
   --brand-ink: oklch(0.21 0.015 260);
+
+  /* --- LEGACY alias bridge ---
+     Direct var(--X) references throughout this file (MDXEditor theme vars,
+     animation keyframes, hairline-grid, etc.) must still resolve. These
+     aliases forward the old names to the --LEGACY-* declarations above.
+     Remove this block in PR #V2-final once all direct usages are migrated. */
+  --background: var(--LEGACY-background);
+  --foreground: var(--LEGACY-foreground);
+  --card: var(--LEGACY-card);
+  --card-foreground: var(--LEGACY-card-foreground);
+  --popover: var(--LEGACY-popover);
+  --popover-foreground: var(--LEGACY-popover-foreground);
+  --primary: var(--LEGACY-primary);
+  --primary-foreground: var(--LEGACY-primary-foreground);
+  --secondary: var(--LEGACY-secondary);
+  --secondary-foreground: var(--LEGACY-secondary-foreground);
+  --muted: var(--LEGACY-muted);
+  --muted-foreground: var(--LEGACY-muted-foreground);
+  --accent: var(--LEGACY-accent);
+  --accent-foreground: var(--LEGACY-accent-foreground);
+  --destructive: var(--LEGACY-destructive);
+  --destructive-foreground: var(--LEGACY-destructive-foreground);
+  --border: var(--LEGACY-border);
+  --input: var(--LEGACY-input);
+  --ring: var(--LEGACY-ring);
+  --sidebar: var(--LEGACY-sidebar);
 
   /* Typography — Pulse Builders register (matches landing.tsx).
      Inter for UI body, Fraunces for editorial display headlines (sharp,
@@ -110,38 +137,132 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: "Fraunces", "Times New Roman", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* =========================================================
+     FOUNDEROS DESIGN SYSTEM V2 — Notion-soft (DESIGN-V2.md §1.1–1.6)
+     Coexistence layer: --v2-* tokens added alongside --LEGACY-*.
+     Components migrate to --v2-* in subsequent PRs (V2-2 onward).
+     ========================================================= */
+
+  /* --- V2 Canvas & Surface --- */
+  --v2-bg-canvas: oklch(0.977 0.006 80);
+  --v2-bg-surface: oklch(0.992 0.003 80);
+  --v2-bg-overlay: oklch(0.985 0.004 80);
+  --v2-bg-subtle: oklch(0.962 0.009 75);
+
+  /* --- V2 Ink & Text --- */
+  --v2-ink-body: oklch(0.22 0.014 260);
+  --v2-ink-secondary: oklch(0.44 0.012 260);
+  --v2-ink-muted: oklch(0.60 0.010 260);
+  --v2-ink-disabled: oklch(0.74 0.006 260);
+
+  /* --- V2 Accent — Dusty Rose --- */
+  --v2-accent: oklch(0.64 0.095 14);
+  --v2-accent-light: oklch(0.96 0.018 14);
+  --v2-accent-dark: oklch(0.46 0.085 14);
+  --v2-accent-ring: oklch(0.80 0.060 14);
+
+  /* --- V2 Status colors --- */
+  --v2-status-positive: oklch(0.56 0.12 150);
+  --v2-status-warning: oklch(0.68 0.13 65);
+  --v2-status-destructive: oklch(0.57 0.19 27);
+  --v2-status-info: oklch(0.55 0.11 240);
+
+  /* --- V2 Structural borders --- */
+  --v2-border: oklch(0.89 0.008 80);
+  --v2-border-strong: oklch(0.78 0.012 80);
+  --v2-border-focus: var(--v2-accent-ring);
+
+  /* --- V2 Radius scale (DESIGN-V2.md §1.4) --- */
+  --v2-radius-none: 0;
+  --v2-radius-xs: 2px;
+  --v2-radius-sm: 4px;
+  --v2-radius-md: 6px;
+  --v2-radius-full: 9999px;
+
+  /* --- V2 Typography (DESIGN-V2.md §1.2) --- */
+  --v2-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --v2-font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --v2-text-caption: 0.6875rem;
+  --v2-text-xs: 0.75rem;
+  --v2-text-sm: 0.875rem;
+  --v2-text-base: 0.9375rem;
+  --v2-text-lead: 1.0625rem;
+  --v2-text-h4: 1.125rem;
+  --v2-text-h3: 1.3125rem;
+  --v2-text-h2: 1.625rem;
+  --v2-text-h1: 2.125rem;
+  --v2-text-display: 2.875rem;
+  --v2-leading-tight: 1.2;
+  --v2-leading-snug: 1.35;
+  --v2-leading-normal: 1.5;
+  --v2-leading-relaxed: 1.65;
+  --v2-tracking-tight: -0.025em;
+  --v2-tracking-normal: 0;
+  --v2-tracking-caps: 0.10em;
+  --v2-tracking-caps-wide: 0.16em;
+
+  /* --- V2 Spacing (DESIGN-V2.md §1.3) --- */
+  --v2-space-1: 4px;
+  --v2-space-2: 8px;
+  --v2-space-3: 12px;
+  --v2-space-4: 16px;
+  --v2-space-6: 24px;
+  --v2-space-8: 32px;
+  --v2-space-12: 48px;
+  --v2-space-16: 64px;
+  --v2-space-24: 96px;
+
+  /* --- V2 Shadows (DESIGN-V2.md §1.5) --- */
+  --v2-shadow-none: none;
+  --v2-shadow-hairline: 0 0 0 1px var(--v2-border);
+  --v2-shadow-raised:
+    0 1px 3px oklch(0.22 0.014 260 / 0.06),
+    0 0 0 1px var(--v2-border);
+  --v2-shadow-modal:
+    0 4px 16px oklch(0.22 0.014 260 / 0.08),
+    0 0 0 1px var(--v2-border);
+
+  /* --- V2 Motion (DESIGN-V2.md §1.6) --- */
+  --v2-duration-fast: 150ms;
+  --v2-duration-normal: 200ms;
+  --v2-duration-slow: 300ms;
+  --v2-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --v2-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --v2-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .dark {
   /* FounderOS brand — dark mode (Pulse Builders register, full match)
      Near-black editorial void backgrounds (#0a0a0c → #17181b elevation
      tiers), bone off-white foreground, signal-orange primary. Mirrors
-     landing.tsx Pulse tokens 1:1. */
-  --background: oklch(0.13 0.005 260);
-  --foreground: oklch(0.93 0.012 88);
-  --card: oklch(0.16 0.005 260);
-  --card-foreground: oklch(0.93 0.012 88);
-  --popover: oklch(0.16 0.005 260);
-  --popover-foreground: oklch(0.93 0.012 88);
-  --primary: oklch(0.7 0.21 35);
-  --primary-foreground: oklch(0.13 0.005 260);
-  --secondary: oklch(0.22 0.005 260);
-  --secondary-foreground: oklch(0.93 0.012 88);
-  --muted: oklch(0.2 0.005 260);
-  --muted-foreground: oklch(0.62 0.008 88);
-  --accent: oklch(0.28 0.06 35);
-  --accent-foreground: oklch(0.85 0.16 35);
-  --destructive: oklch(0.62 0.235 27);
-  --destructive-foreground: oklch(0.97 0.008 95);
-  --border: oklch(0.24 0.005 260);
-  --input: oklch(0.22 0.005 260);
-  --ring: oklch(0.7 0.21 35);
+     landing.tsx Pulse tokens 1:1.
+     NOTE: Tokens renamed to --LEGACY-* as part of DESIGN-V2 Step 1 migration. */
+  --LEGACY-background: oklch(0.13 0.005 260);
+  --LEGACY-foreground: oklch(0.93 0.012 88);
+  --LEGACY-card: oklch(0.16 0.005 260);
+  --LEGACY-card-foreground: oklch(0.93 0.012 88);
+  --LEGACY-popover: oklch(0.16 0.005 260);
+  --LEGACY-popover-foreground: oklch(0.93 0.012 88);
+  --LEGACY-primary: oklch(0.7 0.21 35);
+  --LEGACY-primary-foreground: oklch(0.13 0.005 260);
+  --LEGACY-secondary: oklch(0.22 0.005 260);
+  --LEGACY-secondary-foreground: oklch(0.93 0.012 88);
+  --LEGACY-muted: oklch(0.2 0.005 260);
+  --LEGACY-muted-foreground: oklch(0.62 0.008 88);
+  --LEGACY-accent: oklch(0.28 0.06 35);
+  --LEGACY-accent-foreground: oklch(0.85 0.16 35);
+  --LEGACY-destructive: oklch(0.62 0.235 27);
+  --LEGACY-destructive-foreground: oklch(0.97 0.008 95);
+  --LEGACY-border: oklch(0.24 0.005 260);
+  --LEGACY-input: oklch(0.22 0.005 260);
+  --LEGACY-ring: oklch(0.7 0.21 35);
   --chart-1: oklch(0.7 0.21 35);
   --chart-2: oklch(0.72 0.16 55);
   --chart-3: oklch(0.6 0.105 188);
   --chart-4: oklch(0.66 0.17 300);
   --chart-5: oklch(0.7 0.12 162);
-  --sidebar: oklch(0.15 0.005 260);
+  --LEGACY-sidebar: oklch(0.15 0.005 260);
   --sidebar-foreground: oklch(0.93 0.012 88);
   --sidebar-primary: oklch(0.7 0.21 35);
   --sidebar-primary-foreground: oklch(0.13 0.005 260);
@@ -157,6 +278,55 @@
   --brand-ink: oklch(0.93 0.012 88);
 
   /* Typography is mode-independent — declared only in :root above. */
+
+  /* --- LEGACY alias bridge (dark mode) ---
+     Forwards old names to --LEGACY-* for direct var(--X) usages throughout
+     this file. Remove in PR #V2-final. */
+  --background: var(--LEGACY-background);
+  --foreground: var(--LEGACY-foreground);
+  --card: var(--LEGACY-card);
+  --card-foreground: var(--LEGACY-card-foreground);
+  --popover: var(--LEGACY-popover);
+  --popover-foreground: var(--LEGACY-popover-foreground);
+  --primary: var(--LEGACY-primary);
+  --primary-foreground: var(--LEGACY-primary-foreground);
+  --secondary: var(--LEGACY-secondary);
+  --secondary-foreground: var(--LEGACY-secondary-foreground);
+  --muted: var(--LEGACY-muted);
+  --muted-foreground: var(--LEGACY-muted-foreground);
+  --accent: var(--LEGACY-accent);
+  --accent-foreground: var(--LEGACY-accent-foreground);
+  --destructive: var(--LEGACY-destructive);
+  --destructive-foreground: var(--LEGACY-destructive-foreground);
+  --border: var(--LEGACY-border);
+  --input: var(--LEGACY-input);
+  --ring: var(--LEGACY-ring);
+  --sidebar: var(--LEGACY-sidebar);
+
+  /* --- V2 dark mode tokens (DESIGN-V2.md §1.1) --- */
+  --v2-bg-canvas: oklch(0.138 0.006 260);
+  --v2-bg-surface: oklch(0.168 0.006 260);
+  --v2-bg-overlay: oklch(0.155 0.006 260);
+  --v2-bg-subtle: oklch(0.195 0.007 260);
+
+  --v2-ink-body: oklch(0.924 0.008 80);
+  --v2-ink-secondary: oklch(0.72 0.008 80);
+  --v2-ink-muted: oklch(0.54 0.007 260);
+  --v2-ink-disabled: oklch(0.38 0.005 260);
+
+  --v2-accent: oklch(0.72 0.085 14);
+  --v2-accent-light: oklch(0.24 0.040 14);
+  --v2-accent-dark: oklch(0.84 0.060 14);
+  --v2-accent-ring: oklch(0.60 0.070 14);
+
+  --v2-status-positive: oklch(0.66 0.12 150);
+  --v2-status-warning: oklch(0.76 0.13 65);
+  --v2-status-destructive: oklch(0.66 0.17 27);
+  --v2-status-info: oklch(0.64 0.10 240);
+
+  --v2-border: oklch(0.255 0.007 260);
+  --v2-border-strong: oklch(0.32 0.008 260);
+  --v2-border-focus: var(--v2-accent-ring);
 }
 
 @layer base {
@@ -197,6 +367,17 @@
     font-weight: 400;
     font-variation-settings: "SOFT" 50, "opsz" 144;
     letter-spacing: -0.03em;
+  }
+  /* V2 headline register — Instrument Serif italic (DESIGN-V2.md §1.2).
+     Used for h1, h2, Daily Brief titles, modal headers, onboarding hero.
+     Distinct from .font-display (Fraunces) which stays on Landing/Pulse only. */
+  .font-headline {
+    font-family: var(--v2-font-display);
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    letter-spacing: var(--v2-tracking-tight);
+    line-height: var(--v2-leading-tight);
   }
   /* Editorial caps — section labels, kicker text. Mirrors Pulse landing. */
   .caps {
