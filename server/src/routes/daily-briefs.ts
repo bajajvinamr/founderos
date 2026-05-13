@@ -6,6 +6,11 @@
  *        returns the single brief for that date (200) or 404. Without it,
  *        returns up to `limit` recent briefs newest-first.
  *
+ *   GET  /api/companies/:id/daily-briefs/latest
+ *        Returns the most recent brief by `forDate` DESC. Registered BEFORE
+ *        the `:briefId` route so the literal "latest" isn't captured as a
+ *        UUID-shaped id.
+ *
  *   GET  /api/companies/:id/daily-briefs/:briefId
  *        Single fetch by id, scoped to the path companyId so a known briefId
  *        from one tenant cannot be read under another's path.
@@ -137,7 +142,7 @@ export function dailyBriefRoutes(db: Db, options?: DailyBriefRoutesOptions) {
   /**
    * GET /api/companies/:id/daily-briefs/latest
    *
-   * Returns the single most-recent brief for the company by `for_date` desc.
+   * Returns the single most-recent brief for the company by `forDate` desc.
    * Used by the `/today` UI shell to render the morning brief without paging
    * through the full list. Response shape is intentionally minimal:
    *   { briefDate: 'yyyy-mm-dd', payload: DailyBriefPayload }
@@ -150,26 +155,23 @@ export function dailyBriefRoutes(db: Db, options?: DailyBriefRoutesOptions) {
    * — Express matches in registration order, and the literal "latest" would
    *   otherwise be captured as a `:briefId` UUID lookup.
    */
-  router.get(
-    "/companies/:id/daily-briefs/latest",
-    async (req, res) => {
-      const companyId = req.params.id as string;
-      assertCompanyAccess(req, companyId);
+  router.get("/companies/:id/daily-briefs/latest", async (req, res) => {
+    const companyId = req.params.id as string;
+    assertCompanyAccess(req, companyId);
 
-      const [row] = await db
-        .select()
-        .from(dailyBriefs)
-        .where(eq(dailyBriefs.companyId, companyId))
-        .orderBy(desc(dailyBriefs.forDate))
-        .limit(1);
-      if (!row) throw notFound("No daily brief found for this company");
+    const [row] = await db
+      .select()
+      .from(dailyBriefs)
+      .where(eq(dailyBriefs.companyId, companyId))
+      .orderBy(desc(dailyBriefs.forDate))
+      .limit(1);
+    if (!row) throw notFound("No daily brief found for this company");
 
-      res.json({
-        briefDate: asDateString(row.forDate),
-        payload: row.payload,
-      });
-    },
-  );
+    res.json({
+      briefDate: asDateString(row.forDate),
+      payload: row.payload,
+    });
+  });
 
   /**
    * GET /api/companies/:id/daily-briefs/:briefId
