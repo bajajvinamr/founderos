@@ -596,23 +596,22 @@ describe("onboarding bootstrap — 6-tile MVP api adapters (S7.0.2)", () => {
     expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 
-  it("rejects adapterChoice=google_api with 500 (S8 P0.1 — throw surfaces)", async () => {
-    // S8 P0.1 Phase 1D — the bootstrap dev/local path now routes through
-    // mapOnboardingChoiceToAdapter (PR #148), which throws "google_api
-    // adapter is not yet implemented (S7 Phase 4)" instead of silently
-    // collapsing to claude_local. The Zod schema still accepts the
-    // choice + the key gate still enforces a non-empty key (asserted
-    // in the sibling test below). Live wiring lands with the S7.B
-    // Google API tile.
+  it("accepts adapterChoice=google_api when key is provided (no anthropic validator fires)", async () => {
+    // PR #194 — google_api is now a first-class ServerAdapterModule
+    // (Phase C3 redo). The bootstrap dev/local path resolves it via
+    // mapOnboardingChoiceToAdapter and returns 201. The Zod schema
+    // still accepts the choice; the key gate (asserted in the sibling
+    // test below) enforces a non-empty key. The live Google validator
+    // lands with the S7.B Google API tile and is not exercised here.
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
       .send(makePayload("google_api", "AIza-google-test-key-1234567890"));
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(201);
+    // The Google key path bypasses the Anthropic live validator —
+    // wiring lands with the S7.B Google API tile.
     expect(mockValidateAnthropicKey).not.toHaveBeenCalled();
-    // No agent rows persisted on the throw.
-    expect(mockAgentService.create).not.toHaveBeenCalled();
   });
 
   it("rejects adapterChoice=google_api when key is missing (auth_mode='api' gate)", async () => {

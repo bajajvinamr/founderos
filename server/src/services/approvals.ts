@@ -3,6 +3,7 @@ import type { Db } from "@founderos/db";
 import { approvalComments, approvals } from "@founderos/db";
 import { notFound, unprocessable } from "../errors.js";
 import { redactCurrentUserText } from "../log-redaction.js";
+import { logger } from "../middleware/logger.js";
 import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
 import { notifyHireApproved } from "./hire-hook.js";
@@ -106,6 +107,41 @@ export function approvalService(db: Db) {
         decidedByUserId,
         decisionNote,
       );
+
+      // Council condition #5 (TD-1, 2026-05-13): Mira Labs dogfood approvals
+      // that carry a placeholder gmailDraftId must NEVER reach a real Composio
+      // call path. The approval row is already resolved above (status →
+      // "approved" in the DB) — this guard prevents execution only.
+      //
+      // Pattern: payload.gmailDraftId matching /^draft_placeholder_\d+$/ is a
+      // synthetic value inserted by seed-mira-labs.ts for demo/dogfood data.
+      // If a real Composio GMAIL_DRAFT_EMAIL call were attempted with this
+      // value it would fail with an opaque upstream error and potentially
+      // expose real Gmail auth tokens in error logs.
+      //
+      // Soft error: the approval is already "approved" in the DB (for UI
+      // consistency — the founder clicked Approve), but execution is skipped
+      // with a logged warning and a returned indicator. TD-3 / the UI layer
+      // should check `dogfoodDemoSkipped` and surface:
+      // "This is dogfood demo data; click View full proposal instead."
+      if (applied && updated.type === "agent_action") {
+        const payload = updated.payload as Record<string, unknown>;
+        const gmailDraftId = typeof payload.gmailDraftId === "string" ? payload.gmailDraftId : null;
+        const isDogfoodPlaceholder = gmailDraftId !== null && /^draft_placeholder_\d+$/.test(gmailDraftId);
+        if (isDogfoodPlaceholder) {
+          logger.info(
+            { approvalId: id, gmailDraftId, companyId: updated.companyId },
+            "approval.dogfood_placeholder_skip: gmailDraftId is a seed placeholder — skipping Composio execution (TD-1 council condition #5)",
+          );
+          return {
+            approval: updated,
+            applied,
+            dogfoodDemoSkipped: true,
+            dogfoodDemoMessage:
+              "This is dogfood demo data; click View full proposal instead.",
+          };
+        }
+      }
 
       let hireApprovedAgentId: string | null = null;
       const now = new Date();
