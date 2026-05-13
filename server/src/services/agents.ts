@@ -170,6 +170,32 @@ export function hasAgentShortnameCollision(
   });
 }
 
+/**
+ * Resets agents stuck in `error` status to `idle` at server boot.
+ *
+ * Dev-mode behavior fix: the heartbeat scheduler ticks every agent at its
+ * configured interval and marks the run `error` if the underlying adapter
+ * call fails (e.g. missing API key in `local_trusted` mode). On the next
+ * boot, those agents are still `error` and the scheduler re-fires them,
+ * re-erroring them — a cycle that has no recovery path unless an operator
+ * manually flips them back.
+ *
+ * Calling this once at startup gives every agent a clean slate. If the
+ * underlying problem (missing key, broken integration) is still present,
+ * the next scheduler tick will re-mark them — but at least the operator
+ * sees the error timestamp move, instead of a stuck-since-last-boot row.
+ *
+ * Returns the count of rows reset so callers can log it.
+ */
+export async function resetStaleAgentErrors(db: Db): Promise<number> {
+  const updated = await db
+    .update(agents)
+    .set({ status: "idle", updatedAt: new Date() })
+    .where(eq(agents.status, "error"))
+    .returning({ id: agents.id });
+  return updated.length;
+}
+
 export function deduplicateAgentName(
   candidateName: string,
   existingAgents: AgentShortnameRow[],
