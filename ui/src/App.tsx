@@ -328,6 +328,14 @@ function boardRoutes() {
       <Route path="tests/ux/chat" element={<IssueChatUxLab />} />
       <Route path="tests/ux/runs" element={<RunTranscriptUxLab />} />
       <Route path="instance/settings/adapters" element={<AdapterManager />} />
+      {/* SidebarNew top-level groupings — placeholder redirects until the
+          collapsed shell lands. `/work` covers issues + routines + projects,
+          `/team` covers agents + org, `/library` covers memory + skills +
+          audit. These mirror the Wave 1 pattern (single Navigate target
+          per group); a future Wave will split them into dedicated pages. */}
+      <Route path="work" element={<Navigate to="../issues" replace />} />
+      <Route path="team" element={<Navigate to="../agents/all" replace />} />
+      <Route path="library" element={<Navigate to="../memory" replace />} />
       <Route path=":pluginRoutePath" element={<PluginPage />} />
       <Route path="*" element={<NotFoundPage scope="board" />} />
     </>
