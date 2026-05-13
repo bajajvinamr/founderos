@@ -34,7 +34,7 @@
 
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { createDb } from "../packages/db/src/client.js";
+import { createDb } from "../../packages/db/src/client.js";
 import {
   companies,
   agents,
@@ -45,143 +45,9 @@ import {
   companyMemberships,
   composioConnections,
   dailyBriefs,
-} from "../packages/db/src/schema/index.js";
-import type { DailyBriefPayload } from "../packages/db/src/schema/daily_briefs.js";
-import { runPostSignupBootstrap } from "../server/src/auth/post-signup-hook.js";
-
-// ─── Purge order: every table with a FK referencing companies.id ──────────────
-// Why this list exists (and why it's load-bearing):
-//
-// Pre-fix, `purgeExistingMiraLabs` only deleted the tables this seed itself
-// inserts into (approvals, issues, projects, goals, composio_connections,
-// agents, company_memberships, companies). But the running FounderOS server
-// auto-installs rows in other tables as soon as a company first appears
-// (notably `company_skills` — the founderos bootstrap skill set — plus
-// `insights` from idle background jobs, `daily_briefs` from the digest cron,
-// etc.). Those leftover rows are NO ACTION refs to companies.id, so the
-// final `DELETE FROM companies` violates the FK constraint and the seed
-// crashes mid-RESET. By that point agents/issues/goals are already gone,
-// the `companies` row is still alive, and the next re-seed cannot insert
-// (the persona idempotency check fires and the script aborts).
-//
-// Symptom in the UI: Maya/Theo/Iris invisible on the Agents page, Inbox
-// empty, Goals/Projects empty — because the rows are literally absent. The
-// audit's hypothesis (UI scopes by `workspace_id`, seed sets only
-// `company_id`) was wrong: there is no `workspaces` table, agents has only
-// `company_id` as a tenant FK, and the UI's GET `/api/companies/:companyId/agents`
-// filters on `agents.company_id`. The query and the seed agree on the
-// tenant key; the rows just don't exist.
-//
-// Fix: this list mirrors every FK to companies.id discovered by
-//   SELECT tc.table_name FROM information_schema.referential_constraints rc
-//   JOIN information_schema.table_constraints tc USING (constraint_name)
-//   JOIN information_schema.constraint_column_usage ccu USING (constraint_name)
-//   WHERE ccu.table_name = 'companies'
-// applied to the live local DB (76 FK columns across 71 tables, including
-// the 29 CASCADE-rule tables we delete anyway for predictability + the 40
-// NO ACTION tables we MUST delete + the 2 RESTRICT tables (content_briefs,
-// events) that block deletion if non-empty). Order is reverse-topological so
-// child rows are removed before parents; identical to the order used by
-// server/src/services/companies.ts:remove().
-//
-// Maintenance: when a migration adds a new table with a FK to companies.id,
-// add the table name here. Run the diag at /tmp/diag-all-refs.ts (in PR #) to
-// verify zero orphan rows remain after a RESET pass.
-const MIRA_LABS_PURGE_TABLES: ReadonlyArray<string> = [
-  // ── Deepest children: heartbeats + runtime audit ─────────────────────────
-  "heartbeat_run_events",
-  "agent_task_sessions",
-  "activity_log",
-  "heartbeat_runs",
-  "agent_wakeup_requests",
-  "agent_api_keys",
-  "agent_runtime_state",
-  "agent_config_revisions",
-  "agent_handoffs",
-  "agent_reviews",
-  // ── Issue subtree ────────────────────────────────────────────────────────
-  "issue_comments",
-  "issue_attachments",
-  "issue_documents",
-  "issue_approvals",
-  "issue_execution_decisions",
-  "issue_inbox_archives",
-  "issue_labels",
-  "issue_read_states",
-  "issue_relations",
-  "issue_work_products",
-  "inbox_dismissals",
-  // ── Approvals ────────────────────────────────────────────────────────────
-  "approval_comments",
-  "approvals",
-  // ── Cost / finance / events ──────────────────────────────────────────────
-  "cost_events",
-  "finance_events",
-  "marketing_spend",
-  "budget_incidents",
-  "budget_policies",
-  "events",
-  "company_financials",
-  // ── Insights / experiments / conversations ───────────────────────────────
-  "decision_outcomes",
-  "insights",
-  "experiments",
-  "conversations",
-  // ── Content + workflows + routines ───────────────────────────────────────
-  "content_drafts",
-  "content_briefs",
-  "workflow_runs",
-  "workflows",
-  "routine_runs",
-  "routine_triggers",
-  "routines",
-  // ── Runner + plugins + integrations ──────────────────────────────────────
-  "runner_jobs",
-  "runner_tokens",
-  "plugin_company_settings",
-  "integration_data",
-  "magic_link_tokens",
-  "customer_email_suppressions",
-  "notifications",
-  "weekly_wraps",
-  "daily_briefs",
-  // ── Workspaces + departments ─────────────────────────────────────────────
-  "workspace_operations",
-  "workspace_runtime_services",
-  "workspace_departments",
-  "execution_workspaces",
-  "project_workspaces",
-  // ── Documents + labels + assets ──────────────────────────────────────────
-  "document_revisions",
-  "documents",
-  "labels",
-  "feedback_exports",
-  "feedback_votes",
-  // ── Memory / secrets / skills (auto-installed by server runtime) ─────────
-  // company_secret_versions cascades from company_secrets — purging the
-  // parent table cleans it implicitly.
-  "company_memory",
-  "company_secrets",
-  "company_skills",
-  // ── Composio + integrations ──────────────────────────────────────────────
-  "composio_connections",
-  "integrations",
-  // ── Issue + project + goals ──────────────────────────────────────────────
-  "issues",
-  "project_goals",
-  "projects",
-  "goals",
-  // ── Agents (referenced by issues/approvals/etc. above — must come after) ─
-  "agents",
-  // ── Memberships + access grants + invites ────────────────────────────────
-  "principal_permission_grants",
-  "join_requests",
-  "invites",
-  "company_memberships",
-  // ── Logos + assets (referenced by companies.logoAssetId — keep last) ─────
-  "company_logos",
-  "assets",
-];
+} from "../../packages/db/src/schema/index.js";
+import type { DailyBriefPayload } from "../../packages/db/src/schema/daily_briefs.js";
+import { runPostSignupBootstrap } from "../src/auth/post-signup-hook.js";
 
 // ─── Gate: FOUNDEROS_SEED_MIRA_LABS=1 ────────────────────────────────────────
 
@@ -444,10 +310,45 @@ async function seedMiraLabsDailyBrief(
 
 // ─── Reset path ───────────────────────────────────────────────────────────────
 
+// Every table with a FK to companies.id — see scripts/seed-mira-labs.ts for
+// the full rationale. Short version: the server runtime auto-installs rows
+// in `company_skills`, `insights`, `daily_briefs` etc. as soon as a company
+// appears, so a purge that only deletes seed-inserted tables can't reach
+// `companies` itself (FK violation), and a partial purge leaves the DB in a
+// state where re-seeding aborts on the persona idempotency check. Order is
+// reverse-topological — children first, parents last.
+const MIRA_LABS_PURGE_TABLES: ReadonlyArray<string> = [
+  "heartbeat_run_events", "agent_task_sessions", "activity_log", "heartbeat_runs",
+  "agent_wakeup_requests", "agent_api_keys", "agent_runtime_state",
+  "agent_config_revisions", "agent_handoffs", "agent_reviews",
+  "issue_comments", "issue_attachments", "issue_documents", "issue_approvals",
+  "issue_execution_decisions", "issue_inbox_archives", "issue_labels",
+  "issue_read_states", "issue_relations", "issue_work_products",
+  "inbox_dismissals",
+  "approval_comments", "approvals",
+  "cost_events", "finance_events", "marketing_spend", "budget_incidents",
+  "budget_policies", "events", "company_financials",
+  "decision_outcomes", "insights", "experiments", "conversations",
+  "content_drafts", "content_briefs", "workflow_runs", "workflows",
+  "routine_runs", "routine_triggers", "routines",
+  "runner_jobs", "runner_tokens", "plugin_company_settings", "integration_data",
+  "magic_link_tokens", "customer_email_suppressions", "notifications",
+  "weekly_wraps", "daily_briefs",
+  "workspace_operations", "workspace_runtime_services", "workspace_departments",
+  "execution_workspaces", "project_workspaces",
+  "document_revisions", "documents", "labels",
+  "feedback_exports", "feedback_votes",
+  "company_memory", "company_secrets", "company_skills",
+  "composio_connections", "integrations",
+  "issues", "project_goals", "projects", "goals",
+  "agents",
+  "principal_permission_grants", "join_requests", "invites", "company_memberships",
+  "company_logos", "assets",
+];
+
 async function purgeExistingMiraLabs(db: ReturnType<typeof createDb>): Promise<void> {
   console.log("[seed-mira-labs] RESET=1: purging existing Mira Labs data (reverse dep order)…");
 
-  // Find the company ID first
   const existingCompany = await db
     .select({ id: companies.id })
     .from(companies)
@@ -461,19 +362,12 @@ async function purgeExistingMiraLabs(db: ReturnType<typeof createDb>): Promise<v
 
   const companyId = existingCompany.id;
 
-  // Single transaction: if any DELETE fails, the entire purge rolls back and
-  // the seed exits cleanly. Pre-fix this was a sequence of separate
-  // statements — a half-completed purge left the company row alive with no
-  // dependents, and the next re-seed could not insert (persona idempotency
-  // check fires, and the script aborts). See MIRA_LABS_PURGE_TABLES above for
-  // why each table is on the list.
+  // Single transaction so a mid-purge failure rolls everything back. Without
+  // this, the pre-fix sequence left the DB in a half-purged state where
+  // re-seeding aborted on the persona idempotency check forever.
   await db.transaction(async (tx) => {
     let totalDeleted = 0;
     for (const tableName of MIRA_LABS_PURGE_TABLES) {
-      // Table names come from a static const list defined in this file —
-      // never from user input — so sql.raw() is safe here. Drizzle's typed
-      // tx.delete() would require importing 70+ schema objects; raw is the
-      // pragmatic shape for the bulk-cleanup path.
       const fkColumn = tableName === "cli_auth_challenges"
         ? "requested_company_id"
         : "company_id";
@@ -486,11 +380,6 @@ async function purgeExistingMiraLabs(db: ReturnType<typeof createDb>): Promise<v
         totalDeleted += rowCount;
       }
     }
-    // Finally the parent companies row — by here, no FK should still point
-    // at it. If anything does (a new table added by a migration without
-    // updating MIRA_LABS_PURGE_TABLES), this fails loudly inside the tx and
-    // rolls everything back — that's the correct outcome for "we forgot to
-    // teach the seed about this new table."
     const companyResult = await tx.execute(
       sql`DELETE FROM companies WHERE id = ${companyId}::uuid`,
     );
@@ -500,12 +389,6 @@ async function purgeExistingMiraLabs(db: ReturnType<typeof createDb>): Promise<v
       `[seed-mira-labs] Purged ${totalDeleted} total row(s) (incl. company ${companyId}).`,
     );
   });
-
-  // Note: public."user" row is NOT deleted. The Supabase auth user is also NOT
-  // deleted (it's on a different DB host and requires manual action via the
-  // Supabase dashboard). instance_user_roles for ANITA_AUTH_UID is also NOT
-  // deleted — the upcoming `runPostSignupBootstrap` call is idempotent and
-  // will leave the existing instance_admin role row untouched.
 }
 
 // ─── Main seed function ───────────────────────────────────────────────────────
