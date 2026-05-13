@@ -16,6 +16,7 @@ import { companyRoutes } from "./routes/companies.js";
 import { companiesExportRoutes } from "./routes/companies-export.js";
 import { companySkillRoutes } from "./routes/company-skills.js";
 import { agentRoutes } from "./routes/agents.js";
+import { resetStaleAgentErrors } from "./services/agents.js";
 import { projectRoutes } from "./routes/projects.js";
 import { issueRoutes } from "./routes/issues.js";
 import { routineRoutes } from "./routes/routines.js";
@@ -565,6 +566,23 @@ export async function createApp(
   app.use(errorHandler);
 
   jobCoordinator.start();
+
+  // local_trusted dev hygiene: reset any agents stuck in `error` from a
+  // prior boot. The heartbeat scheduler re-fires errored agents at their
+  // policy interval — without this reset, an agent that errored once
+  // (e.g. missing API key during dogfood) stays errored forever and the
+  // dashboard shows a permanent red pill. In `authenticated` / production
+  // modes we leave the row alone so real failures stay visible.
+  if (opts.deploymentMode === "local_trusted") {
+    const resetCount = await resetStaleAgentErrors(db);
+    if (resetCount > 0) {
+      logger.warn(
+        { resetCount, mode: "local_trusted" },
+        "[boot] reset stale agents.status=error → idle",
+      );
+    }
+  }
+
   scheduler.start();
   createDailyDigestCron({
     db,
