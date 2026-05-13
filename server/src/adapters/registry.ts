@@ -36,6 +36,16 @@ import {
 } from "@founderos/adapter-gemini-local/server";
 import { agentConfigurationDoc as geminiAgentConfigurationDoc, models as geminiModels } from "@founderos/adapter-gemini-local";
 import {
+  execute as openaiExecute,
+  testEnvironment as openaiTestEnvironment,
+} from "@founderos/adapter-openai-api/server";
+import { agentConfigurationDoc as openaiAgentConfigurationDoc, models as openaiModels } from "@founderos/adapter-openai-api";
+import {
+  execute as geminiApiExecute,
+  testEnvironment as geminiApiTestEnvironment,
+} from "@founderos/gemini-api/server";
+import { agentConfigurationDoc as geminiApiAgentConfigurationDoc, models as geminiApiModels } from "@founderos/gemini-api";
+import {
   execute as openCodeExecute,
   listOpenCodeSkills,
   syncOpenCodeSkills,
@@ -144,6 +154,26 @@ const geminiLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: geminiAgentConfigurationDoc,
 };
 
+const openaiApiAdapter: ServerAdapterModule = {
+  type: "openai_api",
+  execute: openaiExecute,
+  testEnvironment: openaiTestEnvironment,
+  sessionManagement: getAdapterSessionManagement("openai_api") ?? undefined,
+  models: openaiModels,
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: openaiAgentConfigurationDoc,
+};
+
+const geminiApiAdapter: ServerAdapterModule = {
+  type: "gemini_api",
+  execute: geminiApiExecute,
+  testEnvironment: geminiApiTestEnvironment,
+  sessionManagement: getAdapterSessionManagement("gemini_api") ?? undefined,
+  models: geminiApiModels,
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: geminiApiAgentConfigurationDoc,
+};
+
 const openclawGatewayAdapter: ServerAdapterModule = {
   type: "openclaw_gateway",
   execute: openclawGatewayExecute,
@@ -209,6 +239,8 @@ function registerBuiltInAdapters() {
   for (const adapter of [
     claudeLocalAdapter,
     codexLocalAdapter,
+    openaiApiAdapter,
+    geminiApiAdapter,
     openCodeLocalAdapter,
     piLocalAdapter,
     cursorLocalAdapter,

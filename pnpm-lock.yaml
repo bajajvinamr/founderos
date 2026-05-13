@@ -554,6 +554,9 @@ importers:
       '@founderos/adapter-gemini-local':
         specifier: workspace:*
         version: link:../packages/adapters/gemini-local
+      '@founderos/adapter-openai-api':
+        specifier: workspace:*
+        version: link:../packages/adapters/openai-api
       '@founderos/adapter-openclaw-gateway':
         specifier: workspace:*
         version: link:../packages/adapters/openclaw-gateway
@@ -569,6 +572,9 @@ importers:
       '@founderos/db':
         specifier: workspace:*
         version: link:../packages/db
+      '@founderos/gemini-api':
+        specifier: workspace:*
+        version: link:../packages/adapters/gemini-api
       '@founderos/plugin-sdk':
         specifier: workspace:*
         version: link:../packages/plugins/sdk
