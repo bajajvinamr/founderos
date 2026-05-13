@@ -327,8 +327,9 @@ async function purgeExistingMiraLabs(db: ReturnType<typeof createDb>): Promise<v
 
   const companyId = existingCompany.id;
 
-  // Reverse topological order: approvals → issues → projects → goals →
+  // Reverse topological order: daily_briefs → approvals → issues → projects → goals →
   // composio_connections → agents → company_memberships → companies → user
+  await db.delete(dailyBriefs).where(sql`${dailyBriefs.companyId} = ${companyId}::uuid`);
   await db.delete(approvals).where(sql`${approvals.companyId} = ${companyId}::uuid`);
   await db.delete(issues).where(sql`${issues.companyId} = ${companyId}::uuid`);
   await db.delete(projects).where(sql`${projects.companyId} = ${companyId}::uuid`);
