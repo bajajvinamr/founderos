@@ -450,4 +450,101 @@ describeEmbeddedPostgres("bootstrapCompanyOnboarding — atomic bootstrap", () =
 
     expect(rows.every((r) => r.autonomyLevel === 4)).toBe(true);
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // GAP-03 (2026-05-13) — Adapter pick threads through to seeded agents.
+  //
+  // Pre-fix: onboarding-bootstrap.ts hardcoded `adapterType = "claude_local"`
+  // in the hosted branch and applied `transport: "local_runner"` to every
+  // pick under BYO mode — including API-mode picks. A founder who picked
+  // `anthropic_api` on Fly got CLI-runner agents that never executed.
+  //
+  // These tests pin the slot mapping for the 3 adapter picks called out
+  // in the mission and assert each produces the correct agent kind +
+  // adapter_config in the seeded data. Flags are intentionally left at
+  // their default (HOSTED off, BYO off) so the assertions read against
+  // the dev/local code path — same path every founder hits in `pnpm dev`.
+  // ──────────────────────────────────────────────────────────────────────
+  describe("GAP-03 — adapter pick threads through to seeded agents", () => {
+    async function getSeededAgents(companyId: string) {
+      return db.select().from(agents).where(eq(agents.companyId, companyId));
+    }
+
+    it("adapterChoice='claude_local' → all 4 agents get adapter_type=claude_local + no transport", async () => {
+      const result = await bootstrapCompanyOnboarding(
+        db,
+        buildInput({ adapterChoice: "claude_local", anthropicKey: "" }),
+        { actorUserId: ACTOR_USER_ID },
+      );
+
+      const seeded = await getSeededAgents(result.companyId);
+      expect(seeded).toHaveLength(4);
+      for (const agent of seeded) {
+        expect(agent.adapterType).toBe("claude_local");
+        const cfg = agent.adapterConfig as Record<string, unknown>;
+        // CLI pick + BYO off → no transport.
+        expect(cfg).not.toHaveProperty("transport");
+      }
+    });
+
+    it("adapterChoice='anthropic_api' → all 4 agents get adapter_type=claude_local + no transport (API-mode is server-handled)", async () => {
+      // API-mode picks must NEVER get `transport: "local_runner"` because
+      // they don't go through a local CLI runner. The Anthropic key is
+      // stored as a company secret and bound into adapter_config.env so
+      // the server-side runtime can read it.
+      const result = await bootstrapCompanyOnboarding(
+        db,
+        buildInput({
+          adapterChoice: "anthropic_api",
+          anthropicKey: "sk-test-key-1234567890",
+        }),
+        { actorUserId: ACTOR_USER_ID },
+      );
+
+      const seeded = await getSeededAgents(result.companyId);
+      expect(seeded).toHaveLength(4);
+      for (const agent of seeded) {
+        // Slug maps to claude_local (the only Anthropic adapter handler).
+        expect(agent.adapterType).toBe("claude_local");
+        const cfg = agent.adapterConfig as {
+          env?: Record<string, unknown>;
+          transport?: string;
+        };
+        // GAP-03 invariant: API-mode pick → NO transport.
+        expect(cfg).not.toHaveProperty("transport");
+        // Anthropic secret is bound so the server-side runtime can read
+        // the key from the company secret store.
+        expect(cfg.env).toMatchObject({
+          ANTHROPIC_API_KEY: expect.objectContaining({
+            type: "secret_ref",
+          }),
+        });
+      }
+    });
+
+    it("adapterChoice='skip' → all 4 agents get adapter_type=claude_local + no transport, no secret stored", async () => {
+      // `skip` is auth_mode='none' — founder deferred the decision. They
+      // never opted into a local runner, and no key was provided so no
+      // company secret should be created.
+      const result = await bootstrapCompanyOnboarding(
+        db,
+        buildInput({ adapterChoice: "skip", anthropicKey: "" }),
+        { actorUserId: ACTOR_USER_ID },
+      );
+
+      const seeded = await getSeededAgents(result.companyId);
+      expect(seeded).toHaveLength(4);
+      for (const agent of seeded) {
+        expect(agent.adapterType).toBe("claude_local");
+        const cfg = agent.adapterConfig as Record<string, unknown>;
+        expect(cfg).not.toHaveProperty("transport");
+      }
+      // No company secret for `skip`.
+      const allSecrets = await db
+        .select()
+        .from(companySecrets)
+        .where(eq(companySecrets.companyId, result.companyId));
+      expect(allSecrets).toHaveLength(0);
+    });
+  });
 });

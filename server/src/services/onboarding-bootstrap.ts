@@ -27,6 +27,7 @@ import type {
   AgentRole,
   OnboardingAdapterChoice,
 } from "@founderos/shared";
+import { ONBOARDING_ADAPTER_AUTH_MODES } from "@founderos/shared";
 import {
   accessService,
   agentService,
@@ -297,66 +298,81 @@ export async function bootstrapCompanyOnboarding(
       .catch(() => null);
 
     // 5. Provision four agents with charters.
-    // S8 P0.1 Phase 1D — hosted-aware tri-branch adapter resolution.
     //
-    // Three precedence levels, evaluated top-down:
+    // GAP-03 (Loop 2 — 2026-05-13) — thread the founder's adapter pick all
+    // the way through. The previous implementation hardcoded
+    // `adapterType = "claude_local"` in the hosted branch and applied
+    // `transport: "local_runner"` to ALL choices in the BYO branch, which
+    // routed an `anthropic_api` (API-key) founder to a CLI runner that
+    // never runs on Fly. Symptom: founder pastes a valid Anthropic key,
+    // passes routes/onboarding.ts:291 validation, then agents silently
+    // never run because the cloud expects a local `claude` binary that
+    // isn't there.
+    //
+    // The fix routes EVERY pick through `mapOnboardingChoiceToAdapter`
+    // (one source of truth for slot mapping) and gates the local-runner
+    // transport on the choice's auth_mode — only CLI-mode picks need a
+    // local runner. API-mode picks (anthropic_api, openai_api, google_api)
+    // and `skip` are server-handled regardless of BYO/HOSTED flags.
+    //
+    // Two precedence levels, evaluated top-down:
     //
     //   1. FOUNDEROS_HOSTED_AGENTS_ENABLED=1 + adapterChoice='anthropic_api'
-    //      → 'claude_local' (server-side hardened path, Phase 1C handler
-    //      reads the key from instance_api_keys and dispatches via the
-    //      Anthropic SDK in-process — no CLI, no laptop runner). This is
-    //      the production hosted path: the founder pastes a key, the
-    //      cloud executes their agents, no install required.
+    //      → server-side hardened path. The mapper still returns
+    //      `claude_local` (no `anthropic_api` adapter is registered), but
+    //      the Phase 1C handler reads the key from instance_api_keys and
+    //      dispatches via the Anthropic SDK in-process — no CLI, no
+    //      laptop runner. We never set `transport: "local_runner"` here.
     //
-    //   2. FOUNDEROS_BYO_RUNNER_ENABLED=1 (and hosted is OFF)
-    //      → preserve the user's chosen adapter type (codex_local,
-    //      gemini_local, claude_local, etc.) and mark the agent with
-    //      `transport: "local_runner"` in adapter_config. The cloud
-    //      enqueues `runner_jobs` rows; the founder's local
-    //      `@founderos/runner` picks them up and shells out to the
-    //      appropriate local CLI. This is QW1 of the multi-provider sprint:
-    //      do NOT collapse to 'byo_runner' — the runner needs the concrete
-    //      adapter type to dispatch to the right CLI at claim time.
+    //   2. Otherwise: `mapOnboardingChoiceToAdapter(adapterChoice)` for
+    //      the slot. If FOUNDEROS_BYO_RUNNER_ENABLED=1 AND the founder's
+    //      pick is a CLI-mode choice (auth_mode === 'cli'), we ALSO set
+    //      `transport: "local_runner"` so the founder's
+    //      `@founderos/runner` claims the jobs. API-mode picks never get
+    //      that transport flag — they are handled server-side via the
+    //      stored company secret (or, with HOSTED on, via the in-process
+    //      handler).
     //
-    //   3. Otherwise (both flags OFF — dev / local default)
-    //      → mapOnboardingChoiceToAdapter(adapterChoice). Live providers
-    //      land at their *_local adapter; google_api throws a clear
-    //      "not yet implemented" error; skip + claude_local + anthropic_api
-    //      collapse to 'claude_local' for dev convenience. This branch
-    //      preserves PR #148 behaviour for local dev installs where the
-    //      operator runs the CLI on the same box as the server.
-    //
-    // The `anthropic_api` choice always stores the user's key as a company
-    // secret upstream (step 2). Whether the agent runtime *uses* that
-    // secret depends on which branch fires:
+    // The `anthropic_api` choice always stores the user's key as a
+    // company secret upstream (step 2). Where the runtime READS that
+    // secret depends on the resolved adapter:
     //   - Hosted: server-side handler reads from instance_api_keys (the
     //     onboarding route also writes there — see routes/onboarding.ts).
-    //   - BYO: the runner reads from the company secret if a flow needs
-    //     direct API calls; agent execution itself uses the local CLI's
-    //     authed session.
-    //   - Dev/local: the claude_local adapter reads ANTHROPIC_API_KEY from
-    //     env (hydrated from instance_api_keys at boot).
+    //   - Dev/local + no BYO: the claude_local adapter reads
+    //     ANTHROPIC_API_KEY from env (hydrated from instance_api_keys at
+    //     boot) or the company secret bound via adapter_config.env.
+    //   - BYO + CLI pick: the runner shells out using the local CLI's
+    //     authed session; the company secret is still available for
+    //     direct API call flows.
     const { isByoRunnerEnabled } = await import("../lib/byo-runner-flag.js");
     const { mapOnboardingChoiceToAdapter } = await import(
       "./adapter-resolver.js"
     );
     const HOSTED_ENABLED =
       process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
-    let adapterType: AgentAdapterType;
-    let byoTransport = false;
-    if (HOSTED_ENABLED && input.adapterChoice === "anthropic_api") {
-      adapterType = "claude_local";
-    } else if (isByoRunnerEnabled()) {
-      // QW1: preserve provider, mark transport so the runner knows to claim
-      // this job and dispatch to the right CLI. Do NOT collapse to byo_runner.
-      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
-      byoTransport = true;
-    } else {
-      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
-    }
-    // Build adapter config after resolution so byoTransport is available.
-    // When BYO runner is active, add transport: "local_runner" so the runner
-    // package knows to claim this agent's jobs (QW1 multi-provider sprint).
+
+    // Single source of truth for the slot mapping. NEVER hardcode a
+    // literal adapter type here — every pick must flow through the mapper
+    // so the bootstrap stays consistent with adapter-resolver.ts.
+    const adapterType: AgentAdapterType = mapOnboardingChoiceToAdapter(
+      input.adapterChoice,
+    );
+
+    // BYO transport gate. Only CLI-mode picks get `transport:
+    // "local_runner"`; API-mode picks (anthropic_api / openai_api /
+    // google_api) are server-handled and must NOT enqueue runner_jobs
+    // rows. `skip` is `auth_mode === 'none'` and never gets the transport.
+    //
+    // Hosted-mode short-circuit: when HOSTED is on AND the founder picked
+    // `anthropic_api`, we route to the in-process server-side handler
+    // even if BYO is also enabled. This preserves the precedence the
+    // S8 P0.1 Phase 1D design documented.
+    const authMode = ONBOARDING_ADAPTER_AUTH_MODES[input.adapterChoice];
+    const hostedShortCircuit =
+      HOSTED_ENABLED && input.adapterChoice === "anthropic_api";
+    const byoTransport =
+      !hostedShortCircuit && isByoRunnerEnabled() && authMode === "cli";
+
     const adapterConfig = buildAgentAdapterConfig(
       secret?.id ?? null,
       byoTransport ? { transport: "local_runner" } : undefined,

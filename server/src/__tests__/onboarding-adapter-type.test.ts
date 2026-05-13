@@ -417,9 +417,13 @@ describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 mul
     }
   });
 
-  it("adapterChoice=anthropic_api + BYO flag → adapter_type=claude_local (key still stored as secret)", async () => {
-    // anthropic_api collapses to claude_local via mapOnboardingChoiceToAdapter —
-    // the Anthropic key is still stored as a company secret upstream.
+  it("adapterChoice=anthropic_api + BYO flag → adapter_type=claude_local WITHOUT transport (GAP-03 fix)", async () => {
+    // GAP-03 (2026-05-13) — anthropic_api is an API-mode pick. Even when
+    // BYO_RUNNER is on, API-mode picks must NOT get `transport:
+    // "local_runner"` — they are server-handled via the company secret
+    // (the Anthropic key is still stored as a secret upstream). Pre-fix,
+    // this routed an API-key founder to a CLI runner that doesn't run on
+    // Fly, producing silent agent failure.
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
     mockSecretService.create.mockResolvedValue({ id: "secret-uuid-byo" });
@@ -434,14 +438,19 @@ describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 mul
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      // anthropic_api → claude_local (mapOnboardingChoiceToAdapter) with transport
+      // anthropic_api → claude_local (mapOnboardingChoiceToAdapter) but
+      // NO local_runner transport — API-mode picks are server-handled.
       expect(payload).toMatchObject({ adapterType: "claude_local" });
       expect(payload.adapterType).not.toBe("byo_runner");
-      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+      expect(payload.adapterConfig).not.toHaveProperty("transport");
     }
   });
 
-  it("adapterChoice=skip + BYO flag → adapter_type=claude_local (skip defers to claude_local)", async () => {
+  it("adapterChoice=skip + BYO flag → adapter_type=claude_local WITHOUT transport (GAP-03 fix)", async () => {
+    // GAP-03 (2026-05-13) — `skip` is auth_mode='none' (founder deferred
+    // the decision). They never explicitly opted into a local runner, so
+    // we must NOT mark the agents with `transport: "local_runner"`. They
+    // can flip into BYO mode later via Settings once they install a CLI.
     const app = await createApp();
     const res = await request(app)
       .post("/api/onboarding/bootstrap")
@@ -453,7 +462,7 @@ describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 mul
     for (const [, payload] of calls) {
       expect(payload).toMatchObject({ adapterType: "claude_local" });
       expect(payload.adapterType).not.toBe("byo_runner");
-      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+      expect(payload.adapterConfig).not.toHaveProperty("transport");
     }
   });
 
@@ -712,10 +721,13 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     }
   });
 
-  it("hosted=OFF + BYO=ON → adapter_type=claude_local with transport:local_runner (QW1 fix)", async () => {
-    // QW1 multi-provider fix: BYO flag preserves the provider choice instead
-    // of collapsing to byo_runner. anthropic_api → claude_local via
-    // mapOnboardingChoiceToAdapter, and transport: "local_runner" is set.
+  it("hosted=OFF + BYO=ON + anthropic_api → adapter_type=claude_local WITHOUT transport (GAP-03 fix)", async () => {
+    // GAP-03 (2026-05-13) — anthropic_api is an API-mode pick: even with
+    // BYO_RUNNER on, API-mode picks must NOT get `transport: "local_runner"`.
+    // The founder paid for hosted API access; routing them to a local CLI
+    // runner is the silent-failure bug this fix closes. Same shape as
+    // the earlier BYO test in this file — re-asserted here for the
+    // hosted-aware describe block's coverage matrix.
     process.env.FOUNDEROS_BYO_RUNNER_ENABLED = "1";
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
@@ -727,10 +739,9 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     expect(res.status).toBe(201);
     const calls = mockAgentService.create.mock.calls;
     for (const [, payload] of calls) {
-      // BYO path now preserves the provider (claude_local for anthropic_api).
       expect(payload).toMatchObject({ adapterType: "claude_local" });
       expect(payload.adapterType).not.toBe("byo_runner");
-      expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
+      expect(payload.adapterConfig).not.toHaveProperty("transport");
     }
   });
 
