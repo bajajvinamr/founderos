@@ -20,6 +20,10 @@ import type { Db } from "@founderos/db";
 import { contentDrafts } from "@founderos/db";
 import { logger } from "../middleware/logger.js";
 import { runComposioTool } from "../services/skills/composio-skill-bridge.js";
+import {
+  ComposioConnectionMissingError,
+  resolveActiveConnection,
+} from "../services/composio-connection-resolver.js";
 import { createEmailSender } from "../services/email-sender.js";
 import type { Queue } from "bullmq";
 
@@ -27,6 +31,17 @@ import type { Queue } from "bullmq";
 const COMPOSIO_TOOLS: Record<string, string> = {
   linkedin: "linkedin_post_content",
   "x-thread": "twitter_post_content",
+};
+
+/**
+ * Format -> Composio app slug used to look up the active per-company
+ * connection. The slug is the same value stored in
+ * `composio_connections.app_name` (e.g. `linkedin`, `twitter`) — keep this
+ * table in sync with the route the founder uses to connect.
+ */
+const COMPOSIO_APPS: Record<string, string> = {
+  linkedin: "linkedin",
+  "x-thread": "twitter",
 };
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -70,11 +85,6 @@ async function publishDraft(db: Db, draft: typeof contentDrafts.$inferSelect): P
   const format = draft.format;
 
   try {
-    // Resolve connectedAccountId from the company's integrations
-    // For now, we'll use a simple lookup from environment or config
-    // This should be replaced with a real integration lookup per company
-    const connectedAccountId = process.env[`COMPOSIO_AUTH_${format.toUpperCase()}`];
-
     if (format === "linkedin" || format === "x-thread") {
       // Publish via Composio
       const toolName = COMPOSIO_TOOLS[format];
@@ -82,8 +92,58 @@ async function publishDraft(db: Db, draft: typeof contentDrafts.$inferSelect): P
         throw new Error(`Unknown format: ${format}`);
       }
 
-      if (!connectedAccountId) {
-        throw new Error(`No integration found for ${format}`);
+      // Resolve BOTH userId and connectedAccountId from the company's
+      // active Composio connection for this app. Source: composio_connections
+      // row written when the founder OAuth-connected the integration. We use
+      // its `userId` (the FounderOS user who owns the OAuth flow) for
+      // Composio's per-user routing, and its `composio_connection_id` for
+      // org-scoped credential targeting.
+      //
+      // The two-field resolution is structural: Composio v3
+      // `executeTool({ userId, connectedAccountId })` uses both axes. Passing
+      // `userId: ""` falls back to "any account for any user" — the same
+      // failure class the cross-org leak fix (PR #30) closed for
+      // `connectedAccountId`. This job had `userId: ""` as a known gap
+      // pre-L2-A10 (TODO: resolve from company's admin user). Closed now via
+      // resolveActiveConnection, which also runtime-guards against an empty
+      // value sneaking through the DB layer.
+      const appName = COMPOSIO_APPS[format];
+      if (!appName) {
+        // Defensive — COMPOSIO_APPS is keyed by the same format set as
+        // COMPOSIO_TOOLS, but a mismatch should fail loud rather than
+        // silently fall through to env-var fallback.
+        throw new Error(`No composio app mapping for format: ${format}`);
+      }
+      let userId: string;
+      let connectedAccountId: string;
+      try {
+        const conn = await resolveActiveConnection(db, draft.companyId, appName);
+        userId = conn.userId;
+        connectedAccountId = conn.connectedAccountId;
+      } catch (err) {
+        if (err instanceof ComposioConnectionMissingError) {
+          throw new Error(
+            `No active ${appName} integration for company ${draft.companyId} (status=${err.status})`,
+          );
+        }
+        throw err;
+      }
+
+      // Belt-and-suspenders fail-fast at the job boundary. The resolver
+      // already guards against empty/whitespace values on the active row,
+      // but a defense-in-depth check here protects against any future
+      // refactor that swaps the resolver for a lighter-weight lookup that
+      // forgets the trim()/length check. Empty userId/connectedAccountId
+      // to runComposioTool is the same shape as the cross-org leak.
+      if (!userId || userId.trim().length === 0) {
+        throw new Error(
+          `content-publish-tick: resolved userId is empty for company ${draft.companyId} / ${appName} — refusing to call Composio`,
+        );
+      }
+      if (!connectedAccountId || connectedAccountId.trim().length === 0) {
+        throw new Error(
+          `content-publish-tick: resolved connectedAccountId is empty for company ${draft.companyId} / ${appName} — refusing to call Composio`,
+        );
       }
 
       // Extract content from payload
@@ -99,7 +159,7 @@ async function publishDraft(db: Db, draft: typeof contentDrafts.$inferSelect): P
       }
 
       const result = await runComposioTool({
-        userId: "", // TODO: resolve from company's admin user
+        userId,
         connectedAccountId,
         toolName,
         input: { content: postContent },

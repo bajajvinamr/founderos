@@ -15,7 +15,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
-import { contentDrafts, companies, contentBriefs } from "@founderos/db";
+import {
+  contentDrafts,
+  companies,
+  contentBriefs,
+  composioConnections,
+} from "@founderos/db";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { runContentPublishTick } from "../jobs/content-publish-tick.js";
 import * as ComposioSkillBridge from "../services/skills/composio-skill-bridge.js";
@@ -34,10 +39,6 @@ describe("content-publish-tick", () => {
     const result = await startEmbeddedPostgresTestDatabase("s4-4-tick");
     cleanup = result.cleanup;
     db = drizzle(result.connectionString);
-
-    // Set up Composio env for the test
-    process.env["COMPOSIO_AUTH_LINKEDIN"] = "test-account-id";
-    process.env["COMPOSIO_AUTH_X-THREAD"] = "test-account-id";
 
     pastTime = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
     futureTime = new Date(Date.now() + 1000 * 60 * 60); // 1 hour from now
@@ -62,6 +63,28 @@ describe("content-publish-tick", () => {
       })
       .returning();
     briefId = brief.id;
+
+    // L2-A10: the job now resolves Composio routing from the per-company
+    // `composio_connections` row instead of an env-var stub. Seed an active
+    // connection for both LinkedIn and Twitter so G2/G5 reach
+    // runComposioTool (the mock catches the call). G4 deletes its row to
+    // assert the missing-connection failure path.
+    await db.insert(composioConnections).values([
+      {
+        companyId,
+        userId: "test-user-linkedin",
+        appName: "linkedin",
+        composioConnectionId: "ca_linkedin_test",
+        status: "active",
+      },
+      {
+        companyId,
+        userId: "test-user-twitter",
+        appName: "twitter",
+        composioConnectionId: "ca_twitter_test",
+        status: "active",
+      },
+    ]);
 
     // Mock Composio and email
     vi.spyOn(ComposioSkillBridge, "runComposioTool").mockResolvedValue({
@@ -102,7 +125,7 @@ describe("content-publish-tick", () => {
     expect(sender.send).not.toHaveBeenCalled();
   });
 
-  // G2: LinkedIn draft due and approved → Composio called
+  // G2: LinkedIn draft due and approved → Composio called with resolved userId
   it("G2: draft scheduled for past, status=approved, channel=linkedin → Composio called", async () => {
     // Create a LinkedIn draft scheduled for the past
     const [draft] = await db
@@ -123,8 +146,17 @@ describe("content-publish-tick", () => {
 
     await runContentPublishTick(db);
 
-    // Verify Composio was called
-    expect(ComposioSkillBridge.runComposioTool).toHaveBeenCalled();
+    // L2-A10: Verify Composio was called WITH the resolved userId and
+    // connectedAccountId from the seeded composio_connections row, not the
+    // empty string. The pre-L2-A10 code passed `userId: ""`, silently
+    // routing to whichever account Composio picked first.
+    expect(ComposioSkillBridge.runComposioTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "test-user-linkedin",
+        connectedAccountId: "ca_linkedin_test",
+        toolName: "linkedin_post_content",
+      }),
+    );
 
     // Verify draft was marked published
     const [updated] = await db.select().from(contentDrafts).where(eq(contentDrafts.id, draft.id));
@@ -158,14 +190,14 @@ describe("content-publish-tick", () => {
     expect(updated.publishedAt).toBeTruthy();
   });
 
-  // G4: No integration for channel → error set, status unchanged
+  // G4: No active integration row for channel → error set, status unchanged
   it("G4: draft has no integration for its channel → error set", async () => {
-    // Mock Composio to fail
-    vi.mocked(ComposioSkillBridge.runComposioTool).mockResolvedValueOnce({
-      ok: false,
-      reason: "not_enabled",
-      message: "Composio is not enabled",
-    });
+    // Remove the seeded LinkedIn connection so the resolver throws
+    // ComposioConnectionMissingError, which the job converts to a
+    // user-visible "No active linkedin integration" error.
+    await db
+      .delete(composioConnections)
+      .where(eq(composioConnections.appName, "linkedin"));
 
     const [draft] = await db
       .insert(contentDrafts)
@@ -188,7 +220,10 @@ describe("content-publish-tick", () => {
     const [updated] = await db.select().from(contentDrafts).where(eq(contentDrafts.id, draft.id));
     expect(updated.status).toBe("approved");  // Status unchanged
     expect(updated.error).toBeTruthy();
-    expect(updated.error).toContain("Composio error");
+    expect(updated.error).toContain("No active linkedin integration");
+
+    // Composio MUST NOT have been called — the resolver short-circuited.
+    expect(ComposioSkillBridge.runComposioTool).not.toHaveBeenCalled();
   });
 
   // G5: One failure doesn't block others
@@ -253,6 +288,48 @@ describe("content-publish-tick", () => {
       .from(contentDrafts)
       .where(eq(contentDrafts.id, successDraft.id));
     expect(successUpdated.status).toBe("published");
+  });
+
+  // G7 (L2-A10): empty userId on an active connection row is rejected.
+  // Defense-in-depth — the resolver catches this, AND the job-level guard
+  // would catch it if the resolver were ever swapped out. Either way, the
+  // empty-userId Composio call must never fire.
+  it("G7: active connection with empty userId → fails fast, no Composio call", async () => {
+    // Overwrite the seeded row with an empty userId — exercise the
+    // resolver's data-integrity guard.
+    await db
+      .update(composioConnections)
+      .set({ userId: "   " }) // whitespace-only — also covered
+      .where(eq(composioConnections.appName, "linkedin"));
+
+    const [draft] = await db
+      .insert(contentDrafts)
+      .values({
+        companyId,
+        briefId,
+        format: "linkedin",
+        status: "approved",
+        payload: {
+          body: "Test post",
+          hashtagSuggestions: [],
+          estimatedReadTime: 1,
+        },
+        scheduledFor: pastTime,
+      })
+      .returning();
+
+    await runContentPublishTick(db);
+
+    const [updated] = await db
+      .select()
+      .from(contentDrafts)
+      .where(eq(contentDrafts.id, draft.id));
+    expect(updated.status).toBe("approved"); // Status unchanged
+    expect(updated.error).toBeTruthy();
+    expect(updated.error?.toLowerCase()).toContain("userid");
+
+    // Composio MUST NOT have been called — never pass userId: "".
+    expect(ComposioSkillBridge.runComposioTool).not.toHaveBeenCalled();
   });
 
   // G6: Future scheduled → not picked up

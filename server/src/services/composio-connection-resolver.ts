@@ -40,6 +40,27 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "@founderos/db";
 import { composioConnections } from "@founderos/db";
 
+/**
+ * Active per-company Composio connection — both the OAuth-scoped FounderOS
+ * userId AND the org-scoped composio connection id, resolved together.
+ *
+ * Per-user routing context: Composio v3 `executeTool({ userId, connectedAccountId })`
+ * uses `userId` for OAuth scoping (which person's Gmail/Slack/LinkedIn the
+ * call posts "as") and `connectedAccountId` for the org-scoped credential.
+ * Pre-2026-05-04, `connectedAccountId` was optional and `userId: ""` was
+ * silently accepted — Composio would then "pick any account for this user".
+ * The cross-org leak (PR #30) closed the connectedAccountId side; this
+ * resolver closes the userId side for jobs that run on behalf of a
+ * company's owning user (e.g. the content-publish-tick scheduler that
+ * posts approved drafts on the founder's behalf).
+ */
+export interface ComposioActiveConnection {
+  /** FounderOS user id that owns the OAuth flow — required for Composio routing. */
+  userId: string;
+  /** Org-scoped Composio connection id — required for cross-org leak defense. */
+  connectedAccountId: string;
+}
+
 export class ComposioConnectionMissingError extends Error {
   constructor(
     public readonly companyId: string,
@@ -148,6 +169,127 @@ export async function tryResolveConnectedAccountId(
 ): Promise<string | null> {
   try {
     return await resolveConnectedAccountId(db, companyId, appName);
+  } catch (err) {
+    if (err instanceof ComposioConnectionMissingError) return null;
+    throw err;
+  }
+}
+
+/**
+ * resolveActiveConnection — both-fields variant for per-user routing.
+ *
+ * Returns the active `{ userId, connectedAccountId }` tuple for (companyId,
+ * appName). Throws `ComposioConnectionMissingError` if no active connection
+ * exists. Throws a plain `Error` (not the typed variant — this is a data
+ * integrity bug, not a user-visible state) if the row exists but has an
+ * empty/whitespace userId or connectedAccountId.
+ *
+ * Used by company-scoped background jobs (content-publish-tick) that need
+ * to post on behalf of a tenant without an interactive request context.
+ * The OAuth-scoped userId is critical: Composio uses it to identify which
+ * person's account performs the post (Gmail "send as me", LinkedIn "post
+ * as me"). Passing `""` silently downgrades to "any account for any user",
+ * the same class as the cross-org leak PR #30 closed.
+ */
+export async function resolveActiveConnection(
+  db: Db,
+  companyId: string,
+  appName: string,
+): Promise<ComposioActiveConnection> {
+  const rows = await db
+    .select({
+      userId: composioConnections.userId,
+      composioConnectionId: composioConnections.composioConnectionId,
+      status: composioConnections.status,
+      updatedAt: composioConnections.updatedAt,
+    })
+    .from(composioConnections)
+    .where(
+      and(
+        eq(composioConnections.companyId, companyId),
+        eq(composioConnections.appName, appName),
+      ),
+    );
+
+  if (rows.length === 0) {
+    throw new ComposioConnectionMissingError(companyId, appName, "missing");
+  }
+
+  const active = rows.filter((r) => r.status === "active");
+  if (active.length === 0) {
+    // Same status-priority surface as resolveConnectedAccountId.
+    const byStatus = (s: string) => rows.find((r) => r.status === s);
+    const pending = byStatus("pending");
+    if (pending) {
+      throw new ComposioConnectionMissingError(
+        companyId,
+        appName,
+        "pending",
+        pending.composioConnectionId,
+      );
+    }
+    const failed = byStatus("failed");
+    if (failed) {
+      throw new ComposioConnectionMissingError(
+        companyId,
+        appName,
+        "failed",
+        failed.composioConnectionId,
+      );
+    }
+    const revoked = byStatus("revoked");
+    if (revoked) {
+      throw new ComposioConnectionMissingError(
+        companyId,
+        appName,
+        "revoked",
+        revoked.composioConnectionId,
+      );
+    }
+    throw new ComposioConnectionMissingError(companyId, appName, "missing");
+  }
+
+  // Most-recently-updated active row wins.
+  active.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const winner = active[0]!;
+
+  // Data-integrity guard: an active row with an empty userId or
+  // connectedAccountId is a structural bug (schema is NOT NULL but
+  // application code could insert "" or whitespace). Fail loud here so the
+  // job-level fail-fast guard isn't the only defense.
+  const userId = winner.userId?.trim() ?? "";
+  const connectedAccountId = winner.composioConnectionId?.trim() ?? "";
+  if (userId.length === 0) {
+    throw new Error(
+      `composio-connection-resolver: active ${appName} connection for company ${companyId} ` +
+        `has an empty userId. This is a data-integrity bug; refusing to call Composio ` +
+        `with userId: "" (would silently route to an arbitrary account).`,
+    );
+  }
+  if (connectedAccountId.length === 0) {
+    throw new Error(
+      `composio-connection-resolver: active ${appName} connection for company ${companyId} ` +
+        `has an empty composio_connection_id. Reconnect the integration.`,
+    );
+  }
+
+  return { userId, connectedAccountId };
+}
+
+/**
+ * tryResolveActiveConnection — non-throwing variant of resolveActiveConnection.
+ *
+ * Returns `null` only for `ComposioConnectionMissingError` (the
+ * "no usable row" signal). Data-integrity errors (empty userId / connection
+ * id on an active row) re-throw — those are bugs, not user-visible state.
+ */
+export async function tryResolveActiveConnection(
+  db: Db,
+  companyId: string,
+  appName: string,
+): Promise<ComposioActiveConnection | null> {
+  try {
+    return await resolveActiveConnection(db, companyId, appName);
   } catch (err) {
     if (err instanceof ComposioConnectionMissingError) return null;
     throw err;
