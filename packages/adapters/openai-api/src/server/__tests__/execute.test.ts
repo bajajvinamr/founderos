@@ -375,3 +375,126 @@ describe("execute() — cost_usd extraction", () => {
     expect(result.costUsd).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// L2-A08 — positional apiKeyResolver harmonization with gemini-api
+// ---------------------------------------------------------------------------
+describe("execute() — positional apiKeyResolver (L2-A08 harmonization)", () => {
+  it("execute.length === 2 — positional resolver is part of the signature", async () => {
+    const { execute } = await import("../execute.js");
+    expect(execute.length).toBe(2);
+  });
+
+  it("uses the positional resolver and skips the API call when it returns null", async () => {
+    const { execute } = await import("../execute.js");
+    const mockCreate = await getOpenAIMock();
+
+    let positionalCalls = 0;
+    const ctx = makeCtx({ config: { promptTemplate: "Should not call API." } });
+
+    const result = await execute(ctx, async () => {
+      positionalCalls++;
+      return null;
+    });
+
+    expect(positionalCalls).toBe(1);
+    expect(result.exitCode).toBeNull();
+    expect(result.errorCode).toBe("no_api_key");
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("positional resolver wins over config.apiKeyResolver when both supplied", async () => {
+    const { execute } = await import("../execute.js");
+    const mockCreate = await getOpenAIMock();
+
+    mockCreate.mockResolvedValue(
+      makeAsyncIterable([
+        {
+          model: "gpt-4o",
+          choices: [{ delta: { content: "ok" } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        },
+      ]),
+    );
+
+    let positionalCalls = 0;
+    let legacyCalls = 0;
+
+    const ctx = makeCtx({
+      config: {
+        model: "gpt-4o",
+        promptTemplate: "Test.",
+        apiKeyResolver: async () => {
+          legacyCalls++;
+          return "sk-legacy-should-be-ignored";
+        },
+      },
+    });
+
+    const result = await execute(ctx, async () => {
+      positionalCalls++;
+      return "sk-positional-wins";
+    });
+
+    expect(positionalCalls).toBe(1);
+    expect(legacyCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to config.apiKeyResolver when no positional arg is supplied", async () => {
+    const { execute } = await import("../execute.js");
+    const mockCreate = await getOpenAIMock();
+
+    mockCreate.mockResolvedValue(
+      makeAsyncIterable([
+        {
+          model: "gpt-4o",
+          choices: [{ delta: { content: "ok" } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        },
+      ]),
+    );
+
+    let legacyCalls = 0;
+    const ctx = makeCtx({
+      config: {
+        model: "gpt-4o",
+        promptTemplate: "Test.",
+        apiKeyResolver: async () => {
+          legacyCalls++;
+          return "sk-legacy-key";
+        },
+      },
+    });
+
+    const result = await execute(ctx);
+
+    expect(legacyCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("treats positional resolver throwing as no_api_key without falling back to legacy", async () => {
+    const { execute } = await import("../execute.js");
+    const mockCreate = await getOpenAIMock();
+
+    let legacyCalls = 0;
+    const ctx = makeCtx({
+      config: {
+        apiKeyResolver: async () => {
+          legacyCalls++;
+          return "sk-should-not-be-used";
+        },
+      },
+    });
+
+    const result = await execute(ctx, async () => {
+      throw new Error("vault unreachable");
+    });
+
+    expect(result.exitCode).toBeNull();
+    expect(result.errorCode).toBe("no_api_key");
+    expect(legacyCalls).toBe(0);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});

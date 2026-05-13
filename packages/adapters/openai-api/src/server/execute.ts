@@ -5,11 +5,24 @@ import type {
 import { asString, asNumber } from "@founderos/adapter-utils/server-utils";
 
 /**
- * Resolver shape supplied via `config.apiKeyResolver` for OpenAI hosted runs.
- * Mirrors the AnthropicKeyResolver pattern in claude-local:
- * `instanceApiKeysService.getDecrypted('openai', 'api')`.
+ * API key resolver — injected at call time by the server adapter registry.
+ *
+ * Shape is identical to the gemini-api `ApiKeyResolver` (no-arg, returns the
+ * decrypted key or null). The server passes a closure that calls
+ * `instanceApiKeysService.getDecrypted('openai', 'api')` per-run; no
+ * process.env fallback. This is the second positional arg of execute().
+ *
+ * L2-A08 (2026-05-13): harmonized to match gemini's positional-arg pattern
+ * established by PR #198 (TA01+TA02). The legacy `config.apiKeyResolver`
+ * inline shape — `(family, executionMode) => Promise<string|null>` — is
+ * still accepted as a fallback so existing callers and tests keep working;
+ * the positional arg takes precedence when both are supplied.
  */
-type OpenAIKeyResolver = (
+export type ApiKeyResolver = () => Promise<string | null>;
+
+/** Legacy resolver shape carried via `config.apiKeyResolver`. Pre-L2-A08,
+ *  this was the only injection point. Retained for backward compat. */
+type LegacyConfigKeyResolver = (
   family: "openai",
   executionMode: "api",
 ) => Promise<string | null>;
@@ -73,17 +86,31 @@ function estimateCostUsd(
 
 export async function execute(
   ctx: AdapterExecutionContext,
+  apiKeyResolver?: ApiKeyResolver,
 ): Promise<AdapterExecutionResult> {
   const { runId, agent, config, context, onLog, onMeta } = ctx;
 
   // --- API key resolution (fail fast before any import or API call) ---
-  const apiKeyResolver = config.apiKeyResolver as OpenAIKeyResolver | undefined;
+  // L2-A08: prefer the positional second-arg resolver (matches gemini_api's
+  // pattern). Fall back to config.apiKeyResolver for backward compat with
+  // call sites that have not yet migrated.
   let resolvedKey: string | null = null;
   if (typeof apiKeyResolver === "function") {
     try {
-      resolvedKey = await apiKeyResolver("openai", "api");
+      resolvedKey = await apiKeyResolver();
     } catch {
       resolvedKey = null;
+    }
+  } else {
+    const legacyResolver = config.apiKeyResolver as
+      | LegacyConfigKeyResolver
+      | undefined;
+    if (typeof legacyResolver === "function") {
+      try {
+        resolvedKey = await legacyResolver("openai", "api");
+      } catch {
+        resolvedKey = null;
+      }
     }
   }
   if (!resolvedKey || resolvedKey.trim().length === 0) {

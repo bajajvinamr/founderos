@@ -251,3 +251,15 @@ describe("execute() — cost_usd extraction safety", () => {
     expect(result.costUsd).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// L2-A08 — pin the positional apiKeyResolver shape uniformly across *_api
+// adapters. openai_api harmonized to the same shape in L2-A08; this test
+// guards against regression in the gemini-api direction (.length must stay
+// exactly 2; never drop back to 1 or grow past 2).
+// ---------------------------------------------------------------------------
+describe("execute() — arity contract (L2-A08 harmonization)", () => {
+  it("execute.length === 2 — positional resolver is part of the signature", () => {
+    expect(execute.length).toBe(2);
+  });
+});
