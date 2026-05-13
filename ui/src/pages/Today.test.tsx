@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { Today } from "./Today";
+import { ApiError } from "../api/client";
 import type { Approval } from "@founderos/shared";
 
 const companyState = vi.hoisted(() => ({
@@ -35,6 +36,10 @@ const mockApprovalsApi = vi.hoisted(() => ({
 
 const mockDailyBriefsApi = vi.hoisted(() => ({
   list: vi.fn(),
+  // L2-C05: `/today` now uses GET .../daily-briefs/latest via dailyBriefsApi.latest.
+  // The component (and DailyBriefView) call this method; 404 surfaces as the
+  // empty state and is mocked via rejectedValue with an ApiError.
+  latest: vi.fn(),
 }));
 
 const mockAuthApi = vi.hoisted(() => ({
@@ -121,6 +126,10 @@ function mountToday(): Mount {
 beforeEach(() => {
   mockApprovalsApi.list.mockResolvedValue([]);
   mockDailyBriefsApi.list.mockResolvedValue({ briefs: [], meta: { limit: 1, offset: 0, count: 0 } });
+  // Default: no brief → 404 ApiError surfaces as the empty state.
+  mockDailyBriefsApi.latest.mockRejectedValue(
+    new ApiError("No daily brief found", 404, null),
+  );
   mockAuthApi.getSession.mockResolvedValue({
     user: { id: "u-1", email: "vinamr@example.com", name: "Vinamr Bajaj" },
   });

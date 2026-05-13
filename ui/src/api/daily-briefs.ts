@@ -64,12 +64,31 @@ export type GenerateDailyBriefResponse = DailyBrief & {
   fallbackReason?: string;
 };
 
+/**
+ * Trimmed wire shape returned by `GET /companies/:id/daily-briefs/latest`.
+ * Intentionally narrower than `DailyBrief` — the /today UI only needs the
+ * date stamp + payload, not generation metadata. Use `list()` or `detail()`
+ * when consumers need `generatedAt`, `emailSentAt`, or `id`.
+ */
+export type LatestDailyBriefResponse = {
+  briefDate: string;
+  payload: DailyBriefPayload;
+};
+
 export const dailyBriefsApi = {
   /** List recent briefs newest-first (paginated). */
   list: (companyId: string, limit = 30, offset = 0): Promise<DailyBriefsListResponse> =>
     api.get(
       `/companies/${companyId}/daily-briefs?limit=${limit}&offset=${offset}`,
     ),
+
+  /**
+   * Fetch the most-recent brief for the company. Throws ApiError(404) when
+   * no brief exists — callers should handle that as the empty state, not an
+   * error condition.
+   */
+  latest: (companyId: string): Promise<LatestDailyBriefResponse> =>
+    api.get(`/companies/${companyId}/daily-briefs/latest`),
 
   /** Fetch the single brief for an ISO yyyy-mm-dd date. 404 if absent. */
   forDate: (companyId: string, forDate: string): Promise<DailyBrief> =>
