@@ -73,6 +73,21 @@ export const companies = pgTable(
      * rows. Default `false`. See P0 audit finding #5 (2026-05-09).
      */
     isDemo: boolean("is_demo").notNull().default(false),
+    /**
+     * Per-company persona / dogfood metadata.
+     *
+     * Mira Labs dogfood sets `metadata.persona = "mira-labs-dogfood"` to
+     * mark the company as the FounderOS dogfood persona. Used by:
+     *   - seed scripts: idempotency check (abort if persona row exists)
+     *   - DB trigger: reject is_demo = true flips on persona rows
+     *   - analytics: exclude persona rows from real-founder metrics
+     *
+     * NULL for all existing and normal rows. Nullable to avoid a table
+     * rewrite on the ALTER TABLE ADD COLUMN migration.
+     *
+     * Added: migration 0109_mira_labs_is_demo_guard (TD-1, 2026-05-13).
+     */
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
