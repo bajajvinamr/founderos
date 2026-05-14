@@ -49,15 +49,9 @@ const RoutineDetail = lazy(() => import("./pages/RoutineDetail").then((m) => ({ 
 const ExecutionWorkspaceDetail = lazy(() => import("./pages/ExecutionWorkspaceDetail").then((m) => ({ default: m.ExecutionWorkspaceDetail })));
 const Goals = lazy(() => import("./pages/Goals").then((m) => ({ default: m.Goals })));
 const GoalDetail = lazy(() => import("./pages/GoalDetail").then((m) => ({ default: m.GoalDetail })));
-// `Approvals` (the list page) was removed from the route table in Wave 1
-// — the list now redirects to `/today` per 06-engineering-handoff.md §2.2.
-// Detail page (`/approvals/:id`) survives unchanged per scope-fence §12.
+const Approvals = lazy(() => import("./pages/Approvals").then((m) => ({ default: m.Approvals })));
 const ApprovalDetail = lazy(() => import("./pages/ApprovalDetail").then((m) => ({ default: m.ApprovalDetail })));
-// `DecisionsInbox` and `Activity` page components are no longer reachable
-// via route — `/decisions` and `/activity` redirect to `/today` in Wave 1.
-// They remain in the codebase pending Wave 2-3 cleanup; deletion is
-// out-of-scope for this PR (the modules still compile and can be revived
-// via direct import if a sample-N reviewer surfaces a regression).
+const DecisionsInbox = lazy(() => import("./pages/DecisionsInbox").then((m) => ({ default: m.DecisionsInbox })));
 const Costs = lazy(() => import("./pages/Costs").then((m) => ({ default: m.Costs })));
 const Permissions = lazy(() => import("./pages/Permissions").then((m) => ({ default: m.Permissions })));
 const AuditLog = lazy(() => import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })));
@@ -88,10 +82,8 @@ const Integrations = lazy(() => import("./pages/Integrations").then((m) => ({ de
 const BoardClaimPage = lazy(() => import("./pages/BoardClaim").then((m) => ({ default: m.BoardClaimPage })));
 const CliAuthPage = lazy(() => import("./pages/CliAuth").then((m) => ({ default: m.CliAuthPage })));
 const InviteLandingPage = lazy(() => import("./pages/InviteLanding").then((m) => ({ default: m.InviteLandingPage })));
-// `WeeklyWrap` and `DailyBrief` page components are unreachable via route
-// — `/weekly` and `/brief` redirect to `/today#weekly` and `/today#brief`
-// anchors in Wave 1; Today renders both sections inline. The components
-// remain in the codebase for Wave 4 (Brief two-column write surface).
+const WeeklyWrap = lazy(() => import("./pages/WeeklyWrap").then((m) => ({ default: m.WeeklyWrap })));
+const DailyBrief = lazy(() => import("./pages/DailyBrief").then((m) => ({ default: m.DailyBrief })));
 const Conversations = lazy(() => import("./pages/Conversations").then((m) => ({ default: m.Conversations })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
@@ -232,23 +224,14 @@ function boardRoutes() {
   return (
     <>
       {/*
-       * P3 Wave 1 — Ask-First shell redirects.
-       *
-       * The new shell ships behind FOUNDEROS_ASK_FIRST_SHELL (default OFF),
-       * but the route redirects in this block run UNCONDITIONALLY — that's
-       * deliberate per 06-engineering-handoff.md §2.2 + §2.5: redirects
-       * survive feature-flag rollback, no data loss.
-       *
-       * Wave 1 maps the obvious flows (/dashboard, /inbox, /brief, /weekly,
-       * /decisions, list-/approvals, /conversations, /activity) to /today.
-       * Wave 2 owns /issues, /routines, /goals, /projects. Wave 3 owns
-       * /integrations, /skills, /audit, /costs. Detail routes (/approvals/:id,
-       * /issues/:id, /agents/:id, etc.) are intentionally NOT redirected —
-       * they're the destinations of decision-row clicks and bookmarks.
+       * Demo shell routing keeps the high-value founder surfaces reachable as
+       * real pages. Inbox and Activity still fold into Today, but Dashboard,
+       * Brief, Weekly, Conversations, Decisions, and Approvals each have their
+       * own route for customer demos and bookmarked workflows.
        */}
       <Route index element={<Navigate to="today" replace />} />
       <Route path="today" element={<Today />} />
-      <Route path="dashboard" element={<Navigate to="../today" replace />} />
+      <Route path="dashboard" element={<Dashboard />} />
       <Route path="onboarding" element={<OnboardingRoutePage />} />
       <Route path="companies" element={<Companies />} />
       <Route path="company/settings" element={<CompanySettings />} />
@@ -295,15 +278,13 @@ function boardRoutes() {
       <Route path="execution-workspaces/:workspaceId/issues" element={<ExecutionWorkspaceDetail />} />
       <Route path="goals" element={<Goals />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
-      {/* Approvals list — folded into /today per Wave 1 redirect map. */}
-      <Route path="approvals" element={<Navigate to="../today?view=queue&risk=high" replace />} />
-      {/* Approvals pending/all sub-views fold into /today as well. */}
-      <Route path="approvals/pending" element={<Navigate to="../today?view=queue&risk=high" replace />} />
-      <Route path="approvals/all" element={<Navigate to="../today?view=queue" replace />} />
+      <Route path="approvals" element={<Approvals />} />
+      <Route path="approvals/pending" element={<Approvals />} />
+      <Route path="approvals/all" element={<Approvals />} />
       {/* Decision detail UNCHANGED per scope-fence §12 — the click target
           for a decision row still lands here with its existing layout. */}
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
-      <Route path="decisions" element={<Navigate to="../today" replace />} />
+      <Route path="decisions" element={<DecisionsInbox />} />
       <Route path="costs" element={<Costs />} />
       <Route path="integrations" element={<Integrations />} />
       {/* Activity — Wave 1 placeholder redirect; Wave 3 lands /library/audit. */}
@@ -311,11 +292,9 @@ function boardRoutes() {
       <Route path="permissions" element={<Permissions />} />
       <Route path="audit" element={<AuditLog />} />
       <Route path="alerts" element={<Alerts />} />
-      <Route path="weekly" element={<Navigate to="../today#weekly" replace />} />
-      <Route path="brief" element={<Navigate to="../today#brief" replace />} />
-      {/* Conversations list — Wave 1 placeholder redirect. Wave 2-3 will
-          refine to /team?tab=conversations or /library/conversations-archive. */}
-      <Route path="conversations" element={<Navigate to="../today" replace />} />
+      <Route path="weekly" element={<WeeklyWrap />} />
+      <Route path="brief" element={<DailyBrief />} />
+      <Route path="conversations" element={<Conversations />} />
       <Route path="conversations/:convId" element={<Conversations />} />
       {/* Inbox — folded into /today's decision list per Wave 1 redirect map. */}
       <Route path="inbox" element={<Navigate to="../today" replace />} />
