@@ -62,6 +62,14 @@ if (!DATABASE_URL) {
   console.error("[seed-mira-labs-month1-runs] DATABASE_URL is required");
   process.exit(1);
 }
+if (process.env.NODE_ENV === "production") {
+  throw new Error(
+    "seed-mira-labs-month1-runs: refused — NODE_ENV=production. " +
+    "This seed performs onConflictDoUpdate against companies/integrations/" +
+    "composioConnections and would overwrite live customer state. " +
+    "Run only against demo or dogfood environments."
+  );
+}
 
 const PERSONA_TAG = "mira-labs-dogfood";
 const ANITA_AUTH_UID = "9b29fdf9-2ddb-4919-8fd2-77e4640849c9";
