@@ -142,10 +142,18 @@ export function dailyBriefRoutes(db: Db, options?: DailyBriefRoutesOptions) {
   /**
    * GET /api/companies/:id/daily-briefs/latest
    *
-   * Returns the most recent daily brief for the company, ordered by `forDate`
-   * DESC. Registered BEFORE the `/:briefId` route — Express routes are matched
-   * in registration order, and a UUID-shaped `:briefId` would otherwise capture
-   * the literal string "latest" and 404.
+   * Returns the single most-recent brief for the company by `forDate` desc.
+   * Used by the `/today` UI shell to render the morning brief without paging
+   * through the full list. Response shape is intentionally minimal:
+   *   { briefDate: 'yyyy-mm-dd', payload: DailyBriefPayload }
+   * Use the list/detail routes when consumers need generation metadata
+   * (`generatedAt`, `emailSentAt`, `id`).
+   *
+   * 404 when no brief exists for the company.
+   *
+   * MUST be declared BEFORE the `/companies/:id/daily-briefs/:briefId` route
+   * — Express matches in registration order, and the literal "latest" would
+   *   otherwise be captured as a `:briefId` UUID lookup.
    */
   router.get("/companies/:id/daily-briefs/latest", async (req, res) => {
     const companyId = req.params.id as string;
@@ -158,7 +166,11 @@ export function dailyBriefRoutes(db: Db, options?: DailyBriefRoutesOptions) {
       .orderBy(desc(dailyBriefs.forDate))
       .limit(1);
     if (!row) throw notFound("No daily brief found for this company");
-    res.json(serialize(row));
+
+    res.json({
+      briefDate: asDateString(row.forDate),
+      payload: row.payload,
+    });
   });
 
   /**
