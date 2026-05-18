@@ -14,6 +14,9 @@
  *   *.ingest.sentry.io / sentry.io                         — error reporting
  *   api.anthropic.com                                      — direct LLM calls
  *   js.stripe.com / api.stripe.com / hooks.stripe.com      — Stripe checkout
+ *   registry.npmjs.org                                     — NPM package
+ *                                                            version lookups
+ *                                                            (AdapterManager)
  *
  * The CSP is intentionally NOT report-only. The 2026-05-03 council BLOCK
  * called out "no CSP" as a P1 — shipping report-only would still be a
@@ -47,6 +50,10 @@ const ANTHROPIC_HOSTS = "https://api.anthropic.com";
 const STRIPE_HOSTS = "https://api.stripe.com https://hooks.stripe.com";
 const STRIPE_FRAME = "https://js.stripe.com https://hooks.stripe.com";
 const STRIPE_SCRIPT = "https://js.stripe.com";
+// NPM registry — UI's AdapterManager fetches latest package versions via
+// `https://registry.npmjs.org/<pkg>/latest`. Without this entry the request
+// is blocked by CSP with no observable error in app code (L2-F01).
+const NPM_REGISTRY_HOSTS = "https://registry.npmjs.org";
 
 export function buildContentSecurityPolicy(opts: SecurityHeadersOptions): string {
   const supabaseExact = opts.supabaseUrl ? new URL(opts.supabaseUrl).origin : "";
@@ -69,6 +76,7 @@ export function buildContentSecurityPolicy(opts: SecurityHeadersOptions): string
       SENTRY_HOSTS,
       ANTHROPIC_HOSTS,
       STRIPE_HOSTS,
+      NPM_REGISTRY_HOSTS,
     ],
     "frame-src": ["'self'", STRIPE_FRAME],
     "frame-ancestors": ["'none'"],

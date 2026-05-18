@@ -288,6 +288,28 @@ export function onboardingRoutes(db: Db) {
             `API key is required when adapterChoice is '${input.adapterChoice}'`,
           );
         }
+        // 2026-05-18 (G4 follow-on) — All three hosted-API adapter choices
+        // (anthropic_api, openai_api, google_api) MUST persist the validated
+        // key into instance_api_keys, otherwise the server-side adapters
+        // built in PR #194 (openai_api, gemini_api) and PR-G3b (anthropic_api)
+        // fail at first heartbeat with `no_api_key`. Pre-fix, only anthropic
+        // was stored — openai/google validated upstream but never reached
+        // the keystore, leaving founders past onboarding with non-functional
+        // agents (silent-failure-cliff, same pattern as the wizard-gate bug).
+        //
+        // Done OUTSIDE the bootstrap transaction so the encryption call and
+        // DB write don't extend tx hold time on the network-bound validation
+        // path. Any failure here surfaces as an unprocessable/500 BEFORE the
+        // bootstrap runs — same fail-fast direction as the live key
+        // validator above.
+        //
+        // Per-family validation:
+        //   - anthropic_api: live validator (validateAnthropicKey) probes
+        //     /v1/messages. Other validators land via /api/providers/validate-key
+        //     called from the V2 wizard's AdapterValidationPanel.
+        //   - openai_api / google_api: length-only check here; live validation
+        //     already happened upstream in the V2 wizard via validateProviderKey.
+        //     The wizard's `adapterValidated` flag is the gate.
         if (input.adapterChoice === "anthropic_api") {
           const keyCheck = await validateAnthropicKey(input.anthropicKey);
           if (!keyCheck.valid) {
@@ -295,35 +317,22 @@ export function onboardingRoutes(db: Db) {
               `Anthropic API key rejected: ${keyCheck.reason ?? "unknown"}`,
             );
           }
-          // S8 P0.1 Phase 1D — when the validated key is for hosted-mode
-          // execution (server-side claude_local handler reads from
-          // instance_api_keys, NOT from company_secrets), persist it into
-          // the instance keystore as well. The bootstrap orchestrator still
-          // writes the company-secret copy below for BYO/dev paths; this
-          // additional write consolidates the credential into the surface
-          // the Phase 1C handler reads via `getDecryptedKey('anthropic',
-          // 'api')`. Failure here is fatal: without this row, the
-          // bootstrapped agents would fail at first heartbeat with
-          // `no_api_key` from the server-side handler.
-          //
-          // Done OUTSIDE the bootstrap transaction so the encryption call
-          // and DB write don't extend tx hold time on the network-bound
-          // validation path. Any failure here surfaces as an
-          // unprocessable/500 BEFORE the bootstrap runs — same fail-fast
-          // direction as the live key validator above.
-          const { instanceApiKeysService } = await import(
-            "../services/instance-api-keys.js"
-          );
-          await instanceApiKeysService(db).setKey({
-            family: "anthropic",
-            executionMode: "api",
-            value: input.anthropicKey,
-          });
         }
-        // openai_api / google_api: live validation lands with the
-        // respective S7.B tiles; for now the length check above is the
-        // backstop and the runtime adapter will surface a clear error
-        // if the key is wrong at first run.
+
+        const { instanceApiKeysService } = await import(
+          "../services/instance-api-keys.js"
+        );
+        const apiKeyFamily: "anthropic" | "openai" | "google" =
+          input.adapterChoice === "anthropic_api"
+            ? "anthropic"
+            : input.adapterChoice === "openai_api"
+              ? "openai"
+              : "google";
+        await instanceApiKeysService(db).setKey({
+          family: apiKeyFamily,
+          executionMode: "api",
+          value: input.anthropicKey,
+        });
       }
 
       // S-TC2 (council 2026-05-05 P2 — analytics milestone for paid users).

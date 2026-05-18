@@ -22,16 +22,40 @@
  * Adapter types whose liveness is surfaced by the company-level
  * `RunnerStatusPill`. Server-side adapters (`process`, `http`) are
  * intentionally excluded.
+ *
+ * 2026-05-18 (G3b/G3c follow-up) — `openai_api`, `anthropic_api`, and
+ * `gemini_api` are NOT BYO-hosted; they're hosted-API adapters that call
+ * the provider SDK in-process on the server. Their liveness depends on
+ * the Fly server, NOT on a laptop runner. They were briefly listed here
+ * as "forward-compat" but that misclassified the architecture — the
+ * runner pill should not be the liveness signal for hosted-API adapters.
  */
 export const BYO_RUNNER_HOSTED_ADAPTERS: ReadonlySet<string> = new Set([
   "claude_local",
   "codex_local",
   "gemini_local",
   "opencode_local",
-  // S7.A.1 will add this to AGENT_ADAPTER_TYPES; UI registry knows about it
-  // now for forward-compat.
-  "openai_api",
 ]);
+
+/**
+ * Adapter types whose execution lives in-process on the Fly server via
+ * the provider SDK. These never need a laptop runner; they need an API
+ * key in `instance_api_keys` (set via the V2 onboarding wizard's
+ * AdapterValidationPanel api-key path).
+ */
+export const HOSTED_API_ADAPTERS: ReadonlySet<string> = new Set([
+  "anthropic_api",
+  "openai_api",
+  "gemini_api",
+]);
+
+/** True iff the adapter type runs server-side via a provider SDK. */
+export function isHostedApiAdapter(
+  adapterType: string | null | undefined,
+): boolean {
+  if (!adapterType) return false;
+  return HOSTED_API_ADAPTERS.has(adapterType);
+}
 
 /** Display metadata for a hosted-runner adapter shown in UI badges. */
 export interface AdapterDisplayInfo {
@@ -75,12 +99,26 @@ export const RUNNER_ADAPTER_DISPLAY: Readonly<Record<string, AdapterDisplayInfo>
     family: "other",
     badgeColor: "outline",
   },
-  // S7.A.1 will add this to AGENT_ADAPTER_TYPES; UI registry knows about it
-  // now for forward-compat.
+  // 2026-05-18 — hosted-API adapters carry display metadata for the
+  // Team-page badge even though they aren't BYO-hosted. The pill itself
+  // is gated by `BYO_RUNNER_HOSTED_ADAPTERS`; this map is for label
+  // resolution only.
+  anthropic_api: {
+    label: "Anthropic API",
+    shortLabel: "Claude API",
+    family: "anthropic",
+    badgeColor: "default",
+  },
   openai_api: {
     label: "OpenAI API",
     shortLabel: "OpenAI",
     family: "openai",
+    badgeColor: "secondary",
+  },
+  gemini_api: {
+    label: "Gemini API",
+    shortLabel: "Gemini API",
+    family: "google",
     badgeColor: "secondary",
   },
 };

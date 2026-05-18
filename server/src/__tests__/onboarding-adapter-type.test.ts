@@ -1,11 +1,14 @@
 /**
- * Tests that POST /onboarding/bootstrap always creates agents with
- * adapterType = "claude_local", regardless of the adapterChoice field.
+ * Tests that POST /onboarding/bootstrap creates agents with the correct
+ * adapterType per adapterChoice family.
  *
- * This covers the P1-2 council finding: the original code mapped
- * "anthropic_api" → "claude_api" but no claude_api adapter is registered,
- * making those agents permanently non-functional.  The fix hardcodes
- * "claude_local" for all paths.
+ * Historical context: the original code mapped "anthropic_api" → "claude_api"
+ * but no claude_api adapter was registered, making those agents permanently
+ * non-functional. The interim fix collapsed everything to "claude_local".
+ * G3b (2026-05-18) shipped a dedicated server-side `anthropic_api` adapter
+ * package, so the collapse is reversed: anthropic_api → anthropic_api,
+ * openai_api → openai_api, google_api → gemini_api. CLI-family choices
+ * (claude_local / codex_local / gemini_local / skip) preserve themselves.
  */
 
 import express from "express";
@@ -192,7 +195,7 @@ function makePayload(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("onboarding bootstrap — adapterType is always claude_local", () => {
+describe("onboarding bootstrap — adapterType reflects adapterChoice family (G3b)", () => {
   let savedFlag: string | undefined;
 
   beforeEach(() => {
@@ -241,7 +244,7 @@ describe("onboarding bootstrap — adapterType is always claude_local", () => {
     );
   });
 
-  it("creates agents with adapterType=claude_local when adapterChoice=anthropic_api", async () => {
+  it("creates agents with adapterType=anthropic_api when adapterChoice=anthropic_api (G3b)", async () => {
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
 
@@ -254,9 +257,11 @@ describe("onboarding bootstrap — adapterType is always claude_local", () => {
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      // The fix: must be "claude_local", NOT "claude_api"
-      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      // G3b: dedicated server-side anthropic_api adapter shipped, no more
+      // collapse to claude_local. The Anthropic SDK is called in-process.
+      expect(payload).toMatchObject({ adapterType: "anthropic_api" });
       expect(payload.adapterType).not.toBe("claude_api");
+      expect(payload.adapterType).not.toBe("claude_local");
     }
   });
 
@@ -417,9 +422,16 @@ describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 mul
     }
   });
 
-  it("adapterChoice=anthropic_api + BYO flag → adapter_type=claude_local (key still stored as secret)", async () => {
-    // anthropic_api collapses to claude_local via mapOnboardingChoiceToAdapter —
-    // the Anthropic key is still stored as a company secret upstream.
+  it("adapterChoice=anthropic_api + BYO flag → adapter_type=anthropic_api (G3b; key still stored as secret)", async () => {
+    // G3b (2026-05-18): anthropic_api preserves to anthropic_api via
+    // mapOnboardingChoiceToAdapter. The Anthropic key is still stored as a
+    // company secret upstream. The BYO branch still sets
+    // transport: "local_runner" because adapterConfig is built after the
+    // branch resolution — note: dispatching an API-family adapter to the
+    // runner is a known design tension (runner's ADAPTER_HANDLERS excludes
+    // api families). Production guidance is to use HOSTED mode or skip BYO
+    // for API choices; this test asserts current code behavior, not the
+    // ideal end state.
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
     mockSecretService.create.mockResolvedValue({ id: "secret-uuid-byo" });
@@ -434,8 +446,7 @@ describe("onboarding bootstrap — BYO runner preserves provider choice (QW1 mul
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      // anthropic_api → claude_local (mapOnboardingChoiceToAdapter) with transport
-      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload).toMatchObject({ adapterType: "anthropic_api" });
       expect(payload.adapterType).not.toBe("byo_runner");
       expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
@@ -664,7 +675,7 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     else process.env.FOUNDEROS_BYO_RUNNER_ENABLED = savedByo;
   });
 
-  it("hosted=ON + anthropic_api → adapter_type=claude_local (server-side path)", async () => {
+  it("hosted=ON + anthropic_api → adapter_type=anthropic_api (G3b server-side adapter)", async () => {
     process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED = "1";
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
@@ -677,13 +688,14 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     const calls = mockAgentService.create.mock.calls;
     expect(calls.length).toBe(4);
     for (const [, payload] of calls) {
-      // Hosted mode routes anthropic_api to claude_local — the server-side
-      // handler reads the key from instance_api_keys (written by the route
-      // post-validation) and dispatches via the Anthropic SDK in-process.
-      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      // G3b hosted branch routes anthropic_api → anthropic_api (dedicated
+      // adapter package). The adapter reads the key from instance_api_keys
+      // (written by the route post-validation) and calls the Anthropic SDK
+      // in-process.
+      expect(payload).toMatchObject({ adapterType: "anthropic_api" });
     }
     // The route ALSO writes the validated key into the instance keystore
-    // — Phase 1C handler reads from there.
+    // — the anthropic_api adapter reads from there at execute time.
     expect(mockInstanceApiKeysSetKey).toHaveBeenCalledTimes(1);
     expect(mockInstanceApiKeysSetKey).toHaveBeenCalledWith({
       family: "anthropic",
@@ -705,16 +717,19 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     expect(res.status).toBe(201);
     const calls = mockAgentService.create.mock.calls;
     for (const [, payload] of calls) {
-      // Hosted wins — anthropic_api goes to server-side claude_local even
-      // though BYO is also enabled.
-      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      // Hosted wins — anthropic_api goes to the server-side anthropic_api
+      // adapter even though BYO is also enabled.
+      expect(payload).toMatchObject({ adapterType: "anthropic_api" });
     }
   });
 
-  it("hosted=OFF + BYO=ON → adapter_type=claude_local with transport:local_runner (QW1 fix)", async () => {
-    // QW1 multi-provider fix: BYO flag preserves the provider choice instead
-    // of collapsing to byo_runner. anthropic_api → claude_local via
-    // mapOnboardingChoiceToAdapter, and transport: "local_runner" is set.
+  it("hosted=OFF + BYO=ON + anthropic_api → adapter_type=anthropic_api with transport:local_runner (G3b)", async () => {
+    // G3b: BYO branch still calls mapOnboardingChoiceToAdapter which
+    // preserves anthropic_api → anthropic_api. transport: "local_runner" is
+    // still set by buildAgentAdapterConfig — a known design tension since
+    // the runner's ADAPTER_HANDLERS excludes API families, so this combo
+    // (BYO+anthropic_api) is not the intended production path. Test asserts
+    // current code behavior; production should use HOSTED for API families.
     process.env.FOUNDEROS_BYO_RUNNER_ENABLED = "1";
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
@@ -726,8 +741,7 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     expect(res.status).toBe(201);
     const calls = mockAgentService.create.mock.calls;
     for (const [, payload] of calls) {
-      // BYO path now preserves the provider (claude_local for anthropic_api).
-      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      expect(payload).toMatchObject({ adapterType: "anthropic_api" });
       expect(payload.adapterType).not.toBe("byo_runner");
       expect(payload.adapterConfig).toMatchObject({ transport: "local_runner" });
     }
@@ -753,7 +767,7 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     expect(mockInstanceApiKeysSetKey).not.toHaveBeenCalled();
   });
 
-  it("both flags OFF + anthropic_api → mapOnboardingChoiceToAdapter path (claude_local)", async () => {
+  it("both flags OFF + anthropic_api → mapOnboardingChoiceToAdapter path (anthropic_api, G3b)", async () => {
     const app = await createApp();
     mockValidateAnthropicKey.mockResolvedValue({ valid: true });
 
@@ -764,8 +778,8 @@ describe("onboarding bootstrap — hosted-aware adapter resolution (S8 P0.1)", (
     expect(res.status).toBe(201);
     const calls = mockAgentService.create.mock.calls;
     for (const [, payload] of calls) {
-      // Pre-PR-148 dev/local path collapses anthropic_api → claude_local.
-      expect(payload).toMatchObject({ adapterType: "claude_local" });
+      // G3b: dev/local path preserves anthropic_api (no more collapse).
+      expect(payload).toMatchObject({ adapterType: "anthropic_api" });
     }
   });
 });

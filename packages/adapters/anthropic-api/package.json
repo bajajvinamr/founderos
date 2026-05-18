@@ -1,0 +1,59 @@
+{
+  "name": "@founderos/adapter-anthropic-api",
+  "version": "0.0.0",
+  "description": "Anthropic API adapter (HTTP wrapper via @anthropic-ai/sdk)",
+  "license": "MIT",
+  "homepage": "https://github.com/founderos-ai/founderos",
+  "bugs": {
+    "url": "https://github.com/founderos-ai/founderos/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/founderos-ai/founderos",
+    "directory": "packages/adapters/anthropic-api"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts"
+  },
+  "bin": {
+    "anthropic-api-runner": "./bin/anthropic-api-runner.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./server": {
+        "types": "./dist/server/index.d.ts",
+        "import": "./dist/server/index.js"
+      }
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
+    "@founderos/adapter-utils": "workspace:*",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

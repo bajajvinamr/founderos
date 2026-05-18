@@ -8,6 +8,9 @@
  */
 export const BUILTIN_ADAPTER_TYPES = new Set([
   "claude_local",
+  // anthropic_api: direct Anthropic Messages API path (G3b, 2026-05-18).
+  // Mirror of the addition in packages/shared/src/constants.ts AGENT_ADAPTER_TYPES.
+  "anthropic_api",
   "codex_local",
   "cursor_local",
   "gemini_local",

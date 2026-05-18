@@ -189,12 +189,23 @@ describe("<RunnerStatusPill />", () => {
 // ---------------------------------------------------------------------------
 
 describe("BYO_RUNNER_HOSTED_ADAPTERS", () => {
-  it("includes the four hosted-runner adapter types plus openai_api", () => {
+  // 2026-05-18 (G8) — Reclassified openai_api / anthropic_api / gemini_api
+  // OUT of BYO_RUNNER_HOSTED_ADAPTERS. They're hosted-API adapters that
+  // run server-side via apiKeyResolver, NOT BYO-hosted CLIs. The set now
+  // contains only the four CLI-family adapter types.
+  it("includes the four CLI-family adapter types", () => {
     expect(BYO_RUNNER_HOSTED_ADAPTERS.has("claude_local")).toBe(true);
     expect(BYO_RUNNER_HOSTED_ADAPTERS.has("codex_local")).toBe(true);
     expect(BYO_RUNNER_HOSTED_ADAPTERS.has("gemini_local")).toBe(true);
     expect(BYO_RUNNER_HOSTED_ADAPTERS.has("opencode_local")).toBe(true);
-    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("openai_api")).toBe(true);
+  });
+
+  it("EXCLUDES hosted-API families (openai_api / anthropic_api / gemini_api)", () => {
+    // These run server-side via apiKeyResolver — NOT BYO. Regression
+    // guard for the 2026-05-18 reclassification (G8 follow-on).
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("openai_api")).toBe(false);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("anthropic_api")).toBe(false);
+    expect(BYO_RUNNER_HOSTED_ADAPTERS.has("gemini_api")).toBe(false);
   });
 
   it("excludes server-side adapter types (process, http)", () => {
@@ -213,7 +224,10 @@ describe("isHostedRunnerAdapter", () => {
     ["codex_local", true],
     ["gemini_local", true],
     ["opencode_local", true],
-    ["openai_api", true],
+    // Hosted-API families return false — they're server-side, not BYO.
+    ["openai_api", false],
+    ["anthropic_api", false],
+    ["gemini_api", false],
     ["process", false],
     ["http", false],
     ["byo_runner", false],
@@ -238,12 +252,23 @@ describe("hasHostedRunnerAdapter", () => {
     expect(hasHostedRunnerAdapter(agents)).toBe(true);
   });
 
-  it.each(["claude_local", "codex_local", "gemini_local", "opencode_local", "openai_api"])(
+  it.each(["claude_local", "codex_local", "gemini_local", "opencode_local"])(
     "returns true for an agent list with only %s",
     (adapterType) => {
       expect(hasHostedRunnerAdapter([{ adapterType }])).toBe(true);
     },
   );
+
+  it("returns false for an agent list of only hosted-API adapters", () => {
+    // openai_api / anthropic_api / gemini_api are server-side, not BYO —
+    // an agent list of only these should NOT show the runner pill.
+    expect(
+      hasHostedRunnerAdapter([
+        { adapterType: "openai_api" },
+        { adapterType: "anthropic_api" },
+      ]),
+    ).toBe(false);
+  });
 
   it("returns false for an agent list of only process / http", () => {
     expect(
