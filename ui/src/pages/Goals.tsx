@@ -5,13 +5,15 @@ import type { Agent, Goal } from "@founderos/shared";
 import { goalsApi } from "../api/goals";
 import { agentsApi } from "../api/agents";
 import { useCompany } from "../context/CompanyContext";
+import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { StatusBadge } from "../components/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { cn } from "../lib/utils";
-import { Target } from "lucide-react";
+import { Target, Plus } from "lucide-react";
 
 export type DriftBand = "ontrack" | "behind" | "atrisk" | "cancelled";
 
@@ -163,6 +165,7 @@ function GoalRow({ goal, agentsById }: GoalRowProps) {
 
 export function Goals() {
   const { selectedCompanyId } = useCompany();
+  const { openNewGoal } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
 
   useEffect(() => {
@@ -197,17 +200,28 @@ export function Goals() {
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-xl font-bold tracking-tight">Goals</h1>
-        <p className="text-sm text-muted-foreground">
-          Where the team's headed
-        </p>
+      <header className="flex items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold tracking-tight">Goals</h1>
+          <p className="text-sm text-muted-foreground">
+            Where the team's headed
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => openNewGoal()} className="gap-1.5">
+          <Plus className="h-3.5 w-3.5" />
+          New goal
+        </Button>
       </header>
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       {goals && goals.length === 0 && (
-        <EmptyState icon={Target} message="No goals tracked." />
+        <EmptyState
+          icon={Target}
+          message="No goals tracked."
+          action="Create your first goal"
+          onAction={() => openNewGoal()}
+        />
       )}
 
       {goals && goals.length > 0 && (

@@ -1207,17 +1207,14 @@ function Footer() {
               { label: "Team roster", href: "#product" },
               { label: "Providers", href: "#product" },
               { label: "Pricing", href: "#pricing" },
-              { label: "Changelog", href: "#" },
+              { label: "Changelog", href: "https://github.com/founderos-ai/founderos/releases" },
             ]}
           />
           <FooterCol
             title="Company"
             items={[
-              { label: "About", href: "#" },
-              { label: "Careers", href: "#" },
-              { label: "Blog", href: "#" },
-              { label: "Press", href: "#" },
               { label: "Contact", href: "mailto:hello@founderos.ai" },
+              { label: "Sales", href: "mailto:hello@founderos.ai?subject=Design%20partner%20inquiry" },
             ]}
           />
           <FooterCol
@@ -1225,18 +1222,8 @@ function Footer() {
             items={[
               { label: "Docs", href: "https://docs.founderos.ai" },
               { label: "API reference", href: "https://docs.founderos.ai/api" },
-              { label: "Templates", href: "#" },
-              { label: "Community", href: "#" },
               { label: "GitHub", href: "https://github.com/founderos-ai/founderos" },
-            ]}
-          />
-          <FooterCol
-            title="For"
-            items={[
-              { label: "SaaS founders", href: "#" },
-              { label: "Indie builders", href: "#" },
-              { label: "Venture studios", href: "#" },
-              { label: "Agencies", href: "#" },
+              { label: "Discussions", href: "https://github.com/founderos-ai/founderos/discussions" },
             ]}
           />
         </div>
@@ -1246,7 +1233,6 @@ function Footer() {
           <div className="flex items-center gap-5">
             <a href="/legal/terms" className="hover:text-pulse-bone">Terms</a>
             <a href="/legal/privacy" className="hover:text-pulse-bone">Privacy</a>
-            <a href="#" className="hover:text-pulse-bone">Status</a>
           </div>
         </div>
       </div>
