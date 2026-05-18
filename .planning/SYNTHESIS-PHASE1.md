@@ -236,3 +236,53 @@ Of the 5 questions in the main synthesis body, one is now elevated by the covera
 **Q (new): G2 coverage target.** Do you want to (a) keep 99/95 as the stated goal and accept this is multi-week work, (b) downgrade G2 to "80/70 UI + 90/80 server + critical-path Playwright" and ship a coverage-policy doc, or (c) defer coverage to post-buyer-sign entirely?
 
 My recommendation is (b) — gives a defensible floor without burning days of demo-prep on test writing. Combined with the existing (a) recommendation in the body ("UI P0 fixes only, doc drift, runner SIGKILL"), this is the cheapest path to a demo-ready buyer hand-off.
+
+---
+
+## Appendix C — Council verdict on this synthesis (2026-05-19, FULL mode)
+
+**Verdict:** **BLOCK** — synthesis missed two demo-blocking items + mis-classified one P0 as v1.1 deferred. Re-rank P0 queue before continuing implementation.
+
+**Mode:** FULL (Codex `gpt-5.4` + Gemini `gemini-2.5-pro`, both healthy)
+**Rounds:** R1 + R2 converged (R2 surfaced 2 net-new P2s, no new P1s)
+
+### Confirmed by both models
+
+1. **[P1] Self-serve company-creation path is broken.** `Layout.tsx:140` suppresses auto-open of `FounderOnboardingWizard` for `deploymentMode === "authenticated"` (the hosted Fly mode). `Dashboard.tsx:108-110` renders **`OnboardingWizardNew`** for zero-company users — a third wizard variant. The V2 wizard hardening we shipped applies only to `/onboarding` route, not to the actual self-serve zero-company landing flow. **Verified via Read of Layout.tsx:138-145 + Dashboard.tsx:108-115.**
+2. **[P2] Runner SIGKILL fix should be in the first P0 tranche.** It's the only listed item that directly blocks "first agent run" (step #9 of the self-serve flow). Fix exists in worktree-agent-afb91fbb1de41666f.
+3. **[P2] Kit §2.1 is NOT just doc drift.** `routes/health.ts` exposes no `stripe_connectivity` probe but kit §2.1 asserts that signal exists. Either (a) implement the probe in `/api/health/deep`, or (b) change the kit's checklist signal to `/api/billing/status` + signed-webhook smoke.
+4. **[P2] G2 coverage downgrade unsafe without Auth.tsx Playwright spec.** `ui/src/pages/Auth.tsx` at 0% line coverage + no dedicated forgot-password E2E spec is a self-serve-journey blocker. The downgrade is defensible ONLY if Phase 3 Playwright work covers Auth + Agents page.
+5. **[P2] V2 wizard draft hydration is P0, not v1.1.** Tab refresh wiping wizard state mid-onboarding is a self-serve conversion-killer.
+
+### Disputed — resolved
+
+- **Gemini R1 [P1] "no password reset flow"**: FALSE POSITIVE. `ui/src/pages/Auth.tsx:272`, `ForgotPassword.tsx`, `ResetPassword.tsx` exist. Codex caught the dispute. The real gap is (a) `e2e/tests/auth-round-trip.spec.ts:43` claims password reset coverage but no separate spec, (b) `docs/runbooks/user-guide.md:249` stale text says password reset isn't self-serve.
+
+### New in R2
+
+- **[P2] (Codex)** `e2e/tests/auth-round-trip.spec.ts:43` falsely claims forgot/reset coverage. Add a dedicated recovery E2E or remove the misleading claim.
+- **[P3] (Codex)** `docs/runbooks/user-guide.md:249` stale "password reset isn't self-serve" line — UI does expose self-serve reset.
+- **[P2] (Gemini, DISPUTED — unverified)** Claims `server/src/routes/providers.ts:98` returns 500 on empty data. Verified line 98 is part of `validate-key` error handler, NOT a `GET /api/providers` list endpoint. **Treat as unverified.**
+
+### Re-ranked P0 queue (final, post-council)
+
+| # | Item | Source | Effort | Authority |
+|---|---|---|---|---|
+| 1 | **Self-serve company-creation flow: verify `OnboardingWizardNew` works for self-serve hosted users OR route them to V2 path** | Council P1 | 2-3 hr (trace deps + fix) | Me |
+| 2 | **Runner SIGKILL 0.1.2 fix + publish** | GOAL G6 + Council P2 | Cherry-pick + reconcile + publish | Me |
+| 3 | **V2 wizard draft hydration on mount** | Council P2 (was P1 v1.1) | ~1 hr | Me |
+| 4 | **Kit §2.1: implement `stripe_connectivity` probe OR change kit signal** | Council P2 | ~1 hr | Me |
+| 5 | Auth.tsx + ForgotPassword + ResetPassword Playwright round-trip | Council P2 | ~2 hr | Me |
+| 6 | Goals/Projects creation + Landing footer + DepartmentConsole | UI P0-A through E | Done in PR #267 | Done |
+| 7 | Set Stripe + Resend + EMAIL_UNSUBSCRIBE_SECRET on Fly | Config P0 | 30 min once keys are in hand | User → Me |
+| 8 | Remove `auth-round-trip.spec.ts:43` stale claim OR add spec | Council R2 P2 | 30 min | Me |
+| 9 | Update `docs/runbooks/user-guide.md:249` stale text | Council R2 P3 | 5 min | Me |
+
+### Model health (Tier 6 #17 — mandatory)
+
+- **Codex:** HEALTHY (model=gpt-5.4, R1≈68s, R2≈42s)
+- **Gemini:** HEALTHY (model=gemini-2.5-pro, R1≈74s, R2≈58s)
+
+### Synthesis: what matters most and why
+
+The self-serve mandate exposed an audit blind spot we wouldn't have caught without council. Both models triangulated the same root cause from different angles — Codex traced the code path (`Layout.tsx:140` → `Dashboard.tsx:108` → `OnboardingWizardNew`), Gemini surfaced the lockout symptom. The V2 wizard hardening we shipped is for a route the self-serve buyer never lands on. **Before any kit/secrets work, verify which onboarding wizard a self-serve buyer actually sees** and make that path bulletproof. Doc/secret work is downstream of confirming the wizard variant.

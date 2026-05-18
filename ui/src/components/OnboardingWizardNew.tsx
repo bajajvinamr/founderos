@@ -597,7 +597,10 @@ function ProvidersStep({
               ) : (
                 <a
                   href="/instance/settings/providers"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-xs text-[var(--brand)] font-medium hover:underline inline-flex items-center gap-1"
+                  title="Opens in new tab — wizard state stays put. Polling auto-detects the key within 5s."
                 >
                   <Key className="h-3 w-3" />
                   Add key
