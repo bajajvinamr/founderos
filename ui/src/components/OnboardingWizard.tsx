@@ -454,6 +454,15 @@ export function OnboardingWizard() {
       if (isLocalAdapter) {
         const result = adapterEnvResult ?? (await runAdapterEnvironmentTest());
         if (!result) return;
+        if (result.status === "fail") {
+          // The failing checks are rendered inline by <AdapterEnvironmentResult>
+          // just above the Next button. Block progression so the founder
+          // doesn't reach the dashboard with an adapter that cannot wake up.
+          setError(
+            "Adapter environment check failed. Resolve the issues above before continuing, or pick a different adapter."
+          );
+          return;
+        }
       }
 
       const agent = await agentsApi.create(createdCompanyId, {

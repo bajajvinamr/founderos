@@ -1109,16 +1109,8 @@ function FaqSection() {
       a: "Yes. CTO on Claude, head of growth on Codex, ops on Gemini Flash. Each teammate picks their preference. If one provider goes down, the next one picks up.",
     },
     {
-      q: "What if I hire real humans later?",
-      a: "The org chart is real. Swap a teammate for a person, keep their standing instructions and context. Your human hires read the same Morning Brief your AI team reads.",
-    },
-    {
       q: "Do I own the code my team writes?",
-      a: "Yes. It runs on your infra, with your keys, against your repos. Agents push to branches you control. No model training on your code. No telemetry unless you flip it on.",
-    },
-    {
-      q: "Is there an API?",
-      a: "Yes — REST for every resource, webhooks for events, and an SDK if you want to plug in your own adapters. Docs at docs.founderos.ai.",
+      a: "Yes. Agents work with your keys against repos you control. No model training on your code.",
     },
   ];
   return (

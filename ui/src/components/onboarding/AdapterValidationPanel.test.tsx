@@ -266,8 +266,17 @@ describe("AdapterValidationPanel — api_key path", () => {
   });
 });
 
-describe("AdapterValidationPanel — subscription path", () => {
-  it("renders the CLI attestation button for claude_local", () => {
+describe("AdapterValidationPanel — subscription path (walkthrough + checkbox)", () => {
+  // 2026-05-18 (G8) — the prior "Confirm CLI is installed" honor-system button
+  // (data-testid='adapter-validation-confirm-cli-btn') was replaced with a
+  // 4-step educational walkthrough + explicit ack checkbox
+  // (data-testid='adapter-validation-ack-checkbox'). The checkbox sets
+  // `validated=true`; the runner install + token issuance happens
+  // post-onboarding via the dashboard banner. These tests pin the new
+  // contract — the old button must NOT exist; the checkbox must drive
+  // onValidated(true) without a network call.
+
+  it("renders the walkthrough + acknowledgment checkbox for claude_local", () => {
     act(() => {
       root.render(
         <AdapterValidationPanel
@@ -282,11 +291,20 @@ describe("AdapterValidationPanel — subscription path", () => {
     const panel = $("[data-testid='adapter-validation-panel']");
     expect(panel?.getAttribute("data-validation-mode")).toBe("subscription");
     expect($("[data-testid='adapter-validation-api-key-input']")).toBeNull();
-    const btn = $("[data-testid='adapter-validation-confirm-cli-btn']");
-    expect(btn?.textContent).toContain("Claude Code");
+    // Old honor-system button MUST NOT exist (regression guard).
+    expect($("[data-testid='adapter-validation-confirm-cli-btn']")).toBeNull();
+    // New walkthrough surface: checkbox + label.
+    const checkbox = $("[data-testid='adapter-validation-ack-checkbox']") as
+      | HTMLInputElement
+      | null;
+    expect(checkbox).not.toBeNull();
+    expect(checkbox?.type).toBe("checkbox");
+    expect(checkbox?.checked).toBe(false);
+    // Panel copy mentions Claude Code (CLI label) somewhere.
+    expect(panel?.textContent).toContain("Claude Code");
   });
 
-  it("flips onValidated(true) on the attestation click — no network call", () => {
+  it("flips onValidated(true) on checkbox toggle — no network call", () => {
     const onValidated = vi.fn();
     act(() => {
       root.render(
@@ -299,22 +317,19 @@ describe("AdapterValidationPanel — subscription path", () => {
         />,
       );
     });
+    const checkbox = $(
+      "[data-testid='adapter-validation-ack-checkbox']",
+    ) as HTMLInputElement;
     act(() => {
-      ($(
-        "[data-testid='adapter-validation-confirm-cli-btn']",
-      ) as HTMLButtonElement).click();
+      checkbox.click();
     });
     expect(onValidated).toHaveBeenCalledWith(true);
     expect(validateProviderKeyMock).not.toHaveBeenCalled();
   });
 
-  it("disables the attestation button when parent reports validated=true", () => {
-    const onValidated = vi.fn();
+  it("reflects parent-side validated=true via checkbox.checked", () => {
     // Mount directly with validated=true to mirror what the wizard
-    // re-renders after the founder clicks Confirm. We do this rather
-    // than click-then-rerender so we are testing the rendered output
-    // contract (parent says validated → button disabled) rather than
-    // racing against React's async state batching across act() blocks.
+    // re-renders after the founder ticks the box.
     act(() => {
       root.render(
         <AdapterValidationPanel
@@ -322,14 +337,41 @@ describe("AdapterValidationPanel — subscription path", () => {
           apiKey=""
           onApiKeyChange={() => {}}
           validated={true}
+          onValidated={() => {}}
+        />,
+      );
+    });
+    const checkbox = $(
+      "[data-testid='adapter-validation-ack-checkbox']",
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    // Success confirmation copy appears when validated.
+    const status = $("[data-testid='adapter-validation-status-valid']");
+    expect(status?.textContent).toContain("continue to finish setup");
+  });
+
+  it("un-ticking the checkbox after validation flips onValidated(false)", () => {
+    // Founder ticks then un-ticks before clicking Continue — the gate
+    // must close again to prevent advancing with an unconfirmed CLI.
+    const onValidated = vi.fn();
+    act(() => {
+      root.render(
+        <AdapterValidationPanel
+          adapterChoice="claude_local"
+          apiKey=""
+          onApiKeyChange={() => {}}
+          validated={true}
           onValidated={onValidated}
         />,
       );
     });
-    const btn = $(
-      "[data-testid='adapter-validation-confirm-cli-btn']",
-    ) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(btn.textContent).toContain("Confirmed");
+    const checkbox = $(
+      "[data-testid='adapter-validation-ack-checkbox']",
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    act(() => {
+      checkbox.click();
+    });
+    expect(onValidated).toHaveBeenLastCalledWith(false);
   });
 });

@@ -186,7 +186,13 @@ export function AppRunnerBanner({
   if (isDismissed) return null;
   if (state.kind === "hidden") return null;
 
-  const setupHref = "/agents/all";
+  // Deep-link to Agents page with the install dialog auto-opened
+  // (Agents.tsx consumes the query param + strips it on mount).
+  // 2026-05-18 — replaces the plain "/agents/all" link that landed the
+  // founder on the team page with no obvious next step. Now the modal
+  // pops directly so the founder can issue a token + copy the install
+  // command in one click.
+  const setupHref = "/agents/all?install-runner=1";
 
   return (
     <div

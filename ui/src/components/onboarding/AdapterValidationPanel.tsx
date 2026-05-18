@@ -87,6 +87,16 @@ function reasonToCopy(reason: string): string {
   if (reason === "timeout") {
     return "Validation timed out — try again.";
   }
+  // 2026-05-18 — explicit copy for nonce path failures so the founder
+  // gets actionable feedback instead of generic "Validation failed".
+  // `nonce_failed` = our own server's nonce issuance broke (rare, but
+  // distinct from a key problem — user shouldn't waste time re-pasting).
+  if (reason === "nonce_failed") {
+    return "Couldn't reach FounderOS to validate. Refresh and try again.";
+  }
+  if (reason === "unknown") {
+    return "Validation got an unexpected response. Try again, or skip and use a CLI provider.";
+  }
   return "Validation failed. Try again.";
 }
 
@@ -245,19 +255,37 @@ export function AdapterValidationPanel({
     );
   }
 
-  // Subscription path — local CLI attestation.
+  // Subscription path — local-CLI runner walkthrough.
+  //
+  // 2026-05-18 — replaced the honor-system "I have the CLI installed"
+  // attestation with an explicit 4-step walkthrough. The prior version
+  // collected an attestation, advanced the wizard, then the agent ran
+  // server-side on Fly where the CLI binary does NOT exist — silent
+  // failure at first heartbeat. The walkthrough is honest about what
+  // happens next: we install a runner (one-time), the runner runs the
+  // CLI on the founder's laptop, and the runner setup happens
+  // post-onboarding via the dashboard banner (companyId doesn't exist
+  // yet here, so token issuance can't happen in-wizard).
   const cliLabel =
     adapterChoice === "claude_local"
       ? "Claude Code"
       : adapterChoice === "gemini_local"
-      ? "Gemini"
+      ? "Gemini CLI"
       : adapterChoice === "codex_local"
-      ? "Codex"
+      ? "Codex CLI"
       : "the CLI";
+  const installBin =
+    adapterChoice === "claude_local"
+      ? "claude"
+      : adapterChoice === "gemini_local"
+      ? "gemini"
+      : adapterChoice === "codex_local"
+      ? "codex"
+      : "your CLI";
   return (
     <div
       className={cn(
-        "rounded-md border p-4 space-y-3",
+        "rounded-md border p-4 space-y-4",
         status.kind === "valid"
           ? "border-green-600/40 bg-green-600/5 dark:border-green-400/40 dark:bg-green-400/5"
           : "border-border",
@@ -265,33 +293,99 @@ export function AdapterValidationPanel({
       data-testid="adapter-validation-panel"
       data-validation-mode="subscription"
     >
-      <div>
+      <div className="space-y-1">
         <p className="text-sm font-medium">
-          Confirm {cliLabel} is installed
+          You'll connect {cliLabel} via the FounderOS runner
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          The {cliLabel} CLI runs on your laptop, not our server, so we
-          can't probe it remotely. Confirm it's installed and signed in,
-          then continue.
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Your AI teammates need a small runner on your laptop to use
+          the {cliLabel} subscription. It's a one-time, two-minute
+          setup that happens right after we create your company.
         </p>
       </div>
-      <Button
-        size="sm"
-        type="button"
-        variant={status.kind === "valid" ? "secondary" : "default"}
-        onClick={handleConfirmCliInstalled}
-        disabled={status.kind === "valid"}
-        data-testid="adapter-validation-confirm-cli-btn"
+      <ol className="space-y-2 text-xs">
+        <li className="flex gap-2">
+          <span className="font-mono font-semibold text-muted-foreground shrink-0">
+            1.
+          </span>
+          <span>
+            Make sure <code className="font-mono">{installBin}</code> is
+            already installed and signed in on your laptop.
+          </span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-mono font-semibold text-muted-foreground shrink-0">
+            2.
+          </span>
+          <span>
+            Install the runner once:{" "}
+            <code className="font-mono px-1 py-0.5 rounded bg-muted">
+              npm i -g @founderos/runner
+            </code>
+          </span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-mono font-semibold text-muted-foreground shrink-0">
+            3.
+          </span>
+          <span>
+            Finish this wizard. You'll get a one-line start command (with
+            your runner token) on the dashboard.
+          </span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-mono font-semibold text-muted-foreground shrink-0">
+            4.
+          </span>
+          <span>
+            Run it. The dashboard banner turns green once your runner
+            connects — agents start working from that moment.
+          </span>
+        </li>
+      </ol>
+      <div className="flex items-start gap-2 rounded border border-border bg-muted/30 p-2.5 text-xs">
+        <ShieldCheck
+          className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span className="text-muted-foreground">
+          Your {cliLabel} subscription stays on your laptop. We never see
+          your API keys or your provider auth — only the work output you
+          allow.
+        </span>
+      </div>
+      <label
+        className="flex items-start gap-2 text-xs cursor-pointer"
+        data-testid="adapter-validation-ack-label"
       >
-        {status.kind === "valid" ? (
-          <>
-            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-            Confirmed
-          </>
-        ) : (
-          <>I have {cliLabel} installed</>
-        )}
-      </Button>
+        <input
+          type="checkbox"
+          checked={status.kind === "valid"}
+          onChange={(e) => {
+            if (e.target.checked) {
+              handleConfirmCliInstalled();
+            } else {
+              setStatus({ kind: "idle" });
+              onValidated(false);
+            }
+          }}
+          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+          data-testid="adapter-validation-ack-checkbox"
+        />
+        <span>
+          I understand — agents won't run until I install the runner after
+          the wizard.
+        </span>
+      </label>
+      {status.kind === "valid" && (
+        <div
+          className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300"
+          data-testid="adapter-validation-status-valid"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Got it — continue to finish setup.</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -104,6 +104,56 @@ export function mapAdapterToProviderId(
   }
 }
 
+/**
+ * Build the bootstrap POST payload from the wizard's draft state.
+ *
+ * Extracted as a pure function (and exported as `@internal`) so the
+ * api-key-passing contract has a regression test independent of the
+ * wizard's render tree. See `__tests__/bootstrap-payload.test.ts`.
+ *
+ * **Critical invariant (2026-05-18):** for any api-mode adapter family
+ * — `anthropic_api`, `openai_api`, `google_api` — the function MUST
+ * send `anthropicKey` populated with `draft.anthropicKey`. Prior to
+ * this fix, the wizard sent `""` for non-anthropic api families, which
+ * broke OpenAI and Google onboarding end-to-end (server rejected with
+ * `unprocessable: API key is required when adapterChoice is 'openai_api'`).
+ *
+ * The field is named `anthropicKey` for historical reasons; rename to
+ * `apiKey` is a follow-up that touches the server Zod schema too.
+ *
+ * @internal Exported for unit testing — not part of the public component API.
+ */
+export function buildBootstrapPayload(
+  draft: OnboardingDraft,
+  adapterChoice: NonNullable<OnboardingDraft["adapterChoice"]>,
+) {
+  return {
+    vision: draft.vision.trim(),
+    bottlenecks: draft.bottlenecks,
+    team: draft.team,
+    cofounder:
+      draft.cofounderName.trim() || draft.cofounderEmail.trim()
+        ? {
+            name: draft.cofounderName.trim() || null,
+            email: draft.cofounderEmail.trim() || null,
+          }
+        : null,
+    adapterChoice,
+    anthropicKey:
+      adapterChoice === "anthropic_api" ||
+      adapterChoice === "openai_api" ||
+      adapterChoice === "google_api"
+        ? draft.anthropicKey
+        : "",
+    integrations: draft.integrations,
+    nonCoreDepartments: draft.nonCoreDepartments,
+    autonomyLevel: draft.autonomyLevel,
+    charters: draft.charters,
+    // S-TC1 — telemetry consent from Step 8 (cannot complete without seeing it).
+    telemetryEnabled: draft.telemetryEnabled,
+  };
+}
+
 function buildInitialDraft(): OnboardingDraft {
   return {
     vision: "",
@@ -229,6 +279,40 @@ export function FounderOnboardingWizard() {
     setDraft((prev) => ({ ...prev, ...patch }));
   }
 
+  /**
+   * Heuristic: does the founder have enough state in the wizard that
+   * accidentally closing would lose meaningful work? Used to gate the
+   * "are you sure?" confirm on the X button. We deliberately do NOT
+   * trigger on every keystroke (e.g., 3 chars typed into vision is not
+   * "meaningful") — only when the founder has completed at least one
+   * step's worth of state.
+   *
+   * Backend draft persistence (onboarding_drafts table with getOrCreate)
+   * exists but the V2 wizard does NOT yet hydrate from it on mount —
+   * pending follow-up. Until that lands, the confirm dialog is the only
+   * thing standing between a stray Esc-press and 5 minutes of lost state.
+   */
+  function hasMeaningfulDraftState(): boolean {
+    return (
+      draft.vision.trim().length >= 10 ||
+      draft.bottlenecks.length > 0 ||
+      draft.adapterChoice !== null ||
+      draft.cofounderName.trim().length > 0 ||
+      draft.cofounderEmail.trim().length > 0
+    );
+  }
+
+  function handleCloseRequest() {
+    if (submitting) return; // never close mid-submit
+    if (hasMeaningfulDraftState()) {
+      const ok = window.confirm(
+        "Close onboarding? Your answers won't be saved.",
+      );
+      if (!ok) return;
+    }
+    closeOnboarding();
+  }
+
   function canAdvance(current: Step): boolean {
     if (current === 1) return draft.vision.trim().length >= 10;
     if (current === 2) return draft.bottlenecks.length >= 1;
@@ -279,28 +363,7 @@ export function FounderOnboardingWizard() {
     }
     const adapterChoice = draft.adapterChoice;
     try {
-      const payload = {
-        vision: draft.vision.trim(),
-        bottlenecks: draft.bottlenecks,
-        team: draft.team,
-        cofounder:
-          draft.cofounderName.trim() || draft.cofounderEmail.trim()
-            ? {
-                name: draft.cofounderName.trim() || null,
-                email: draft.cofounderEmail.trim() || null,
-              }
-            : null,
-        adapterChoice,
-        anthropicKey: adapterChoice === "anthropic_api" ? draft.anthropicKey : "",
-        integrations: draft.integrations,
-        nonCoreDepartments: draft.nonCoreDepartments,
-        autonomyLevel: draft.autonomyLevel,
-        charters: draft.charters,
-        // S-TC1 — telemetry consent decision from the final wizard step.
-        // Always present (true OR false) — the wizard cannot complete
-        // without the founder having seen Step 8.
-        telemetryEnabled: draft.telemetryEnabled,
-      };
+      const payload = buildBootstrapPayload(draft, adapterChoice);
       const bootstrap = await api.post<OnboardingBootstrapResponse>(
         "/onboarding/bootstrap",
         payload,
@@ -354,7 +417,10 @@ export function FounderOnboardingWizard() {
     <Dialog
       open={onboardingOpen}
       onOpenChange={(open) => {
-        if (!open) closeOnboarding();
+        // 2026-05-18 — accidental close guard. Esc / click-outside both
+        // go through this path; we route to handleCloseRequest so the
+        // confirm-on-meaningful-state contract applies uniformly.
+        if (!open) handleCloseRequest();
       }}
     >
       <DialogPortal>
@@ -395,9 +461,10 @@ export function FounderOnboardingWizard() {
               </div>
               <button
                 type="button"
-                onClick={() => closeOnboarding()}
+                onClick={handleCloseRequest}
                 className="rounded-sm p-1 text-muted-foreground hover:text-foreground transition-colors"
                 aria-label="Close onboarding"
+                data-testid="onboarding-close-button"
               >
                 <X className="h-4 w-4" />
               </button>
