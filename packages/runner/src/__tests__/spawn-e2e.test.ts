@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { writeFileSync, mkdirSync, rmSync, statSync, chmodSync, readdirSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync, statSync, chmodSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,12 +34,19 @@ import type { RunnerEvent } from "../api.js";
 
 // ---------------------------------------------------------------------------
 // Test fixture directory + fake CLI builders.
+//
+// `mkdtempSync` creates a unique random-suffixed path under os.tmpdir(),
+// e.g. `/tmp/founderos-runner-e2e-fixtures-Xkj92m`. The unguessable suffix
+// closes a CodeQL `js/insecure-temporary-file` finding: a predictable path
+// like `join(tmpdir(), "founderos-runner-e2e-fixtures")` could be hijacked
+// via a pre-staged symlink (TOCTOU) so `writeFileSync(...)` writes through
+// the symlink target. Test-only code, but fix the pattern at the source.
 // ---------------------------------------------------------------------------
 
-const FIX_DIR = join(tmpdir(), "founderos-runner-e2e-fixtures");
+let FIX_DIR: string;
 
 beforeAll(() => {
-  mkdirSync(FIX_DIR, { recursive: true });
+  FIX_DIR = mkdtempSync(join(tmpdir(), "founderos-runner-e2e-fixtures-"));
 });
 
 afterAll(() => {
