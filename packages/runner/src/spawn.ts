@@ -108,14 +108,18 @@ export async function runClaude(
 
   let timedOut = false;
   let finalResult: SpawnResult["finalResult"] = null;
+  // Track actual exit rather than `child.killed` — the latter flips true on
+  // `kill()` invocation, not on the child's actual exit. A trapped-SIGTERM
+  // child would otherwise skip the SIGKILL backstop.
+  let exited = false;
 
   // Hard kill after 1.5x timeout if SIGTERM didn't land.
   const termTimer = setTimeout(() => {
     timedOut = true;
-    if (!child.killed) child.kill("SIGTERM");
+    if (!exited) child.kill("SIGTERM");
   }, args.timeoutSec * 1000);
   const killTimer = setTimeout(() => {
-    if (!child.killed) child.kill("SIGKILL");
+    if (!exited) child.kill("SIGKILL");
   }, args.timeoutSec * 1000 * 1.5);
 
   // stdin: write the prompt then close.
@@ -165,8 +169,14 @@ export async function runClaude(
   });
 
   const exit = await new Promise<{ code: number; signal: NodeJS.Signals | null }>((resolve) => {
-    child.once("exit", (code, signal) => resolve({ code: code ?? -1, signal }));
-    child.once("error", () => resolve({ code: -1, signal: null }));
+    child.once("exit", (code, signal) => {
+      exited = true;
+      resolve({ code: code ?? -1, signal });
+    });
+    child.once("error", () => {
+      exited = true;
+      resolve({ code: -1, signal: null });
+    });
   });
 
   // Drain any trailing partial line.

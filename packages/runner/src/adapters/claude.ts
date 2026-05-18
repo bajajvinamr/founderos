@@ -355,12 +355,17 @@ export const claudeLocalAdapter: SubprocessAdapter = {
     // 1.5x if SIGTERM didn't land. The dispatcher's AbortController only
     // fires on user cancel today (S7.1.c notes); the adapter owns its own
     // timeout escalation to keep behavior identical to `runClaude`.
+    // Note: gating kill calls on `exitState.value` (set in the exit/error
+    // handlers below) instead of `child.killed`. The latter flips true on
+    // kill() invocation, not on actual exit — a trapped-SIGTERM child would
+    // otherwise short-circuit the SIGKILL backstop and hang for its natural
+    // runtime. Same fix pattern as `spawn.ts` and the codex/gemini adapters.
     const termTimer: NodeJS.Timeout = setTimeout(() => {
       timedOut = true;
-      if (!child.killed) child.kill("SIGTERM");
+      if (!exitState.value) child.kill("SIGTERM");
     }, ctx.timeoutSec * 1000);
     const killTimer: NodeJS.Timeout = setTimeout(() => {
-      if (!child.killed) child.kill("SIGKILL");
+      if (!exitState.value) child.kill("SIGKILL");
     }, ctx.timeoutSec * 1000 * 1.5);
 
     // Cancellation: forward the dispatcher's AbortSignal as a SIGTERM →
@@ -368,12 +373,12 @@ export const claudeLocalAdapter: SubprocessAdapter = {
     // flag steers the terminal status to "cancelled" rather than "failed".
     const onAbort = () => {
       cancelled = true;
-      if (!child.killed) child.kill("SIGTERM");
+      if (!exitState.value) child.kill("SIGTERM");
       // Hard kill if SIGTERM is ignored. 200ms grace matches the existing
       // SIGTERM-then-SIGKILL pattern in `spawn.ts` (timer-driven there;
       // signal-driven here).
       setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
+        if (!exitState.value) child.kill("SIGKILL");
       }, 200).unref();
     };
     if (signal.aborted) {
@@ -566,8 +571,9 @@ export const claudeLocalAdapter: SubprocessAdapter = {
       clearTimeout(killTimer);
       signal.removeEventListener("abort", onAbort);
       // Best-effort: if the generator is closed early (consumer threw or
-      // called .return), make sure the child doesn't outlive us.
-      if (!exitState.value && !child.killed) {
+      // called .return), make sure the child doesn't outlive us. Gate on
+      // exitState (actual exit) not child.killed (kill-called).
+      if (!exitState.value) {
         try {
           child.kill("SIGKILL");
         } catch {

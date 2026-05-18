@@ -441,22 +441,26 @@ export const codexLocalAdapter: SubprocessAdapter = {
     let stdoutAccum = "";
     let stderrAccum = "";
 
+    // Gate kill calls on `exitState.value` (set by the exit/error handlers
+    // below) not `child.killed`. The latter flips true on kill() invocation,
+    // so a trapped-SIGTERM child would skip the SIGKILL backstop and hang
+    // for its natural runtime. Same fix pattern across spawn.ts + adapters.
     const termTimer: NodeJS.Timeout = setTimeout(() => {
       timedOut = true;
-      if (!child.killed) child.kill("SIGTERM");
+      if (!exitState.value) child.kill("SIGTERM");
     }, ctx.timeoutSec * 1000);
     const killTimer: NodeJS.Timeout = setTimeout(
       () => {
-        if (!child.killed) child.kill("SIGKILL");
+        if (!exitState.value) child.kill("SIGKILL");
       },
       ctx.timeoutSec * 1000 * 1.5,
     );
 
     const onAbort = () => {
       cancelled = true;
-      if (!child.killed) child.kill("SIGTERM");
+      if (!exitState.value) child.kill("SIGTERM");
       setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
+        if (!exitState.value) child.kill("SIGKILL");
       }, 200).unref();
     };
     if (signal.aborted) {
@@ -631,7 +635,7 @@ export const codexLocalAdapter: SubprocessAdapter = {
       clearTimeout(termTimer);
       clearTimeout(killTimer);
       signal.removeEventListener("abort", onAbort);
-      if (!exitState.value && !child.killed) {
+      if (!exitState.value) {
         try {
           child.kill("SIGKILL");
         } catch {
