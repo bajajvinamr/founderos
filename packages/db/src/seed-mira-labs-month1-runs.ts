@@ -40,6 +40,7 @@ import {
   companies,
   agents,
   composioConnections,
+  integrations,
   agentConfigRevisions,
   heartbeatRuns,
   heartbeatRunEvents,
@@ -60,6 +61,14 @@ const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
   console.error("[seed-mira-labs-month1-runs] DATABASE_URL is required");
   process.exit(1);
+}
+if (process.env.NODE_ENV === "production") {
+  throw new Error(
+    "seed-mira-labs-month1-runs: refused — NODE_ENV=production. " +
+    "This seed performs onConflictDoUpdate against companies/integrations/" +
+    "composioConnections and would overwrite live customer state. " +
+    "Run only against demo or dogfood environments."
+  );
 }
 
 const PERSONA_TAG = "mira-labs-dogfood";
@@ -782,6 +791,89 @@ await db.transaction(async (tx) => {
   summary.composioInserted = composioAfter.filter(
     (r) => r.app === "linkedin" || r.app === "hubspot",
   ).length;
+
+  // Keep the legacy Integrations page populated as well. The Composio rows
+  // drive OAuth-aware execution, while `integrations` powers the founder-facing
+  // connection grid at /integrations.
+  const integrationRows = [
+    {
+      kind: "stripe",
+      status: "connected",
+      keyHint: "OAuth",
+      config: {
+        accountName: "Mira Labs Stripe",
+        accountId: "acct_mira_demo",
+        mrrCents: 640_000,
+        overdueInvoices: 1,
+      },
+      lastError: null,
+      connectedAt: ist(2026, 4, 14, 18, 12),
+    },
+    {
+      kind: "slack",
+      status: "connected",
+      keyHint: "OAuth",
+      config: {
+        workspaceName: "Mira Labs",
+        channels: [
+          { id: "C_MIRA_TEAM", name: "mira-team", isPrivate: false },
+          { id: "C_CLIENTS", name: "client-updates", isPrivate: true },
+          { id: "C_FINANCE", name: "mira-finance", isPrivate: true },
+        ],
+      },
+      lastError: null,
+      connectedAt: ist(2026, 4, 13, 11, 12),
+    },
+    {
+      kind: "hubspot",
+      status: "error",
+      keyHint: "OAuth",
+      config: {
+        portalName: "Mira Labs CRM",
+        openDeals: 3,
+        pipelineCents: 720_000,
+      },
+      lastError: "OAuth refresh token expired 2026-05-08; reconnect required",
+      connectedAt: ist(2026, 5, 8, 14, 32),
+    },
+    {
+      kind: "linkedin",
+      status: "connected",
+      keyHint: "OAuth",
+      config: {
+        profile: "Anita Mehra",
+        weeklyOutboundLimit: 25,
+        warmIntrosQueued: 4,
+      },
+      lastError: null,
+      connectedAt: ist(2026, 4, 22, 15, 4),
+    },
+  ];
+  const now = RUN_NOW;
+  for (const row of integrationRows) {
+    await tx.insert(integrations).values({
+      companyId: MIRA,
+      kind: row.kind,
+      status: row.status,
+      keyHint: row.keyHint,
+      encryptedApiKey: null,
+      config: row.config,
+      lastError: row.lastError,
+      connectedAt: row.connectedAt,
+      createdAt: row.connectedAt,
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: [integrations.companyId, integrations.kind],
+      set: {
+        status: row.status,
+        keyHint: row.keyHint,
+        config: row.config,
+        lastError: row.lastError,
+        connectedAt: row.connectedAt,
+        updatedAt: now,
+      },
+    });
+  }
 
   // ─── 2. agent_config_revisions ──────────────────────────────────────────────
   console.log("[seed-mira-labs-month1-runs] agent_config_revisions…");

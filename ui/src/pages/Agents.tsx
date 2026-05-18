@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate, useLocation } from "@/lib/router";
+import { Link, useNavigate, useLocation, useSearchParams } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { agentsApi, type OrgNode } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -219,6 +219,20 @@ export function Agents() {
     [agents],
   );
   const [runnerDialogOpen, setRunnerDialogOpen] = useState(false);
+
+  // Deep-link support: AppRunnerBanner CTA navigates here with
+  // `?install-runner=1` to auto-open the install dialog. The query param
+  // is consumed once on mount; we strip it so a refresh doesn't keep
+  // re-opening the dialog and so the URL stays clean.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("install-runner") === "1" && selectedCompanyId) {
+      setRunnerDialogOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("install-runner");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams, selectedCompanyId]);
 
   if (!selectedCompanyId) {
     return <EmptyState icon={Users} message="Select a company to view your team." />;

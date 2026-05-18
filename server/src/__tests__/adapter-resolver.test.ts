@@ -241,10 +241,12 @@ describe("mapOnboardingChoiceToAdapter (S7.0.2)", () => {
     });
   }
 
-  // Non-CLI sentinels collapse to claude_local (no claude_api adapter
-  // exists; skip preserves pre-S7 default behavior).
-  it("maps anthropic_api → claude_local (no claude_api adapter exists)", () => {
-    expect(mapOnboardingChoiceToAdapter("anthropic_api")).toBe("claude_local");
+  // G3b (2026-05-18) — anthropic_api now maps to the dedicated server-side
+  // anthropic_api adapter package. Pre-G3b it collapsed to claude_local
+  // because no Anthropic-API adapter existed. The dedicated package now
+  // calls the Anthropic SDK in-process; the collapse is gone.
+  it("maps anthropic_api → anthropic_api (dedicated server-side adapter, G3b)", () => {
+    expect(mapOnboardingChoiceToAdapter("anthropic_api")).toBe("anthropic_api");
   });
 
   it("maps openai_api → openai_api (1:1 with registered adapter)", () => {

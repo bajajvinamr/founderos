@@ -41,6 +41,11 @@ import {
 } from "@founderos/adapter-openai-api/server";
 import { agentConfigurationDoc as openaiAgentConfigurationDoc, models as openaiModels } from "@founderos/adapter-openai-api";
 import {
+  execute as anthropicExecute,
+  testEnvironment as anthropicTestEnvironment,
+} from "@founderos/adapter-anthropic-api/server";
+import { agentConfigurationDoc as anthropicAgentConfigurationDoc, models as anthropicModels } from "@founderos/adapter-anthropic-api";
+import {
   execute as geminiApiExecute,
   testEnvironment as geminiApiTestEnvironment,
 } from "@founderos/gemini-api/server";
@@ -164,6 +169,16 @@ const openaiApiAdapter: ServerAdapterModule = {
   agentConfigurationDoc: openaiAgentConfigurationDoc,
 };
 
+const anthropicApiAdapter: ServerAdapterModule = {
+  type: "anthropic_api",
+  execute: anthropicExecute,
+  testEnvironment: anthropicTestEnvironment,
+  sessionManagement: getAdapterSessionManagement("anthropic_api") ?? undefined,
+  models: anthropicModels,
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: anthropicAgentConfigurationDoc,
+};
+
 const geminiApiAdapter: ServerAdapterModule = {
   type: "gemini_api",
   execute: geminiApiExecute,
@@ -238,6 +253,7 @@ const pausedOverrides = new Set<string>();
 function registerBuiltInAdapters() {
   for (const adapter of [
     claudeLocalAdapter,
+    anthropicApiAdapter,
     codexLocalAdapter,
     openaiApiAdapter,
     geminiApiAdapter,

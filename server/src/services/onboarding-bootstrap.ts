@@ -344,8 +344,20 @@ export async function bootstrapCompanyOnboarding(
       process.env.FOUNDEROS_HOSTED_AGENTS_ENABLED === "1";
     let adapterType: AgentAdapterType;
     let byoTransport = false;
-    if (HOSTED_ENABLED && input.adapterChoice === "anthropic_api") {
-      adapterType = "claude_local";
+    // 2026-05-18 G3b reconciliation — after the anthropic_api adapter
+    // package shipped, the HOSTED branch routes all three hosted-API
+    // choices to their dedicated adapters (no longer collapses to
+    // claude_local with hosted hardening). For CLI choices in HOSTED
+    // mode, fall through to the BYO/dev resolution path; the wizard's
+    // BYO Runner walkthrough is what gets the founder a working
+    // execution path for those.
+    if (
+      HOSTED_ENABLED &&
+      (input.adapterChoice === "anthropic_api" ||
+        input.adapterChoice === "openai_api" ||
+        input.adapterChoice === "google_api")
+    ) {
+      adapterType = mapOnboardingChoiceToAdapter(input.adapterChoice);
     } else if (isByoRunnerEnabled()) {
       // QW1: preserve provider, mark transport so the runner knows to claim
       // this job and dispatch to the right CLI. Do NOT collapse to byo_runner.

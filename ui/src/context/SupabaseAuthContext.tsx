@@ -103,3 +103,24 @@ export function useSupabaseAuth(): SupabaseAuthContextValue {
   }
   return ctx;
 }
+
+/**
+ * Permissive variant of {@link useSupabaseAuth}. Returns a `loading: false`
+ * default when no provider is mounted, instead of throwing. Use this only
+ * from code paths that wire an `enabled: !auth.loading` query gate and need
+ * to work in tests that don't bother mounting the auth provider tree
+ * (e.g., `CompanyProvider`, `useDisabledAdaptersSync`). Production code paths
+ * are always wrapped in `<SupabaseAuthProvider>` via `App.tsx`, so this
+ * returns the real context there. The strict `useSupabaseAuth()` above is
+ * preferred for any caller that actually needs the user/session.
+ */
+export function useSupabaseAuthOptional(): SupabaseAuthContextValue {
+  const ctx = useContext(SupabaseAuthContext);
+  if (ctx) return ctx;
+  return {
+    user: null,
+    session: null,
+    loading: false,
+    signOut: async () => {},
+  };
+}

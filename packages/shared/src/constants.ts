@@ -59,6 +59,12 @@ export const AGENT_ADAPTER_TYPES = [
   "process",
   "http",
   "claude_local",
+  // anthropic_api: direct Anthropic Messages API path (no claude CLI shell).
+  // Sits next to claude_local per the family grouping (anthropic-CLI,
+  // anthropic-API, openai-CLI, openai-API, google) — keeps related providers
+  // contiguous. Shipped 2026-05-18 (G3b) — replaces the historical
+  // `anthropic_api -> claude_local` collapse in mapOnboardingChoiceToAdapter.
+  "anthropic_api",
   "codex_local",
   // openai_api: direct OpenAI API path (no Codex CLI shell). Sits between
   // codex_local and gemini_local per PHASE-S7 TRD §3 — keeps the family
@@ -87,13 +93,12 @@ export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number] | (string & 
  * The CLI choices (everything except `anthropic_api`, `openai_api`,
  * `google_api`, and `skip`) map 1:1 to entries in `AGENT_ADAPTER_TYPES`.
  * The `*_api` sentinels mean "use the founder's API key directly".
- * `anthropic_api` currently still collapses to `claude_local` at
- * provisioning time (no Anthropic-API adapter exists; see
- * onboarding-bootstrap.ts comment block). `openai_api` maps to the
- * already-registered `openai_api` adapter. `google_api` is the 6-tile
- * MVP shell — accepted at wire and validated by Zod, but no agent
- * runtime handler exists yet (S7 Phase 4 territory). `skip` defers
- * configuration entirely.
+ * `anthropic_api` maps 1:1 to the registered `anthropic_api` adapter as
+ * of 2026-05-18 (G3b) — the historical collapse to `claude_local` is
+ * removed. `openai_api` maps 1:1 to the registered `openai_api` adapter.
+ * `google_api` is the 6-tile MVP shell — accepted at wire and validated
+ * by Zod, but no agent runtime handler exists yet (S7 Phase 4 territory).
+ * `skip` defers configuration entirely.
  *
  * 6-tile MVP scope (S7.0.2 — final-sprint roadmap line 61):
  *   claude_local, anthropic_api, gemini_local, codex_local, openai_api,

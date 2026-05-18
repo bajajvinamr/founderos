@@ -265,11 +265,13 @@ function executionFromAdapter(adapter: FounderOSAdapterType): "cli" | "api" {
  * "all choices collapse to byo_runner" behavior.
  *
  * Notes:
- *   - `anthropic_api` collapses to `claude_local` because no
- *     `claude_api` adapter exists in the codebase. The Anthropic key
- *     itself is still stored as a company secret upstream of this
- *     function — adapters that need it (currently only `claude_local`
- *     when CLI auth is missing) read from there.
+ *   - `anthropic_api` maps 1:1 to the registered `anthropic_api`
+ *     adapter as of 2026-05-18 (G3b). The historical collapse to
+ *     `claude_local` is removed — there is now a real Anthropic API
+ *     adapter at `packages/adapters/anthropic-api/` that calls
+ *     `@anthropic-ai/sdk` directly. The founder's key is resolved at
+ *     run time via `instanceApiKeysService.getDecrypted("anthropic",
+ *     "api")` injected by the heartbeat dispatch layer.
  *   - `openai_api` maps 1:1 to the registered `openai_api` adapter
  *     (added to AGENT_ADAPTER_TYPES alongside the S7 sprint).
  *   - `google_api` is part of the 6-tile MVP onboarding surface but
@@ -291,9 +293,10 @@ export function mapOnboardingChoiceToAdapter(
 ): AgentAdapterType {
   switch (choice) {
     case "claude_local":
-    case "anthropic_api":
     case "skip":
       return "claude_local";
+    case "anthropic_api":
+      return "anthropic_api";
     case "codex_local":
       return "codex_local";
     case "openai_api":

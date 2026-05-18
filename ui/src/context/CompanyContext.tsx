@@ -12,6 +12,7 @@ import type { Company } from "@founderos/shared";
 import { companiesApi } from "../api/companies";
 import { ApiError } from "../api/client";
 import { queryKeys } from "../lib/queryKeys";
+import { useSupabaseAuthOptional } from "./SupabaseAuthContext";
 import type { CompanySelectionSource } from "../lib/company-selection";
 type CompanySelectionOptions = { source?: CompanySelectionSource };
 
@@ -51,12 +52,23 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const [selectionSource, setSelectionSource] = useState<CompanySelectionSource>("bootstrap");
   const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY));
 
+  // 2026-05-18 (G2 canary 401 fix) — gate companies fetch on auth-loaded.
+  // Pre-fix: useQuery fired on mount of CompanyProvider, which mounts
+  // BEFORE Supabase's onAuthStateChange has hydrated the session from
+  // localStorage. fetch() ran without an Authorization header → server
+  // returned 401 with `actorType:"none"` → React Query gave up
+  // (retry: false on 401) → UI flashed "session broken" empty state for
+  // ~7s until session resolved. Fly logs canary fired on these 401s as a
+  // real failure even though the session DID eventually load. Fix: defer
+  // the query until SupabaseAuthProvider reports loading=false. Once
+  // hydrated, queryClient.invalidateQueries fires on auth state changes
+  // (see SupabaseAuthContext.tsx:53) so the query refetches with the
+  // newly-available session.
+  const auth = useSupabaseAuthOptional();
   const { data: companies = [], isLoading, error } = useQuery({
     queryKey: queryKeys.companies.all,
     queryFn: () => companiesApi.list(),
-    // Don't retry on auth failures — they are a cliff, not a transient.
-    // (network/5xx still retried by react-query defaults if enabled at
-    // a higher level.)
+    enabled: !auth.loading,
     retry: (failureCount, err) => {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         return false;

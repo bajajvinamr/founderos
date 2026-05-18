@@ -184,7 +184,11 @@ describe("<AppRunnerBanner />", () => {
     const cta = container.querySelector(
       '[data-testid="app-runner-banner-cta"]',
     ) as HTMLAnchorElement | null;
-    expect(cta?.getAttribute("href")).toBe("/agents/all");
+    // 2026-05-18 (G8) — CTA href now carries `install-runner=1` so the
+    // Agents page auto-opens RunnerInstallDialog on mount (token issuance
+    // + install snippet in one click rather than landing the founder on
+    // the team page with no obvious next step).
+    expect(cta?.getAttribute("href")).toBe("/agents/all?install-runner=1");
     expect(cta?.textContent).toContain("Get setup instructions");
   });
 

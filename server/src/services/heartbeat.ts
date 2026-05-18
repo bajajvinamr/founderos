@@ -35,6 +35,7 @@ import { getTelemetryClient } from "../telemetry.js";
 import { companySkillService } from "./company-skills.js";
 import { budgetService, type BudgetEnforcementScope } from "./budgets.js";
 import { secretService } from "./secrets.js";
+import { instanceApiKeysService } from "./instance-api-keys.js";
 import { resolveDefaultAgentWorkspaceDir, resolveManagedProjectWorkspaceDir } from "../home-paths.js";
 import {
   buildHeartbeatRunIssueComment,
@@ -2397,11 +2398,27 @@ export function heartbeatService(db: Db) {
       const authToken: string | undefined = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
         : undefined;
+      // Phase 1B wiring (2026-05-18) — inject `apiKeyResolver` on the per-run
+      // config so hosted-API adapters (openai_api, gemini_api, future
+      // anthropic_api) and claude_local in hosted mode can resolve their key
+      // from the per-instance vault instead of returning no_api_key. The
+      // resolver closure delegates to `instanceApiKeysService(db).getDecrypted`
+      // — same primitive used by conversation-extractor, onboarding-decisions,
+      // and yesterday-summary. Family/mode strings are loose by design; each
+      // adapter narrows the type at its own consumption site.
+      const apiKeys = instanceApiKeysService(db);
+      const runtimeConfigForExecute = {
+        ...runtimeConfig,
+        apiKeyResolver: (
+          family: "anthropic" | "openai" | "google",
+          mode: "api" | "cli_oauth" = "api",
+        ) => apiKeys.getDecrypted(family, mode),
+      };
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
-        config: runtimeConfig,
+        config: runtimeConfigForExecute,
         context,
         onLog: gatedOnLog,
         onMeta: onAdapterMeta,
