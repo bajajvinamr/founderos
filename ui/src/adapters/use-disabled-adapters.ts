@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { adaptersApi } from "@/api/adapters";
 import { setDisabledAdapterTypes } from "@/adapters/disabled-store";
 import { syncExternalAdapters } from "@/adapters/registry";
+import { useSupabaseAuthOptional } from "@/context/SupabaseAuthContext";
 import { queryKeys } from "@/lib/queryKeys";
 
 /**
@@ -15,11 +16,17 @@ import { queryKeys } from "@/lib/queryKeys";
  *
  * Returns a reactive Set of disabled types for use as useMemo dependencies.
  * Call this at the top of any component that renders adapter menus.
+ *
+ * 2026-05-18 (G2 canary 401 fix) — gated on `auth.loading === false` so
+ * the SPA boot doesn't fire /api/adapters before the Supabase session is
+ * hydrated. See CompanyContext.tsx for the full rationale.
  */
 export function useDisabledAdaptersSync(): Set<string> {
+  const auth = useSupabaseAuthOptional();
   const { data: adapters } = useQuery({
     queryKey: queryKeys.adapters.all,
     queryFn: () => adaptersApi.list(),
+    enabled: !auth.loading,
     staleTime: 5 * 60 * 1000,
   });
 
