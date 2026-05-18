@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { authApi } from "../api/auth";
 import { approvalsApi } from "../api/approvals";
 import { dailyBriefsApi } from "../api/daily-briefs";
+import { ApiError } from "../api/client";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { DecisionBrief, type DecisionBriefData } from "../components/DecisionBrief";
+import { DailyBriefView } from "../components/DailyBriefView";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Approval } from "@founderos/shared";
 
@@ -49,16 +51,32 @@ export function Today() {
     enabled: !!selectedCompanyId,
   });
 
-  // Today brief — fetch the most recent. We don't trigger generation
-  // here; the "Generate one →" affordance handles that.
-  // Query key matches existing convention in DailyBrief.tsx (inline array,
-  // not from the queryKeys helper).
-  const { data: briefsList } = useQuery({
-    queryKey: ["daily-briefs", selectedCompanyId ?? "none"],
-    queryFn: () => dailyBriefsApi.list(selectedCompanyId!, 1, 0),
+  // Today brief — fetch via the dedicated /latest endpoint (L2-C05). The
+  // DailyBriefView component owns its own query; we only fetch here to
+  // detect the cold-start condition (no decisions AND no brief) so the
+  // greeting + hint shell stays in sync. 404 is the empty state — query
+  // does not retry it.
+  const {
+    data: todayBrief,
+    error: todayBriefError,
+    isFetched: todayBriefFetched,
+  } = useQuery({
+    queryKey: ["daily-briefs", "latest", selectedCompanyId ?? "none"],
+    queryFn: () => dailyBriefsApi.latest(selectedCompanyId!),
+    retry: (failureCount, err) => {
+      if (err instanceof ApiError && err.status === 404) return false;
+      return failureCount < 2;
+    },
     enabled: !!selectedCompanyId,
   });
-  const todayBrief = briefsList?.briefs?.[0] ?? null;
+
+  // Cold start = fetch settled AND (no brief returned OR 404 empty state).
+  // Avoid treating "still pending" as cold-start to prevent the hint
+  // flashing on every page load.
+  const briefIsEmpty =
+    todayBriefFetched &&
+    (!todayBrief ||
+      (todayBriefError instanceof ApiError && todayBriefError.status === 404));
 
   const decisions = useMemo<DecisionBriefData[]>(
     () =>
@@ -71,7 +89,8 @@ export function Today() {
   const firstName = resolveFirstName(session?.user?.name ?? session?.user?.email ?? null);
   const greeting = `Hi, ${firstName}.`;
   const subheading = buildSubheading(decisions.length);
-  const isColdStart = !approvalsLoading && decisions.length === 0 && todayBrief === null;
+  const isColdStart =
+    !approvalsLoading && decisions.length === 0 && briefIsEmpty;
   const isFriday = new Date().getDay() === 5;
 
   if (approvalsLoading) {
@@ -119,31 +138,11 @@ export function Today() {
         <ColdStartHint />
       )}
 
-      <section
-        id="brief"
-        aria-labelledby="today-brief-heading"
-        className="mt-12 border-t border-border pt-6"
-      >
-        <h2
-          id="today-brief-heading"
-          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-        >
-          Today's brief
-        </h2>
-        {todayBrief ? (
-          <div className="mt-3">
-            {todayBrief.payload?.headline && (
-              <p className="max-w-prose text-sm leading-relaxed text-foreground">
-                {todayBrief.payload.headline}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            No brief today. <span className="text-foreground underline-offset-2 hover:underline">Generate one →</span>
-          </p>
-        )}
-      </section>
+      {selectedCompanyId ? (
+        <div id="brief" className="mt-12 border-t border-border pt-6">
+          <DailyBriefView companyId={selectedCompanyId} />
+        </div>
+      ) : null}
 
       {isFriday && (
         <section
