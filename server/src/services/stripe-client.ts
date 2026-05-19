@@ -46,6 +46,25 @@ export class StripeClient {
     return this.enabled;
   }
 
+  /**
+   * Cheap upstream-liveness probe for /api/health/deep. Calls Stripe's
+   * `balance.retrieve()` endpoint — the canonical "is my key valid + can
+   * I reach Stripe" ping. Read-only, idempotent, ~100ms typical.
+   *
+   * Returns `{ok, livemode}` on success so the health endpoint can flag
+   * test-mode keys in prod (kit §2.1 gate is "test→live" flip).
+   *
+   * Throws on network failure, auth rejection, or any other Stripe error
+   * — caller maps the error to a fail-with-detail check.
+   */
+  async ping(): Promise<{ ok: true; livemode: boolean }> {
+    if (!this.client) {
+      throw new Error("Stripe not configured — STRIPE_SECRET_KEY missing");
+    }
+    const balance = await this.client.balance.retrieve();
+    return { ok: true, livemode: balance.livemode };
+  }
+
   async createCheckoutSession(params: CheckoutSessionParams): Promise<{ url: string }> {
     if (!this.client) {
       throw new Error("Stripe not configured — STRIPE_SECRET_KEY missing");
