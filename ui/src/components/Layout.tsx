@@ -27,6 +27,7 @@ import { MobileBottomNav } from "./MobileBottomNav";
 import { WorktreeBanner } from "./WorktreeBanner";
 import { DevRestartBanner } from "./DevRestartBanner";
 import { AppRunnerBanner } from "./AppRunnerBanner";
+import { branding } from "../branding";
 import { useDialog } from "../context/DialogContext";
 import { GeneralSettingsProvider } from "../context/GeneralSettingsContext";
 import { usePanel } from "../context/PanelContext";
@@ -437,15 +438,17 @@ export function Layout() {
             </div>
             <div className="border-t border-r border-border px-3 py-2 bg-background">
               <div className="flex items-center gap-1">
-                <a
-                  href="https://docs.founderos.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
-                >
-                  <BookOpen className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Documentation</span>
-                </a>
+                {branding.docsUrl && (
+                  <a
+                    href={branding.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
+                  >
+                    <BookOpen className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Documentation</span>
+                  </a>
+                )}
                 {healthRoot?.version && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -496,15 +499,17 @@ export function Layout() {
             </div>
             <div className="border-t border-r border-border px-3 py-2">
               <div className="flex items-center gap-1">
-                <a
-                  href="https://docs.founderos.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
-                >
-                  <BookOpen className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Documentation</span>
-                </a>
+                {branding.docsUrl && (
+                  <a
+                    href={branding.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors text-foreground/80 hover:bg-accent/50 hover:text-foreground flex-1 min-w-0"
+                  >
+                    <BookOpen className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Documentation</span>
+                  </a>
+                )}
                 {healthRoot?.version && (
                   <Tooltip>
                     <TooltipTrigger asChild>
