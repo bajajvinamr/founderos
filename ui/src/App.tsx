@@ -11,14 +11,19 @@ import { branding } from "./branding";
 
 /**
  * Feature flag for the opinionated 6-step founder onboarding (Wave 15A).
- * Defaults to ON in dev so every local run exercises the new flow; ships
- * OFF in prod until the new bootstrap API is vetted end-to-end.
- * Set `VITE_FOUNDEROS_ONBOARDING_V2=false` in dev to fall back.
+ * Defaults to ON in every environment — V2 is the production wizard per
+ * CLAUDE.md (G3a/b/c shipped 2026-05-18; legacy is fallback only).
+ * Set `VITE_FOUNDEROS_ONBOARDING_V2=false` to fall back to the legacy
+ * single-page wizard. Buyer-demo regression 2026-05-19: prod Docker build
+ * doesn't pass the VITE_ ARG, so the prior `import.meta.env.DEV === true`
+ * default silently shipped V1 and the legacy `agentsApi.create` path
+ * surfaced "Missing permission: agents:create" because it bypasses the
+ * atomic `/api/onboarding/bootstrap` permission grant.
  */
 const FOUNDEROS_ONBOARDING_V2: boolean = (() => {
   const raw = import.meta.env.VITE_FOUNDEROS_ONBOARDING_V2;
   if (raw === undefined || raw === null || raw === "") {
-    return import.meta.env.DEV === true;
+    return true;
   }
   return raw !== "false" && raw !== "0";
 })();
