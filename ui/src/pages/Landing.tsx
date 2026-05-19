@@ -1207,7 +1207,6 @@ function Footer() {
               { label: "Team roster", href: "#product" },
               { label: "Providers", href: "#product" },
               { label: "Pricing", href: "#pricing" },
-              { label: "Changelog", href: "https://github.com/founderos-ai/founderos/releases" },
             ]}
           />
           <FooterCol
@@ -1215,15 +1214,14 @@ function Footer() {
             items={[
               { label: "Contact", href: "mailto:hello@founderos.ai" },
               { label: "Sales", href: "mailto:hello@founderos.ai?subject=Design%20partner%20inquiry" },
+              { label: "Design partner", href: "/auth" },
             ]}
           />
           <FooterCol
-            title="Resources"
+            title="Legal"
             items={[
-              { label: "Docs", href: "https://docs.founderos.ai" },
-              { label: "API reference", href: "https://docs.founderos.ai/api" },
-              { label: "GitHub", href: "https://github.com/founderos-ai/founderos" },
-              { label: "Discussions", href: "https://github.com/founderos-ai/founderos/discussions" },
+              { label: "Terms", href: "/legal/terms" },
+              { label: "Privacy", href: "/legal/privacy" },
             ]}
           />
         </div>
