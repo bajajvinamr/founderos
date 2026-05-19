@@ -5,14 +5,16 @@ import type { Agent, Project } from "@founderos/shared";
 import { projectsApi } from "../api/projects";
 import { agentsApi } from "../api/agents";
 import { useCompany } from "../context/CompanyContext";
+import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { formatDate, projectUrl, cn } from "../lib/utils";
-import { Hexagon, Search } from "lucide-react";
+import { Hexagon, Search, Plus } from "lucide-react";
 
 type SortKey = "name" | "lead" | "target" | "status" | "updated";
 type SortDir = "asc" | "desc";
@@ -146,6 +148,7 @@ function ProjectRow({ project, agentsById }: ProjectRowProps) {
 
 export function Projects() {
   const { selectedCompanyId } = useCompany();
+  const { openNewProject } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [sort, setSort] = useState<SortState>({ key: "updated", dir: "desc" });
   const [search, setSearch] = useState("");
@@ -203,11 +206,17 @@ export function Projects() {
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-xl font-bold tracking-tight">Projects</h1>
-        <p className="text-sm text-muted-foreground">
-          Finite-duration containers for issues, agents, goals
-        </p>
+      <header className="flex items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold tracking-tight">Projects</h1>
+          <p className="text-sm text-muted-foreground">
+            Finite-duration containers for issues, agents, goals
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => openNewProject()} className="gap-1.5">
+          <Plus className="h-3.5 w-3.5" />
+          New project
+        </Button>
       </header>
 
       <div className="flex items-center gap-2">
@@ -245,7 +254,12 @@ export function Projects() {
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       {projects.length === 0 ? (
-        <EmptyState icon={Hexagon} message="No projects." />
+        <EmptyState
+          icon={Hexagon}
+          message="No projects."
+          action="Create your first project"
+          onAction={() => openNewProject()}
+        />
       ) : (
         <div className="border border-border">
           <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">

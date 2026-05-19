@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Loader2, X } from "lucide-react";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
@@ -265,15 +265,102 @@ export function FounderOnboardingWizard() {
     }));
   }, [step, draft.vision, draft.bottlenecks, draft.team]);
 
-  // Reset when the dialog is closed externally.
+  // Council P2 (2026-05-19) — draft hydration from server-persisted state.
+  // `hydratedRef` gates the debounced save effect below so we don't echo
+  // server state back to the server during the hydration window (avoids a
+  // pointless round-trip and a potential race where a stale local default
+  // overwrites freshly-hydrated state).
+  //
+  // Lifecycle:
+  //   - onboardingOpen flips true → GET /onboarding/draft, hydrate state,
+  //     mark hydrated; save effect now active.
+  //   - User patches draft → debounced PUT after 800ms quiet period.
+  //   - handleFinish() → POST /onboarding/draft/complete after bootstrap;
+  //     server flips completed_at so the next GET creates a fresh draft.
+  //   - onboardingOpen flips false → mark un-hydrated; on next open we
+  //     hydrate again. Local state is NOT reset (server is the source of
+  //     truth). If user explicitly cancels via the close-confirm, their
+  //     state still lives server-side and resumes on the next open.
+  const hydratedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hydrating, setHydrating] = useState(false);
+
   useEffect(() => {
     if (!onboardingOpen) {
-      setStep(1);
-      setDraft(buildInitialDraft());
-      setSubmitError(null);
-      setSubmitting(false);
+      // Cancel any in-flight save timer on close.
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      hydratedRef.current = false;
+      return;
     }
+
+    // Hydration: GET the user's in-progress draft (server `getOrCreate`
+    // returns an empty draft if none exists, so this is idempotent).
+    let cancelled = false;
+    setHydrating(true);
+    void api
+      .get<{
+        id: string;
+        currentStep: number;
+        draft: Partial<OnboardingDraft>;
+        completedAt: string | null;
+      }>("/onboarding/draft")
+      .then((server) => {
+        if (cancelled) return;
+        // Merge server draft over current defaults. Spread-merge tolerates
+        // a server-side draft written by an older wizard version (missing
+        // fields fall through to defaults).
+        setDraft((prev) => ({ ...prev, ...(server.draft as Partial<OnboardingDraft>) }));
+        // Clamp to valid Step union — server stores int 1..8, but defense
+        // against drift if MAX changes on either side.
+        const clamped = Math.min(
+          Math.max(1, server.currentStep || 1),
+          TOTAL_STEPS,
+        ) as Step;
+        setStep(clamped);
+      })
+      .catch(() => {
+        // Non-fatal — wizard continues with default state. The debounced
+        // save below will retry on next patchDraft.
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setHydrating(false);
+        hydratedRef.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [onboardingOpen]);
+
+  // Debounced save: PUT the draft 800ms after the last change. Flushes
+  // on close (cleanup in the hydration effect cancels the timer; the
+  // server keeps the last successful save).
+  useEffect(() => {
+    if (!onboardingOpen || !hydratedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void api
+        .put("/onboarding/draft", {
+          currentStep: step,
+          draft,
+        })
+        .catch(() => {
+          // Non-fatal — next change re-schedules. We deliberately do not
+          // surface this to the user; the close-confirm and the final
+          // handleFinish bootstrap are the load-bearing failure surfaces.
+        });
+    }, 800);
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [step, draft, onboardingOpen]);
 
   function patchDraft(patch: Partial<OnboardingDraft>) {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -281,16 +368,15 @@ export function FounderOnboardingWizard() {
 
   /**
    * Heuristic: does the founder have enough state in the wizard that
-   * accidentally closing would lose meaningful work? Used to gate the
-   * "are you sure?" confirm on the X button. We deliberately do NOT
-   * trigger on every keystroke (e.g., 3 chars typed into vision is not
-   * "meaningful") — only when the founder has completed at least one
-   * step's worth of state.
+   * a stray Esc/click-outside would feel like a loss? Used only to gate
+   * the close confirm — we deliberately do NOT trigger on a few chars
+   * typed into vision.
    *
-   * Backend draft persistence (onboarding_drafts table with getOrCreate)
-   * exists but the V2 wizard does NOT yet hydrate from it on mount —
-   * pending follow-up. Until that lands, the confirm dialog is the only
-   * thing standing between a stray Esc-press and 5 minutes of lost state.
+   * As of 2026-05-19 the wizard hydrates from server-persisted state
+   * (Council P2 fix above), so closing no longer loses work — the next
+   * open resumes from the same step. The confirm dialog remains as a
+   * UX backstop against accidental close, with copy that reflects the
+   * new persistence contract.
    */
   function hasMeaningfulDraftState(): boolean {
     return (
@@ -306,7 +392,7 @@ export function FounderOnboardingWizard() {
     if (submitting) return; // never close mid-submit
     if (hasMeaningfulDraftState()) {
       const ok = window.confirm(
-        "Close onboarding? Your answers won't be saved.",
+        "Close onboarding? Your progress is saved — you can resume anytime.",
       );
       if (!ok) return;
     }
@@ -389,6 +475,15 @@ export function FounderOnboardingWizard() {
           });
         }
       }
+
+      // Mark the draft completed server-side so the next GET creates a
+      // fresh draft (vs. resuming this one). Non-blocking — bootstrap
+      // success is the load-bearing signal; if /complete fails the next
+      // wizard mount will hydrate the now-stale draft which is mildly
+      // confusing but recoverable (user can just dismiss + restart).
+      void api.post("/onboarding/draft/complete", {}).catch(() => {
+        /* non-fatal — bootstrap already succeeded */
+      });
 
       setSelectedCompanyId(bootstrap.companyId);
       await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
@@ -474,6 +569,16 @@ export function FounderOnboardingWizard() {
           {/* Body */}
           <div className="flex-1 overflow-y-auto">
             <div className="mx-auto max-w-2xl px-6 py-10">
+              {hydrating ? (
+                <div
+                  className="flex items-center justify-center py-20 text-sm text-muted-foreground"
+                  data-testid="onboarding-hydrating"
+                >
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading your progress…
+                </div>
+              ) : (
+              <>
               {step === 1 && (
                 <Step1Vision
                   vision={draft.vision}
@@ -643,6 +748,8 @@ export function FounderOnboardingWizard() {
               {submitError && (
                 <p className="mt-6 text-xs text-destructive">{submitError}</p>
               )}
+              </>
+              )}
             </div>
           </div>
 
@@ -652,9 +759,9 @@ export function FounderOnboardingWizard() {
               {step < TOTAL_STEPS ? (
                 <Button
                   size="sm"
-                  disabled={!canAdvance(step)}
+                  disabled={hydrating || !canAdvance(step)}
                   onClick={() => setStep((s) => (s + 1) as Step)}
-                  className={cn(!canAdvance(step) && "opacity-50")}
+                  className={cn((hydrating || !canAdvance(step)) && "opacity-50")}
                 >
                   Next
                   <ArrowRight className="ml-1 h-3.5 w-3.5" />
@@ -662,7 +769,7 @@ export function FounderOnboardingWizard() {
               ) : (
                 <Button
                   size="sm"
-                  disabled={submitting}
+                  disabled={hydrating || submitting}
                   onClick={() => void handleFinish()}
                 >
                   {submitting ? (

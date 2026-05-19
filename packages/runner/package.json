@@ -1,6 +1,6 @@
 {
   "name": "@founderos/runner",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "FounderOS local runner — polls cloud, spawns claude CLI under your Pro session, streams events back. ADR-011.",
   "license": "MIT",
   "homepage": "https://github.com/founderos-ai/founderos",

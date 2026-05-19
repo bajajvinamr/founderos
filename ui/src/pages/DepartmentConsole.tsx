@@ -1,15 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo } from "react";
-import { Navigate, useParams, useSearchParams } from "@/lib/router";
+import { Navigate, useParams } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
-import { Gauge, GitBranch, AlertTriangle, UserPlus } from "lucide-react";
-import { Tabs } from "@/components/ui/tabs";
+import { AlertTriangle, UserPlus } from "lucide-react";
 import { agentsApi } from "../api/agents";
-import { approvalsApi } from "../api/approvals";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { getDepartmentById, agentsInDepartment } from "../lib/departments";
-import { PageTabBar } from "../components/PageTabBar";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
@@ -22,41 +19,22 @@ import { AGENT_ROLE_LABELS } from "@founderos/shared";
 import type { Agent } from "@founderos/shared";
 
 // Department-specific consoles are lazy-loaded so a founder hitting
-// /departments/growth only pays the cost of the Growth bundle, not
-// all four. Matches the lazy-route pattern in App.tsx.
+// /departments/growth only pays the cost of the Growth bundle.
+// Content / CRM / Finance consoles exist on disk but ship mock data
+// (Wave 5 work) — they're hidden from prod until real data layers
+// land. /departments/content|crm|finance fall through to the generic
+// Team view instead, so a founder seeing "Finance" lists their
+// finance agents rather than fabricated MRR numbers.
 const GrowthConsole = lazy(() =>
   import("./departments/GrowthConsole").then((m) => ({ default: m.GrowthConsole })),
 );
-const ContentConsole = lazy(() =>
-  import("./departments/ContentConsole").then((m) => ({ default: m.ContentConsole })),
-);
-const CrmConsole = lazy(() =>
-  import("./departments/CrmConsole").then((m) => ({ default: m.CrmConsole })),
-);
-const FinanceConsole = lazy(() =>
-  import("./departments/FinanceConsole").then((m) => ({ default: m.FinanceConsole })),
-);
 
-/**
- * Departments that ship with a fully-custom console (own header, own
- * tabs, department-specific modules). Everything else falls through
- * to the generic Team/KPIs/Workflows/Decisions shell below.
- */
-const SPECIALIZED_CONSOLES = new Set(["growth", "content", "crm", "finance"]);
-
-type DepartmentTab = "team" | "kpis" | "workflows" | "decisions";
-
-const VALID_TABS: DepartmentTab[] = ["team", "kpis", "workflows", "decisions"];
-
-function isValidTab(v: string | null): v is DepartmentTab {
-  return VALID_TABS.includes(v as DepartmentTab);
-}
+const SPECIALIZED_CONSOLES = new Set(["growth"]);
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
 export function DepartmentConsole() {
   const { departmentId } = useParams<{ departmentId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { selectedCompanyId, companies } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
 
@@ -64,9 +42,6 @@ export function DepartmentConsole() {
   const companyMetrics = (selectedCompany as { metrics?: unknown } | undefined)?.metrics as
     | CompanyMetrics
     | undefined;
-
-  const rawTab = searchParams.get("tab");
-  const activeTab: DepartmentTab = isValidTab(rawTab) ? rawTab : "team";
 
   const department = departmentId ? getDepartmentById(departmentId) : undefined;
 
@@ -84,24 +59,10 @@ export function DepartmentConsole() {
     enabled: !!selectedCompanyId,
   });
 
-  const { data: approvals } = useQuery({
-    queryKey: queryKeys.approvals.list(selectedCompanyId!, "pending"),
-    queryFn: () => approvalsApi.list(selectedCompanyId!, "pending"),
-    enabled: !!selectedCompanyId,
-  });
-
   const deptAgents = useMemo(() => {
     if (!department || !agents) return [];
     return agentsInDepartment(department.id, agents);
   }, [department, agents, departmentId]);
-
-  const pendingDecisionCount = useMemo(() => {
-    if (!approvals || !department || !agents) return 0;
-    const deptAgentIds = new Set(deptAgents.map((a) => a.id));
-    return approvals.filter(
-      (ap) => ap.status === "pending" && ap.requestedByAgentId != null && deptAgentIds.has(ap.requestedByAgentId),
-    ).length;
-  }, [approvals, deptAgents, agents, department]);
 
   if (!department) {
     return (
@@ -121,7 +82,8 @@ export function DepartmentConsole() {
   // Specialized consoles each own their editorial header + tab bar.
   // Render inside a Suspense boundary so lazy-loaded chunks don't jank.
   // S1.3 — Company Pulse rail mounts above each console so KPIs follow
-  // the founder across departments.
+  // the founder across departments. Only Growth ships today (real
+  // PostHog/HubSpot data path); Content/CRM/Finance are Wave 5.
   if (SPECIALIZED_CONSOLES.has(department.id)) {
     return (
       <div className="space-y-6">
@@ -129,15 +91,6 @@ export function DepartmentConsole() {
         <Suspense fallback={<PageSkeleton variant="list" />}>
           {department.id === "growth" && (
             <GrowthConsole companyId={selectedCompanyId} agents={agents ?? []} />
-          )}
-          {department.id === "content" && (
-            <ContentConsole companyId={selectedCompanyId} agents={agents ?? []} />
-          )}
-          {department.id === "crm" && (
-            <CrmConsole companyId={selectedCompanyId} agents={agents ?? []} />
-          )}
-          {department.id === "finance" && (
-            <FinanceConsole companyId={selectedCompanyId} agents={agents ?? []} />
           )}
         </Suspense>
       </div>
@@ -149,20 +102,6 @@ export function DepartmentConsole() {
   }
 
   const DeptIcon = department.icon;
-
-  function setTab(tab: DepartmentTab) {
-    setSearchParams({ tab });
-  }
-
-  const tabItems = [
-    { value: "team", label: `Team${deptAgents.length > 0 ? ` · ${deptAgents.length}` : ""}` },
-    { value: "kpis", label: "KPIs" },
-    { value: "workflows", label: "Workflows" },
-    {
-      value: "decisions",
-      label: pendingDecisionCount > 0 ? `Decisions · ${pendingDecisionCount}` : "Decisions",
-    },
-  ];
 
   return (
     <div className="space-y-6">
@@ -181,23 +120,8 @@ export function DepartmentConsole() {
         <p className="text-sm text-muted-foreground">{department.sublabel}</p>
       </header>
 
-      {/* Tab bar */}
-      <Tabs value={activeTab} onValueChange={(v) => setTab(v as DepartmentTab)}>
-        <PageTabBar
-          items={tabItems}
-          value={activeTab}
-          onValueChange={(v) => setTab(v as DepartmentTab)}
-          align="start"
-        />
-      </Tabs>
-
-      {/* Tab content */}
-      {activeTab === "team" && (
-        <TeamTab agents={deptAgents} departmentLabel={department.label} />
-      )}
-      {activeTab === "kpis" && <KpisTab />}
-      {activeTab === "workflows" && <WorkflowsTab />}
-      {activeTab === "decisions" && <DecisionsTab />}
+      {/* Team — the only view that ships for non-specialized departments today. */}
+      <TeamTab agents={deptAgents} departmentLabel={department.label} />
     </div>
   );
 }
@@ -285,46 +209,3 @@ function DepartmentAgentCard({ agent }: { agent: Agent }) {
   );
 }
 
-function PlaceholderTab({
-  icon: Icon,
-  message,
-}: {
-  icon: React.ElementType;
-  message: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border">
-        <Icon className="h-5 w-5 text-muted-foreground/70" />
-      </div>
-      <p className="text-sm text-muted-foreground max-w-sm">{message}</p>
-    </div>
-  );
-}
-
-function KpisTab() {
-  return (
-    <PlaceholderTab
-      icon={Gauge}
-      message="Coming soon — department KPIs wired to integrations."
-    />
-  );
-}
-
-function WorkflowsTab() {
-  return (
-    <PlaceholderTab
-      icon={GitBranch}
-      message="Coming soon — filtered issues/cadences scoped to this department."
-    />
-  );
-}
-
-function DecisionsTab() {
-  return (
-    <PlaceholderTab
-      icon={AlertTriangle}
-      message="Coming soon — approvals queued for this department."
-    />
-  );
-}

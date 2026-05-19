@@ -190,43 +190,53 @@ sleep 5
     expect(result.signal !== null || result.exitCode !== 0).toBe(true);
   }, 10_000);
 
-  it.skip("(h) SKIPPED — known SIGKILL-no-escalation bug, see comment", async () => {
-    // ⚠️ FOLLOW-UP BUG FOUND BY E2E TESTING (2026-05-18) ⚠️
+  it("(h) trapped-SIGTERM child gets SIGKILL'd by the hard timer, not allowed to run to natural exit", async () => {
+    // Regression test for the SIGKILL-no-escalation bug (fixed 2026-05-19).
     //
-    // spawn.ts:117-119 guards the SIGKILL escalation on `if (!child.killed)`.
-    // Per Node docs, `child.killed` is set to `true` after `child.kill(SIG)`
-    // is invoked SUCCESSFULLY (i.e., the signal was delivered to the OS) —
-    // NOT after the child actually died. So once SIGTERM is sent (and the
-    // child traps/ignores it), `child.killed === true` and the SIGKILL
-    // backstop is suppressed. A trapped-SIGTERM CLI hangs for its full
-    // natural runtime. Same bug pattern in adapters/claude.ts:360-376 (two
-    // of three kill paths share the broken primitive; line 570 uses the
-    // correct `exitState.value` flag).
+    // Pre-fix: spawn.ts guarded the SIGKILL backstop on `if (!child.killed)`.
+    // `child.killed` flips to `true` after `child.kill(SIG)` returns
+    // successfully — NOT after the child actually exits. So once SIGTERM
+    // was sent and the child trapped/ignored it, the guard short-circuited
+    // SIGKILL and the child ran to natural exit (~3000ms observed for the
+    // sleep 3 fixture, vs the expected ~600ms hard-kill at 1.5x timeout).
     //
-    // Verified empirically in isolation (vitest -t "DOCUMENTED BUG"):
-    //   - timeoutSec=0.4, script: trap '' TERM; sleep 3; exit 0
-    //   - Observed elapsed: 3197ms (the full sleep — SIGKILL never fired)
+    // Fix: gate kill calls on a local `let exited = false` flag set in the
+    // exit/error handlers. Same pattern propagated to adapters/{claude,
+    // codex,gemini}.ts (which already had an `exitState.value` tracker but
+    // were checking the wrong field).
     //
-    // Marked SKIPPED rather than running:
-    //   - It's flaky when other tests run in the same file (cross-test
-    //     signal/cleanup contamination caused 425ms one run, 3197ms another)
-    //   - Asserting either bound codifies the bug into the test suite
-    //   - The honest signal is "this is a known bug" — surface in
-    //     vinamr-invariants and follow-up PR
+    // Repro: bash trap on TERM + sleep 3. With timeoutSec=0.4:
+    //   - SIGTERM at 400ms → trapped, ignored
+    //   - SIGKILL at 600ms (0.4 * 1.5 * 1000) → kernel-level, cannot be trapped
+    //   - Expected elapsed: ~600ms. Pre-fix: ~3000ms.
     //
-    // Why we don't fix it inline with this E2E sprint:
-    //   - Production hot path is adapters/claude.ts, not spawn.ts:runClaude
-    //     (the latter is legacy after PHASE-S7 dispatcher canonicalization —
-    //     only the npm re-export + tests reach it)
-    //   - Fixing requires touching spawn.ts + adapters/claude.ts +
-    //     gemini/codex adapters (same pattern copied across) — council call,
-    //     not a green-tests inline.
-    //
-    // To un-skip after fix: replace `if (!child.killed)` with a local
-    // `let exited = false` flag set in the exit handler; the assertion
-    // becomes `expect(elapsed).toBeLessThan(1500)` for a 0.4s timeout.
-    expect(true).toBe(true);
-  });
+    // The 1500ms upper bound has margin for test-host jitter and the
+    // 10ms post-exit sleep in spawn.ts that lets event listeners drain.
+    const cli = writeFakeCli(
+      "fake-claude-trap.sh",
+      `#!/usr/bin/env bash
+trap '' TERM
+sleep 3
+exit 0
+`,
+    );
+
+    const sink = makeEventSink();
+    const start = Date.now();
+    const result = await runClaude(
+      { binary: cli, prompt: "x", timeoutSec: 0.4 },
+      sink,
+    );
+    const elapsed = Date.now() - start;
+
+    expect(result.timedOut).toBe(true);
+    // Hard kill must fire — elapsed should be well under the 3000ms natural
+    // sleep. Pre-fix this was ~3000ms; post-fix ~600ms with margin.
+    expect(elapsed).toBeLessThan(1500);
+    // SIGKILL is signal 9; expect either a signal-termination or non-zero
+    // exitCode (linuxes vary on how they expose SIGKILL on bash scripts).
+    expect(result.signal !== null || result.exitCode !== 0).toBe(true);
+  }, 10_000);
 
   it("(e) returns exitCode -1 when binary is missing (no crash)", async () => {
     const sink = makeEventSink();

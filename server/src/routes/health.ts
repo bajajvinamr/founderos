@@ -16,6 +16,7 @@ import { LOCAL_BOARD_USER_ID } from "../auth/post-signup-hook.js";
 import { isByoRunnerEnabled } from "../lib/byo-runner-flag.js";
 import { serverVersion } from "../version.js";
 import { assertInstanceAdmin } from "./authz.js";
+import { createStripeClient } from "../services/stripe-client.js";
 
 export function healthRoutes(
   db?: Db,
@@ -438,6 +439,55 @@ export function healthRoutes(
         detail: "SENTRY_DSN not set",
       });
       overallStatus = "degraded";
+    }
+
+    // 7. Stripe connectivity: backs the kit §2.1 checklist signal.
+    // Calls Stripe's balance.retrieve() — cheap read-only ping that
+    // validates (a) the secret is set, (b) the key is auth-valid, (c)
+    // Stripe is reachable. STRIPE_SECRET_KEY unset → `skipped` (billing
+    // gate is opt-in via FOUNDEROS_BILLING_GATE_ENABLED). 500ms timeout
+    // is generous — typical balance.retrieve is ~100ms; over 500 means
+    // upstream is degraded and ops should know.
+    //
+    // Surfaces `livemode` in detail so operators can spot a test key in
+    // a prod-exposure deployment (kit §2.1 is the test→live flip gate).
+    const stripeStart = Date.now();
+    if (!process.env.STRIPE_SECRET_KEY) {
+      checks.push({
+        name: "stripe_connectivity",
+        status: "skipped",
+        latencyMs: 0,
+        detail: "STRIPE_SECRET_KEY not set (billing-gate opt-in)",
+      });
+    } else {
+      try {
+        const stripeClient = createStripeClient({
+          secretKey: process.env.STRIPE_SECRET_KEY,
+        });
+        const result = await Promise.race([
+          stripeClient.ping(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("stripe ping timeout")), 500),
+          ),
+        ]);
+        checks.push({
+          name: "stripe_connectivity",
+          status: "ok",
+          latencyMs: Date.now() - stripeStart,
+          detail: `livemode=${result.livemode}`,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "unknown error";
+        checks.push({
+          name: "stripe_connectivity",
+          status: "fail",
+          latencyMs: Date.now() - stripeStart,
+          detail: msg,
+        });
+        // Degrade — Stripe down doesn't fail the readiness probe, but
+        // ops should see the signal in /api/health/deep.
+        if (overallStatus === "ok") overallStatus = "degraded";
+      }
     }
 
     const statusCode = overallStatus === "failing" ? 503 : 200;

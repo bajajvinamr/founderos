@@ -22,10 +22,13 @@ COPY packages/templates/package.json packages/templates/
 COPY packages/db/package.json packages/db/
 COPY packages/adapter-utils/package.json packages/adapter-utils/
 COPY packages/mcp-server/package.json packages/mcp-server/
+COPY packages/adapters/anthropic-api/package.json packages/adapters/anthropic-api/
 COPY packages/adapters/claude-local/package.json packages/adapters/claude-local/
 COPY packages/adapters/codex-local/package.json packages/adapters/codex-local/
 COPY packages/adapters/cursor-local/package.json packages/adapters/cursor-local/
+COPY packages/adapters/gemini-api/package.json packages/adapters/gemini-api/
 COPY packages/adapters/gemini-local/package.json packages/adapters/gemini-local/
+COPY packages/adapters/openai-api/package.json packages/adapters/openai-api/
 COPY packages/adapters/openclaw-gateway/package.json packages/adapters/openclaw-gateway/
 COPY packages/adapters/opencode-local/package.json packages/adapters/opencode-local/
 COPY packages/adapters/pi-local/package.json packages/adapters/pi-local/
