@@ -46,6 +46,9 @@ feedback-export-*
 # Doc maintenance cursor
 .doc-review-cursor
 
+# Autonomous bug loop reports
+.autonomous-loop/
+
 # Playwright
 tests/e2e/test-results/
 tests/e2e/playwright-report/
