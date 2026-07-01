@@ -17,6 +17,7 @@ import { approvalsApi } from "../api/approvals";
 import { queryKeys } from "../lib/queryKeys";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "@/components/ui/button";
+import { branding } from "../branding";
 import { cn } from "../lib/utils";
 
 /**
@@ -137,15 +138,17 @@ export function SidebarNew() {
           per 01-shell-revised.md §4.1 (F-11), not here. */}
       <div className="flex shrink-0 flex-col gap-1 border-t border-border px-3 py-2.5">
         <div className="flex items-center gap-1">
-          <a
-            href="https://docs.founderos.ai/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex flex-1 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/50 hover:text-foreground"
-          >
-            <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">Docs</span>
-          </a>
+          {branding.docsUrl && (
+            <a
+              href={branding.docsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-accent/50 hover:text-foreground"
+            >
+              <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">Docs</span>
+            </a>
+          )}
           <Button
             type="button"
             variant="ghost"
